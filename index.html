@@ -341,7 +341,7 @@ body{font-family:'DM Sans',sans-serif;display:flex;justify-content:center;align-
     <button class="qb" onclick="sendQ('urgence medicale')">&#x1F6A8; Urgence</button>
   </div>
   <div class="inp-area">
-    <div class="iwrap"><textarea id="ui" placeholder="Decrivez vos symptomes..." rows="1" onkeydown="hk(event)" oninput="ar(this)"></textarea></div>
+    <div class="iwrap"><textarea id="ui" placeholder="Decrivez vos symptomes..." rows="1" onkeydown="hk(event)" oninput="ar(this)" wrap="soft"></textarea></div>
     <button class="sbtn2" onclick="send()"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
   </div>
 </div>
@@ -599,7 +599,7 @@ async function poll(sid,jid){
 var DKEYS=['diagnostic','recommande','prescri','traitement','consultez','symptome','paludisme','fievre','infection','medicament','posologie','preconise','conclus','filariose','loa loa','parasite','maladie','suspicion','bilan','analyse','pathologie'];
 
 async function send(){
-  var txt=ui.value.trim();if(!txt)return;
+  var txt=ui.value.replace(/[\n\r]+/g,' ').trim();if(!txt)return;
   if(!KEY){showSetupAgain();return;}
   ui.value='';ui.style.height='auto';
   document.getElementById('qr').style.display='none';
