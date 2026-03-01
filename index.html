@@ -157,7 +157,7 @@ body{font-family:'DM Sans',sans-serif;display:flex;justify-content:center;align-
 .inp-area{padding:6px 13px;padding-bottom:calc(6px + var(--sb));background:var(--w);border-top:1px solid var(--gl);display:flex;gap:8px;align-items:flex-end;flex-shrink:0;}
 .iwrap{flex:1;background:var(--gl);border-radius:22px;padding:9px 13px;display:flex;align-items:center;border:1.5px solid transparent;transition:border-color .2s;}
 .iwrap:focus-within{border-color:var(--ba);background:var(--w);}
-#ui{flex:1;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--bd);outline:none;resize:none;max-height:90px;line-height:1.5;}
+#ui{flex:1;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--bd);outline:none;min-width:0;}
 #ui::placeholder{color:var(--gm);}
 .sbtn2{width:40px;height:40px;background:linear-gradient(135deg,var(--ba),var(--bm));border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
 .sbtn2:active{transform:scale(0.94);}
@@ -341,7 +341,7 @@ body{font-family:'DM Sans',sans-serif;display:flex;justify-content:center;align-
     <button class="qb" onclick="sendQ('urgence medicale')">&#x1F6A8; Urgence</button>
   </div>
   <div class="inp-area">
-    <div class="iwrap"><textarea id="ui" placeholder="Decrivez vos symptomes..." rows="1" onkeydown="hk(event)" oninput="ar(this)" wrap="soft"></textarea></div>
+    <div class="iwrap"><input type="text" id="ui" placeholder="Decrivez vos symptomes..." onkeydown="hk(event)" autocomplete="off" autocorrect="off" spellcheck="false"/></div>
     <button class="sbtn2" onclick="send()"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
   </div>
 </div>
@@ -556,7 +556,7 @@ function filterMedecins(){
 // ══════════════════════════════════════
 var chatArea=document.getElementById('chatArea'),ui=document.getElementById('ui');
 function gt(){return new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});}
-function ar(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
+function ar(el){}
 function hk(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
 function sendQ(t){ui.value=t;send();}
 function sc(){chatArea.scrollTo({top:chatArea.scrollHeight,behavior:'smooth'});}
