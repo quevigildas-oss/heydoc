@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0A2540">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hey Doc!</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:wght@600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bd:#0A2540;--bm:#1A5276;--ba:#2E86C1;--bl:#AED6F1;--bp:#EBF5FB;
+  --w:#fff;--gl:#F4F6F8;--gm:#BDC3C7;--gt:#5D6D7E;--go:#1ABC9C;--ra:#E74C3C;
+  --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden;background:var(--bd);}
+body{font-family:'DM Sans',sans-serif;display:flex;justify-content:center;align-items:center;}
+.phone{width:100%;max-width:420px;height:100vh;background:var(--gl);display:flex;flex-direction:column;overflow:hidden;position:relative;}
+
+/* HOME = fond permanent, toujours visible */
+#home{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;}
+
+/* SETUP = couche au-dessus de tout */
+#setup{
+  position:absolute;inset:0;z-index:500;
+  background:var(--w);
+  display:none;
+  flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 20px;gap:14px;
+  overflow-y:auto;
+}
+#setup.on{display:flex;}
+
+/* SCREENS = vues secondaires par-dessus home */
+.screen{position:absolute;inset:0;z-index:100;display:none;flex-direction:column;background:var(--gl);}
+.screen.active{display:flex;animation:sIn .25s ease forwards;}
+.screen.closing{animation:sOut .2s ease forwards;}
+@keyframes sIn{from{transform:translateX(100%);}to{transform:translateX(0);}}
+@keyframes sOut{from{transform:translateX(0);}to{transform:translateX(100%);}}
+
+/* MODAL */
+#modalProfil{position:absolute;inset:0;z-index:400;background:rgba(10,37,64,0.6);display:none;align-items:flex-end;justify-content:center;}
+#modalProfil.on{display:flex;}
+
+/* HOME */
+.home-hdr{background:linear-gradient(135deg,var(--bd),var(--bm));padding:20px 20px 28px;padding-top:calc(20px + var(--st));display:flex;flex-direction:column;align-items:center;position:relative;flex-shrink:0;}
+.home-hdr::after{content:'';position:absolute;bottom:-18px;left:0;right:0;height:36px;background:linear-gradient(135deg,var(--bd),var(--bm));border-radius:0 0 36px 36px;}
+.app-logo{width:70px;height:70px;background:linear-gradient(135deg,var(--ba),var(--bl));border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(255,255,255,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.2);margin-bottom:10px;}
+.app-name{font-family:'Fraunces',serif;font-size:24px;color:white;font-weight:600;}
+.app-sub{font-size:11px;color:var(--bl);margin-top:3px;text-align:center;}
+.hbadges{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;justify-content:center;}
+.hbadge{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:4px 10px;font-size:10px;color:rgba(255,255,255,0.85);}
+.sbar{background:linear-gradient(135deg,var(--bd),var(--bm));display:flex;align-items:center;justify-content:center;padding:5px 16px;gap:6px;flex-shrink:0;}
+.sdot{width:6px;height:6px;background:var(--go);border-radius:50%;animation:pu 2s infinite;}
+@keyframes pu{0%,100%{opacity:1;}50%{opacity:0.4;}}
+.stxt{font-size:11px;color:var(--bl);}
+.home-scroll{flex:1;overflow-y:auto;padding:26px 16px 16px;display:flex;flex-direction:column;gap:11px;-webkit-overflow-scrolling:touch;}
+.home-scroll::-webkit-scrollbar{display:none;}
+.home-footer{padding:8px 16px;padding-bottom:calc(8px + var(--sb));background:var(--w);border-top:1px solid var(--gl);text-align:center;font-size:10px;color:var(--gm);flex-shrink:0;}
+.sec-lbl{font-size:11px;font-weight:600;color:var(--gt);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;padding-left:2px;}
+
+/* CARDS HOME */
+.card{background:var(--w);border-radius:18px;padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 14px rgba(10,37,64,0.07);cursor:pointer;transition:transform .18s;}
+.card:active{transform:scale(0.97);}
+.cico{width:50px;height:50px;flex-shrink:0;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;}
+.ctitle{font-size:15px;font-weight:600;color:var(--bd);margin-bottom:2px;}
+.cdesc{font-size:11.5px;color:var(--gt);line-height:1.4;}
+.ctags{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+.ctag{font-size:10px;padding:2px 7px;border-radius:8px;font-weight:500;background:rgba(0,0,0,0.05);color:var(--gt);}
+.carrow{font-size:16px;color:var(--gm);flex-shrink:0;}
+
+/* SETUP COMPONENTS */
+.ulogo{width:78px;height:78px;background:linear-gradient(135deg,var(--bd),var(--ba));border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:36px;box-shadow:0 8px 24px rgba(10,37,64,0.25);}
+.utitle{font-family:'Fraunces',serif;font-size:24px;color:var(--bd);font-weight:600;}
+.usub{font-size:12px;color:var(--gt);text-align:center;line-height:1.5;max-width:280px;}
+.ucard{background:var(--gl);border-radius:16px;padding:16px;width:100%;display:flex;flex-direction:column;gap:10px;}
+.ulabel{font-size:11px;font-weight:600;color:var(--bm);text-transform:uppercase;letter-spacing:0.8px;}
+.uinput{background:var(--w);border:1.5px solid var(--gm);border-radius:10px;padding:11px 13px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--bd);outline:none;width:100%;transition:border-color .2s;}
+.uinput:focus{border-color:var(--ba);box-shadow:0 0 0 3px rgba(46,134,193,0.1);}
+.uhint{font-size:11px;color:var(--gt);line-height:1.5;background:#FEF9E7;border-radius:8px;padding:8px 12px;border-left:3px solid #F39C12;}
+.ubtn{background:linear-gradient(135deg,var(--bd),var(--ba));color:white;border:none;border-radius:10px;padding:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;width:100%;box-shadow:0 4px 16px rgba(46,134,193,0.3);}
+.ubtn:active{transform:scale(0.98);}
+.uerr{font-size:12px;color:var(--ra);text-align:center;display:none;}
+
+/* SCREEN HEADERS */
+.ghdr{background:linear-gradient(135deg,var(--bd),var(--bm));padding:16px 20px;padding-top:calc(16px + var(--st));display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.back{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:white;flex-shrink:0;}
+.htitle{font-family:'Fraunces',serif;font-size:19px;color:white;font-weight:600;flex:1;}
+.hsub{font-size:11px;color:var(--bl);}
+.hico{font-size:22px;}
+
+/* SCROLL BODY */
+.sbody{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;}
+.sbody::-webkit-scrollbar{display:none;}
+
+/* AVATAR */
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-family:'DM Sans',sans-serif;flex-shrink:0;letter-spacing:-0.5px;text-align:center;line-height:1.1;}
+
+/* PROFILS */
+.profil-card{background:var(--w);border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(10,37,64,0.07);cursor:pointer;transition:transform .18s;}
+.profil-card:active{transform:scale(0.97);}
+.add-profil{background:var(--w);border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(10,37,64,0.07);cursor:pointer;border:2px dashed var(--gm);}
+
+/* MODAL */
+.modal-box{background:var(--w);border-radius:24px 24px 0 0;padding:24px 20px;padding-bottom:calc(24px + var(--sb));width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px;}
+.modal-title{font-family:'Fraunces',serif;font-size:20px;color:var(--bd);font-weight:600;text-align:center;}
+.modal-avatars{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;}
+.avc{width:44px;height:44px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:border-color .2s;}
+.avc.sel{border-color:var(--bd);}
+.modal-row{display:flex;gap:10px;}
+.modal-btn{background:linear-gradient(135deg,var(--bd),var(--ba));color:white;border:none;border-radius:10px;padding:13px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;flex:1;}
+.modal-cancel{background:var(--gl);color:var(--gt);border:none;border-radius:10px;padding:13px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;flex:1;}
+
+/* DOSSIER */
+.dos-item{background:var(--w);border-radius:14px;padding:14px;box-shadow:0 2px 10px rgba(10,37,64,0.06);display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .18s;}
+.dos-item:active{transform:scale(0.97);}
+.dos-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+
+/* MEDECINS */
+.med-card{background:var(--w);border-radius:18px;padding:16px;box-shadow:0 2px 14px rgba(10,37,64,0.07);margin-bottom:2px;}
+.med-av{width:46px;height:46px;border-radius:13px;background:linear-gradient(135deg,var(--ba),var(--bl));display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.med-ref{background:linear-gradient(135deg,var(--go),#16A085);color:white;border-radius:7px;padding:2px 7px;font-size:10px;font-weight:600;}
+.med-stat{background:var(--gl);border-radius:9px;padding:5px 9px;font-size:11.5px;color:var(--bd);font-weight:500;}
+
+/* CHAT */
+.chat-hdr{background:linear-gradient(135deg,var(--bd),var(--bm));padding:14px 20px;padding-top:calc(14px + var(--st));display:flex;align-items:center;gap:11px;flex-shrink:0;position:relative;z-index:5;}
+.chat-hdr::after{content:'';position:absolute;bottom:-10px;left:0;right:0;height:10px;background:linear-gradient(135deg,var(--bd),var(--bm));border-radius:0 0 18px 18px;}
+.chat-av{width:42px;height:42px;background:linear-gradient(135deg,var(--ba),var(--bl));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid rgba(255,255,255,0.3);}
+.chat-gear{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;}
+.disc{background:#FEF9E7;border-bottom:1px solid #F9E79F;padding:7px 14px;display:flex;gap:7px;flex-shrink:0;margin-top:10px;}
+.disc-t{font-size:10px;color:#7D6608;line-height:1.4;}
+.chat-area{flex:1;overflow-y:auto;padding:16px 13px;display:flex;flex-direction:column;gap:11px;-webkit-overflow-scrolling:touch;}
+.chat-area::-webkit-scrollbar{display:none;}
+.mrow{display:flex;align-items:flex-end;gap:7px;animation:fu .3s ease forwards;opacity:0;transform:translateY(8px);}
+@keyframes fu{to{opacity:1;transform:translateY(0);}}
+.mrow.u{flex-direction:row-reverse;}
+.mav{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;background:linear-gradient(135deg,var(--ba),var(--bm));}
+.mav.u{font-size:10px;font-weight:700;color:white;}
+.bub{max-width:78%;padding:10px 13px;border-radius:15px;font-size:13px;line-height:1.6;word-wrap:break-word;}
+.bub.d{background:var(--w);color:var(--bd);border-radius:4px 15px 15px 15px;box-shadow:0 2px 10px rgba(10,37,64,0.08);border-left:3px solid var(--ba);}
+.bub.u2{background:linear-gradient(135deg,var(--bd),var(--bm));color:var(--w);border-radius:15px 4px 15px 15px;}
+.btime{font-size:10px;color:var(--gm);margin-top:3px;}
+.mrow.u .btime{text-align:right;}
+.sptag{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
+.sptag span{background:var(--bp);border:1px solid var(--bl);border-radius:10px;padding:2px 8px;font-size:10px;color:var(--bm);font-weight:500;}
+.dsep{text-align:center;font-size:10px;color:var(--gm);font-weight:500;}
+.tyrow{display:flex;align-items:flex-end;gap:7px;flex-shrink:0;}
+.tybub{background:var(--w);border-radius:4px 15px 15px 15px;box-shadow:0 2px 10px rgba(10,37,64,0.08);border-left:3px solid var(--ba);padding:11px 15px;display:flex;gap:4px;align-items:center;}
+.tyd{width:6px;height:6px;background:var(--ba);border-radius:50%;animation:bo 1.2s infinite;}
+.tyd:nth-child(2){animation-delay:.2s;}.tyd:nth-child(3){animation-delay:.4s;}
+@keyframes bo{0%,100%{transform:translateY(0);opacity:0.4;}50%{transform:translateY(-4px);opacity:1;}}
+.qr{padding:0 13px 8px;display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;}
+.qb{background:var(--w);border:1.5px solid var(--ba);border-radius:16px;padding:6px 11px;font-size:12px;color:var(--ba);font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;}
+.qb:active{background:var(--ba);color:var(--w);}
+.inp-area{padding:10px 13px;padding-bottom:calc(10px + var(--sb));background:var(--w);border-top:1px solid var(--gl);display:flex;gap:8px;align-items:flex-end;flex-shrink:0;}
+.iwrap{flex:1;background:var(--gl);border-radius:22px;padding:9px 13px;display:flex;align-items:center;border:1.5px solid transparent;transition:border-color .2s;}
+.iwrap:focus-within{border-color:var(--ba);background:var(--w);}
+#ui{flex:1;border:none;background:transparent;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--bd);outline:none;resize:none;max-height:90px;line-height:1.5;}
+#ui::placeholder{color:var(--gm);}
+.sbtn2{width:40px;height:40px;background:linear-gradient(135deg,var(--ba),var(--bm));border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.sbtn2:active{transform:scale(0.94);}
+.sbtn2 svg{width:17px;height:17px;fill:white;}
+
+/* RECO MEDECINS */
+.reco-hdr{background:linear-gradient(135deg,#0E6655,#1ABC9C);margin:4px 13px;border-radius:14px;padding:12px 15px;flex-shrink:0;display:none;}
+.reco-hdr.on{display:block;}
+.reco-scroll{display:none;overflow-x:auto;padding:0 13px 8px;flex-shrink:0;}
+.reco-scroll.on{display:flex;gap:8px;}
+.reco-scroll::-webkit-scrollbar{display:none;}
+.reco-card{background:var(--w);border-radius:14px;padding:13px;min-width:158px;max-width:175px;box-shadow:0 2px 10px rgba(10,37,64,0.08);flex-shrink:0;border:2px solid transparent;}
+.reco-card.best{border-color:var(--go);}
+.r-btn{display:block;margin-top:6px;border:none;border-radius:8px;padding:7px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;cursor:pointer;width:100%;text-align:center;text-decoration:none;color:white;}
+
+/* EMAIL BANNER */
+.email-banner{background:linear-gradient(135deg,#1A7A6A,var(--go));margin:0 13px 6px;border-radius:14px;padding:12px 15px;display:none;align-items:center;gap:10px;cursor:pointer;flex-shrink:0;}
+.email-banner.on{display:flex;}
+
+/* TOAST */
+.toast-msg{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bd);color:white;padding:10px 18px;border-radius:11px;font-size:12.5px;font-weight:500;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,0.3);white-space:nowrap;pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="phone">
+
+<!-- ══ HOME ══ -->
+<div id="home">
+  <div class="home-hdr">
+    <div class="app-logo">&#x1FA7A;</div>
+    <div class="app-name">Hey Doc!</div>
+    <div class="app-sub">Plateforme medicale &bull; Afrique &amp; Maladies tropicales</div>
+    <div class="hbadges"><span class="hbadge">&#x1F30D; Afrique</span><span class="hbadge">&#x1F4CA; OMS</span><span class="hbadge">&#x1F9EC; IA Medicale</span></div>
+  </div>
+  <div class="sbar"><div class="sdot"></div><span class="stxt">Systeme operationnel &bull; 5 services disponibles</span></div>
+  <div class="home-scroll">
+    <div class="sec-lbl">Selectionnez votre profil</div>
+    <div class="card" onclick="showScreen('familleScreen')">
+      <div class="cico" style="background:#EBF5FB;font-size:26px;">&#x1F46A;</div>
+      <div style="flex:1;"><div class="ctitle" style="color:#1A5276;">Patient</div><div class="cdesc">Selectionnez un profil famille</div><div class="ctags"><span class="ctag">Sarah</span><span class="ctag">Marc Antoine</span><span class="ctag">Maxo</span><span class="ctag">Andrea</span></div></div>
+      <div class="carrow">&#x276F;</div>
+    </div>
+    <div class="card" onclick="showScreen('medecinListScreen')">
+      <div class="cico" style="background:#E8F8F5;font-size:26px;">&#x1FA7A;</div>
+      <div style="flex:1;"><div class="ctitle" style="color:#1A7A6A;">Medecin</div><div class="cdesc">Trouver un medecin pres de vous</div><div class="ctags"><span class="ctag">Referent</span><span class="ctag">Note</span><span class="ctag">Tarif</span></div></div>
+      <div class="carrow">&#x276F;</div>
+    </div>
+    <div class="card" onclick="toast('Clinique — Bientot disponible !')"><div class="cico" style="background:#FEF9E7;font-size:26px;">&#x1F3E5;</div><div style="flex:1;"><div class="ctitle" style="color:#7D6608;">Clinique / Hopital</div><div class="cdesc">Protocoles, reception, verification IA</div></div><div class="carrow">&#x276F;</div></div>
+    <div class="card" onclick="toast('Laboratoire — Bientot disponible !')"><div class="cico" style="background:#F4ECF7;font-size:26px;">&#x1F52C;</div><div style="flex:1;"><div class="ctitle" style="color:#6C3483;">Laboratoire</div><div class="cdesc">Analyses biologiques et resultats</div></div><div class="carrow">&#x276F;</div></div>
+    <div class="card" onclick="toast('Pharmacie — Bientot disponible !')"><div class="cico" style="background:#FDEDEC;font-size:26px;">&#x1F48A;</div><div style="flex:1;"><div class="ctitle" style="color:#922B21;">Pharmacie</div><div class="cdesc">Prescriptions et livraison</div></div><div class="carrow">&#x276F;</div></div>
+  </div>
+  <div class="home-footer">&#x26A0;&#xFE0F; Outil d'aide a la decision. Ne remplace pas un medecin.</div>
+</div>
+
+<!-- ══ SETUP (z-index 500, par-dessus tout) ══ -->
+<div id="setup">
+  <div class="ulogo">&#x1FA7A;</div>
+  <div class="utitle">Hey Doc!</div>
+  <div class="usub">Entrez votre cle Relevance AI pour demarrer</div>
+  <div class="ucard">
+    <div class="ulabel">Cle API Relevance AI</div>
+    <input class="uinput" id="apiK" type="password" placeholder="Collez votre cle API..."/>
+    <div class="uhint">Relevance AI &rarr; <strong>Integrations &amp; API Keys</strong></div>
+  </div>
+  <div class="ucard" style="gap:7px;">
+    <div class="ulabel">Email <span style="font-weight:400;text-transform:none;font-size:10px;color:var(--gt);">(optionnel)</span></div>
+    <input class="uinput" id="emailUser" type="email" placeholder="votre@email.com"/>
+    <div style="font-size:10px;color:var(--gt);">Pour les comptes-rendus de consultation</div>
+  </div>
+  <div class="uerr" id="uerr">Cle invalide — minimum 10 caracteres.</div>
+  <button class="ubtn" onclick="startApp()">Acceder a Hey Doc! &rarr;</button>
+  <div style="font-size:10px;color:var(--gm);text-align:center;">Donnees sur cet appareil uniquement.</div>
+</div>
+
+<!-- ══ FAMILLE ══ -->
+<div class="screen" id="familleScreen">
+  <div class="ghdr">
+    <div class="back" onclick="closeScreen('familleScreen')">&#x2190;</div>
+    <div class="hico">&#x1F46A;</div>
+    <div><div class="htitle">Ma famille</div><div class="hsub">Selectionnez un profil</div></div>
+    <div style="margin-left:auto;cursor:pointer;color:rgba(255,255,255,0.7);font-size:16px;" onclick="showSetupAgain()">&#9881;</div>
+  </div>
+  <div class="sbody" id="familleList"></div>
+  <div id="modalProfil">
+    <div class="modal-box">
+      <div class="modal-title">Nouveau profil</div>
+      <div class="ulabel" style="text-align:center;">Couleur</div>
+      <div class="modal-avatars" id="avChoices"></div>
+      <input class="uinput" id="newNom" placeholder="Prenom"/>
+      <input class="uinput" id="newAge" placeholder="Age" type="number" min="0" max="120"/>
+      <div class="modal-row">
+        <button class="modal-cancel" onclick="closeModal()">Annuler</button>
+        <button class="modal-btn" onclick="saveProfil()">Creer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ESPACE PATIENT ══ -->
+<div class="screen" id="patientScreen">
+  <div class="ghdr">
+    <div class="back" onclick="closeScreen('patientScreen')">&#x2190;</div>
+    <div class="av" id="patHdrAv" style="width:36px;height:36px;font-size:10px;"></div>
+    <div><div class="htitle" id="patHdrTitle">Patient</div><div class="hsub" id="patHdrSub"></div></div>
+    <div style="margin-left:auto;cursor:pointer;color:rgba(255,255,255,0.7);font-size:16px;" onclick="showSetupAgain()">&#9881;</div>
+  </div>
+  <div id="patHero" style="background:linear-gradient(135deg,var(--bd),var(--bm));padding:4px 20px 20px;display:flex;align-items:center;gap:14px;flex-shrink:0;">
+    <div class="av" id="heroAv" style="width:54px;height:54px;font-size:13px;border:2px solid rgba(255,255,255,0.3);"></div>
+    <div><div style="font-size:16px;font-weight:600;color:white;" id="heroName"></div><div style="font-size:11px;color:var(--bl);">Espace de sante Hey Doc!</div></div>
+  </div>
+  <div class="sbody">
+    <div class="sec-lbl">Consultation</div>
+    <div onclick="showScreen('chatScreen')" style="background:linear-gradient(135deg,#1A5276,#2E86C1);border-radius:18px;padding:18px;cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px rgba(26,82,118,0.3);">
+      <div style="width:50px;height:50px;background:rgba(255,255,255,0.2);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">&#x2795;</div>
+      <div style="flex:1;"><div style="font-size:15px;font-weight:600;color:white;margin-bottom:3px;">Nouvelle consultation</div><div style="font-size:11.5px;color:rgba(255,255,255,0.75);">Decrivez vos symptomes, obtenez un diagnostic</div></div>
+      <div style="font-size:18px;color:rgba(255,255,255,0.6);">&#x276F;</div>
+    </div>
+    <div onclick="showScreen('historiqueScreen')" style="background:var(--w);border-radius:18px;padding:16px;cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(10,37,64,0.07);border:1.5px solid var(--bp);">
+      <div style="width:50px;height:50px;background:#EBF5FB;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">&#x1F4CB;</div>
+      <div style="flex:1;"><div style="font-size:15px;font-weight:600;color:var(--bd);margin-bottom:2px;">Reprendre une consultation</div><div style="font-size:11.5px;color:var(--gt);">Historique de vos sessions</div></div>
+      <div style="font-size:14px;color:var(--gm);">&#x276F;</div>
+    </div>
+    <div class="sec-lbl" style="margin-top:4px;">Dossier medical</div>
+    <div onclick="showScreen('dossierScreen')" style="background:var(--w);border-radius:18px;padding:16px;cursor:pointer;display:flex;align-items:center;gap:14px;box-shadow:0 2px 12px rgba(10,37,64,0.07);border:1.5px solid #F4ECF7;">
+      <div style="width:50px;height:50px;background:#F4ECF7;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">&#x1F4C2;</div>
+      <div style="flex:1;"><div style="font-size:15px;font-weight:600;color:#6C3483;margin-bottom:2px;">Dossier medical</div><div style="font-size:11.5px;color:var(--gt);">Ordonnances, allergies, vaccins, chirurgie</div></div>
+      <div style="font-size:14px;color:var(--gm);">&#x276F;</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ HISTORIQUE ══ -->
+<div class="screen" id="historiqueScreen">
+  <div class="ghdr"><div class="back" onclick="closeScreen('historiqueScreen')">&#x2190;</div><div class="hico">&#x1F4CB;</div><div class="htitle">Historique</div></div>
+  <div class="sbody">
+    <div style="background:var(--w);border-radius:16px;padding:36px 20px;text-align:center;box-shadow:0 2px 10px rgba(10,37,64,0.06);"><div style="font-size:44px;margin-bottom:10px;">&#x1F4CB;</div><div style="font-size:15px;font-weight:600;color:var(--bd);margin-bottom:7px;">Aucune consultation</div><div style="font-size:12px;color:var(--gt);line-height:1.5;">Vos consultations apparaitront ici apres chaque session.</div></div>
+    <button onclick="showScreen('chatScreen')" style="background:linear-gradient(135deg,#1A5276,#2E86C1);color:white;border:none;border-radius:13px;padding:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;width:100%;">Demarrer une consultation &#x276F;</button>
+  </div>
+</div>
+
+<!-- ══ DOSSIER ══ -->
+<div class="screen" id="dossierScreen">
+  <div class="ghdr"><div class="back" onclick="closeScreen('dossierScreen')">&#x2190;</div><div class="hico">&#x1F4C2;</div><div class="htitle">Dossier medical</div></div>
+  <div class="sbody">
+    <div class="dos-item" onclick="toast('Ordonnances — Bientot disponible !')"><div class="dos-ico" style="background:#F4ECF7;">&#x1F48A;</div><div><div style="font-size:13.5px;font-weight:600;color:#6C3483;">Ordonnances medicaments</div><div style="font-size:11px;color:var(--gt);">Prescriptions medicamenteuses</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+    <div class="dos-item" onclick="toast('Biologie — Bientot disponible !')"><div class="dos-ico" style="background:#E8F8F5;">&#x1F9EA;</div><div><div style="font-size:13.5px;font-weight:600;color:#1A7A6A;">Ordonnances biologiques</div><div style="font-size:11px;color:var(--gt);">Analyses et bilans</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+    <div class="dos-item" onclick="toast('Traitements — Bientot disponible !')"><div class="dos-ico" style="background:#EBF5FB;">&#x1F501;</div><div><div style="font-size:13.5px;font-weight:600;color:#1A5276;">Traitements reguliers</div><div style="font-size:11px;color:var(--gt);">Medicaments chroniques</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+    <div class="dos-item" onclick="toast('Allergies — Bientot disponible !')"><div class="dos-ico" style="background:#FDEDEC;">&#x26A0;&#xFE0F;</div><div><div style="font-size:13.5px;font-weight:600;color:#922B21;">Allergies</div><div style="font-size:11px;color:var(--gt);">Allergies connues</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+    <div class="dos-item" onclick="toast('Vaccins — Bientot disponible !')"><div class="dos-ico" style="background:#FEF9E7;">&#x1F489;</div><div><div style="font-size:13.5px;font-weight:600;color:#7D6608;">Vaccins</div><div style="font-size:11px;color:var(--gt);">Carnet de vaccination</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+    <div class="dos-item" onclick="toast('Chirurgie — Bientot disponible !')"><div class="dos-ico" style="background:#F0F3F4;">&#x1FA7B;</div><div><div style="font-size:13.5px;font-weight:600;color:#2C3E50;">Operations chirurgicales</div><div style="font-size:11px;color:var(--gt);">Antecedents chirurgicaux</div></div><div style="font-size:14px;color:var(--gm);margin-left:auto;">&#x276F;</div></div>
+  </div>
+</div>
+
+<!-- ══ CHAT ══ -->
+<div class="screen" id="chatScreen">
+  <div class="chat-hdr">
+    <div class="back" onclick="closeScreen('chatScreen')">&#x2190;</div>
+    <div class="chat-av">&#x1FA7A;</div>
+    <div style="flex:1;"><div style="font-family:'Fraunces',serif;font-size:16px;color:white;font-weight:600;">Hey Doc!</div><div style="display:flex;align-items:center;gap:5px;margin-top:1px;"><div class="sdot"></div><span style="font-size:11px;color:var(--bl);">Assistant disponible</span></div></div>
+    <div class="chat-gear" onclick="showSetupAgain()">&#9881;</div>
+  </div>
+  <div class="disc"><span>&#x26A0;&#xFE0F;</span><div class="disc-t">Outil d'aide a la decision. Ne remplace pas un medecin.</div></div>
+  <div class="chat-area" id="chatArea">
+    <div class="dsep">Aujourd'hui</div>
+    <div class="mrow">
+      <div class="mav">&#x1FA7A;</div>
+      <div><div class="bub d">Bonjour <span style="color:var(--ba);font-weight:600;" id="chatName"></span> &#x1F44B; Je suis Hey Doc!, specialise maladies africaines et tropicales.<div class="sptag"><span>&#x1F99F; Paludisme</span><span>&#x1F9A0; Tropical</span><span>&#x1F48A; Prescription</span></div></div><div class="btime">Maintenant</div></div>
+    </div>
+  </div>
+  <div class="reco-hdr" id="recoHdr"><div style="font-size:13px;font-weight:600;color:white;margin-bottom:2px;">&#x1FA7A; Medecins recommandes</div><div style="font-size:11px;color:rgba(255,255,255,0.8);" id="recoSub">...</div></div>
+  <div class="reco-scroll" id="recoScroll"></div>
+  <div class="email-banner" id="emailBanner" onclick="sendEmailMedecin()">
+    <div style="font-size:20px;">&#x1F4E7;</div>
+    <div style="font-size:12px;color:white;flex:1;font-weight:500;">Envoyer le dossier au medecin selectionne</div>
+    <button style="background:rgba(255,255,255,0.25);border:none;border-radius:8px;padding:6px 10px;font-size:11px;color:white;font-weight:600;cursor:pointer;">Envoyer</button>
+  </div>
+  <div class="qr" id="qr">
+    <button class="qb" onclick="sendQ('j ai de la fievre')">&#x1F321; Fievre</button>
+    <button class="qb" onclick="sendQ('verifier une prescription')">&#x1F48A; Prescription</button>
+    <button class="qb" onclick="sendQ('symptomes du paludisme')">&#x1F99F; Paludisme</button>
+    <button class="qb" onclick="sendQ('urgence medicale')">&#x1F6A8; Urgence</button>
+  </div>
+  <div class="inp-area">
+    <div class="iwrap"><textarea id="ui" placeholder="Decrivez vos symptomes..." rows="1" onkeydown="hk(event)" oninput="ar(this)"></textarea></div>
+    <button class="sbtn2" onclick="send()"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+  </div>
+</div>
+
+<!-- ══ MEDECINS ══ -->
+<div class="screen" id="medecinListScreen">
+  <div class="ghdr"><div class="back" onclick="closeScreen('medecinListScreen')">&#x2190;</div><div class="hico">&#x1FA7A;</div><div><div class="htitle">Medecins</div><div class="hsub" id="medSrc">BDD Notion</div></div></div>
+  <div style="padding:10px 16px 0;flex-shrink:0;"><input class="uinput" id="searchMed" placeholder="&#x1F50D;  Rechercher..." oninput="filterMedecins()" style="width:100%;font-size:13px;"/></div>
+  <div class="sbody" id="medecinListBody"></div>
+</div>
+
+</div><!-- /phone -->
+<script>
+// ══════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════
+var RG='d7b62b',RP='428dc1d8-2fa4-46da-b226-c26a52653ed0',RA='7d26fda3-fe2d-405c-8aed-645df10baa12';
+var TURL='https://api-'+RG+'.stack.tryrelevance.com/latest/agents/trigger';
+// Notion lu directement par l'agent Relevance AI — pas d'appel Notion depuis l'app
+
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+var KEY='',USER_EMAIL='',CID=null,CURRENT_PROFIL=null,chatMessages=[],USER_LAT=null,USER_LNG=null,BEST_MED=null,notionMedecins=[];
+try{KEY=localStorage.getItem('hdk')||'';}catch(e){}
+try{USER_EMAIL=localStorage.getItem('hdkemail')||'';}catch(e){}
+var AV_COLORS=['#2E86C1','#1ABC9C','#E74C3C','#9B59B6','#F39C12','#16A085','#2C3E50','#8E44AD'];
+var selColor=AV_COLORS[0];
+var PROFILS=[{nom:'Sarah',age:32,color:'#2E86C1'},{nom:'Marc Antoine',age:35,color:'#1ABC9C'},{nom:'Maxo',age:8,color:'#E74C3C'},{nom:'Andrea',age:5,color:'#9B59B6'}];
+try{var sp=localStorage.getItem('hd_profils');if(sp)PROFILS=JSON.parse(sp);}catch(e){}
+// BDD Médecins — chargée depuis Notion via l'agent Relevance AI
+// Aucune donnée codée en dur
+var notionMedecins=[];
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+window.addEventListener('load',function(){
+  renderFamille();
+  renderMedecins(notionMedecins); // Liste vide au départ — remplie depuis l'agent après diagnostic
+  // Afficher setup seulement si pas de cle
+  if(!KEY) document.getElementById('setup').classList.add('on');
+});
+
+// ══════════════════════════════════════
+// SETUP
+// ══════════════════════════════════════
+function startApp(){
+  var k=document.getElementById('apiK').value.trim();
+  var em=document.getElementById('emailUser').value.trim();
+  if(!k||k.length<10){document.getElementById('uerr').style.display='block';return;}
+  KEY=k; USER_EMAIL=em;
+  try{localStorage.setItem('hdk',k);}catch(e){}
+  try{if(em)localStorage.setItem('hdkemail',em);}catch(e){}
+  // Fermer setup
+  var s=document.getElementById('setup');
+  s.style.transition='opacity 0.3s';
+  s.style.opacity='0';
+  setTimeout(function(){s.classList.remove('on');s.style.opacity='';s.style.transition='';initGeo();},300);
+}
+function showSetupAgain(){
+  document.getElementById('apiK').value=KEY;
+  document.getElementById('emailUser').value=USER_EMAIL;
+  document.getElementById('setup').classList.add('on');
+}
+
+// ══════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════
+function showScreen(id){
+  var s=document.getElementById(id);
+  s.classList.remove('closing');
+  s.classList.add('active');
+  if(id==='medecinListScreen') loadNotionMedecins();
+}
+function closeScreen(id){
+  var s=document.getElementById(id);
+  s.classList.add('closing');
+  setTimeout(function(){s.classList.remove('active','closing');},200);
+}
+
+// ══════════════════════════════════════
+// FAMILLE
+// ══════════════════════════════════════
+function prenom(nom){return nom.trim().split(' ')[0];}
+function renderFamille(){
+  var list=document.getElementById('familleList');
+  list.innerHTML='';
+  PROFILS.forEach(function(p,i){
+    var d=document.createElement('div');d.className='profil-card';
+    d.innerHTML='<div class="av" style="width:56px;height:56px;font-size:12px;background:'+p.color+';">'+prenom(p.nom)+'</div><div style="flex:1;"><div style="font-size:16px;font-weight:600;color:var(--bd);">'+p.nom+'</div><div style="font-size:11.5px;color:var(--gt);margin-top:2px;">'+p.age+' ans</div></div><div style="font-size:14px;color:var(--gm);">&#x276F;</div>';
+    d.onclick=function(){openProfil(i);};
+    list.appendChild(d);
+  });
+  var add=document.createElement('div');add.className='add-profil';
+  add.innerHTML='<div style="width:50px;height:50px;border-radius:50%;background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">&#x2795;</div><div style="font-size:14px;font-weight:500;color:var(--gt);">Ajouter un profil</div>';
+  add.onclick=openModal;list.appendChild(add);
+}
+function openProfil(i){
+  CURRENT_PROFIL=PROFILS[i];
+  var p=prenom(CURRENT_PROFIL.nom),c=CURRENT_PROFIL.color;
+  document.getElementById('patHdrAv').textContent=p;document.getElementById('patHdrAv').style.background=c;
+  document.getElementById('patHdrTitle').textContent=CURRENT_PROFIL.nom;
+  document.getElementById('patHdrSub').textContent=CURRENT_PROFIL.age+' ans';
+  document.getElementById('heroAv').textContent=p;document.getElementById('heroAv').style.background=c;
+  document.getElementById('heroName').textContent=CURRENT_PROFIL.nom;
+  document.getElementById('chatName').textContent=p+' !';
+  // Reset chat
+  chatMessages=[];CID=null;
+  document.getElementById('recoHdr').classList.remove('on');
+  document.getElementById('recoScroll').classList.remove('on');
+  document.getElementById('emailBanner').classList.remove('on');
+  showScreen('patientScreen');
+}
+function openModal(){
+  var c=document.getElementById('avChoices');c.innerHTML='';
+  AV_COLORS.forEach(function(col,i){var d=document.createElement('div');d.className='avc'+(i===0?' sel':'');d.style.background=col;d.onclick=function(){document.querySelectorAll('.avc').forEach(function(x){x.classList.remove('sel');});d.classList.add('sel');selColor=col;};c.appendChild(d);});
+  selColor=AV_COLORS[0];document.getElementById('newNom').value='';document.getElementById('newAge').value='';
+  document.getElementById('modalProfil').classList.add('on');
+}
+function closeModal(){document.getElementById('modalProfil').classList.remove('on');}
+function saveProfil(){
+  var nom=document.getElementById('newNom').value.trim(),age=parseInt(document.getElementById('newAge').value)||0;
+  if(!nom){toast('Entrez un prenom !');return;}
+  PROFILS.push({nom:nom,age:age,color:selColor});
+  try{localStorage.setItem('hd_profils',JSON.stringify(PROFILS));}catch(e){}
+  closeModal();renderFamille();toast('Profil '+nom+' cree !');
+}
+
+// ══════════════════════════════════════
+// GEO
+// ══════════════════════════════════════
+function initGeo(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    USER_LAT=pos.coords.latitude;USER_LNG=pos.coords.longitude;
+    notionMedecins.forEach(function(m){if(m.lat&&m.lng)m.distance_km=hav(USER_LAT,USER_LNG,m.lat,m.lng);});
+    filterMedecins();
+  },null,{timeout:8000});
+}
+function hav(la1,lo1,la2,lo2){var R=6371,dL=(la2-la1)*Math.PI/180,dO=(lo2-lo1)*Math.PI/180,a=Math.sin(dL/2)*Math.sin(dL/2)+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)*Math.sin(dO/2);return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+
+// ══════════════════════════════════════
+// NOTION — BDD Médecins lue par l'agent Relevance AI, pas par l'app
+// L'app extrait le médecin depuis la réponse de l'agent (bloc ===MEDECIN===)
+function loadNotionMedecins(){
+  // Affiche les médecins reçus depuis l'agent (via diagnostic)
+  var src=document.getElementById('medSrc');
+  var body=document.getElementById('medecinListBody');
+  if(notionMedecins.length>0){
+    src.textContent='BDD Notion ('+notionMedecins.length+' medecin'+(notionMedecins.length>1?'s':'')+')';
+    renderMedecins(notionMedecins);
+  } else {
+    src.textContent='BDD Notion';
+    body.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--gt);">'+
+      '<div style="font-size:40px;margin-bottom:12px;">🩺</div>'+
+      '<div style="font-size:14px;font-weight:600;color:var(--bd);margin-bottom:8px;">Aucun medecin charge</div>'+
+      '<div style="font-size:12px;line-height:1.6;">Faites une consultation dans le chat.<br>Le medecin recommande par l\'agent<br>apparaitra ici automatiquement.</div>'+
+    '</div>';
+  }
+}
+
+function parseMedecinFromAgent(text){
+  var match=text.match(/===MEDECIN===([\s\S]*?)===FIN===/);
+  if(!match)return null;
+  var bloc=match[1];
+  // Extraction par split sur les clés connues — robuste format une ligne
+  var keys=['NOM','SPEC','TEL','EMAIL','NOTE','TARIF','DEVISE'];
+  var vals={};
+  keys.forEach(function(k,i){
+    var nextKeys=keys.slice(i+1);
+    var endPattern=nextKeys.length>0?'(?=\\s+(?:'+nextKeys.join('|')+'):)':'';
+    var re=new RegExp(k+':\\s*(.*?)'+endPattern,'s');
+    var m=bloc.match(re);
+    vals[k]=m?m[1].trim():'';
+  });
+  var nom=vals['NOM'];
+  if(!nom||nom.toLowerCase()==='aucun')return null;
+  console.log('[parseMedecin]',vals);
+  return{
+    nom:nom,
+    spec:vals['SPEC'],
+    tel:vals['TEL'],
+    email:vals['EMAIL'],
+    note:parseFloat(vals['NOTE'])||4.5,
+    tarif:parseInt((vals['TARIF']||'').replace(/\D/g,''))||0,
+    devise:vals['DEVISE']||'FCFA',
+    referent:false,
+    distance_km:null
+  };
+}
+
+function renderMedecins(list){
+  var body=document.getElementById('medecinListBody');if(!body)return;body.innerHTML='';
+  if(!list||!list.length){body.innerHTML='<div style="text-align:center;padding:40px;color:var(--gt);">Aucun medecin.</div>';return;}
+  list.slice().sort(function(a,b){return(a.distance_km||5)-(b.distance_km||5);}).forEach(function(m){
+    var stars='';for(var i=0;i<5;i++)stars+=i<Math.floor(m.note||4)?'&#x2B50;':'&#x2606;';
+    var d=m.distance_km||5,ds=d<1?Math.round(d*1000)+'m':d.toFixed(1)+' km';
+    var card=document.createElement('div');card.className='med-card';
+    card.innerHTML='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;"><div class="med-av">&#x1FA7A;</div><div style="flex:1;"><div style="display:flex;align-items:center;gap:7px;"><div style="font-size:15px;font-weight:600;color:var(--bd);">'+m.nom+'</div>'+(m.referent?'<span class="med-ref">Referent</span>':'')+' </div><div style="font-size:12px;color:var(--ba);font-weight:500;margin-top:1px;">'+m.spec+(m.sousSpec?' &bull; '+m.sousSpec.split('/')[0].trim():'')+'</div></div></div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;"><span class="med-stat">'+stars+' '+(m.note||'N/A')+'</span><span class="med-stat">&#x1F4CD; '+ds+'</span><span class="med-stat">&#x1F4B0; '+(m.tarif?m.tarif.toLocaleString()+' '+m.devise:'N/A')+'</span></div><div style="display:flex;gap:8px;">'+(m.tel?'<a href="tel:'+m.tel+'" style="flex:1;background:linear-gradient(135deg,var(--go),#16A085);color:white;border:none;border-radius:10px;padding:10px;font-family:DM Sans,sans-serif;font-size:12px;font-weight:600;text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;">&#x1F4DE; Appeler</a>':'')+' <button onclick="toast(\'RDV — Bientot disponible !\')" style="flex:1;background:linear-gradient(135deg,var(--bd),var(--ba));color:white;border:none;border-radius:10px;padding:10px;font-family:DM Sans,sans-serif;font-size:12px;font-weight:600;cursor:pointer;">&#x1F4C5; RDV</button></div>';
+    body.appendChild(card);
+  });
+}
+function filterMedecins(){
+  var q=(document.getElementById('searchMed')||{}).value||'';q=q.toLowerCase();
+  var src=notionMedecins;
+  renderMedecins(!q?src:src.filter(function(m){return m.spec.toLowerCase().includes(q)||(m.sousSpec||'').toLowerCase().includes(q)||m.nom.toLowerCase().includes(q);}));
+}
+
+// ══════════════════════════════════════
+// CHAT
+// ══════════════════════════════════════
+var chatArea=document.getElementById('chatArea'),ui=document.getElementById('ui');
+function gt(){return new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});}
+function ar(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
+function hk(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
+function sendQ(t){ui.value=t;send();}
+function sc(){chatArea.scrollTo({top:chatArea.scrollHeight,behavior:'smooth'});}
+
+function addMsg(txt,isU){
+  var p=CURRENT_PROFIL?prenom(CURRENT_PROFIL.nom):'?',c=CURRENT_PROFIL?CURRENT_PROFIL.color:'#2E86C1';
+  var row=document.createElement('div');row.className='mrow'+(isU?' u':'');
+  var av=document.createElement('div');av.className='mav'+(isU?' u':'');
+  if(isU){av.textContent=p;av.style.background=c;av.style.fontSize=p.length>6?'8px':'10px';}else{av.innerHTML='&#x1FA7A;';}
+  var wrap=document.createElement('div'),bub=document.createElement('div');bub.className='bub '+(isU?'u2':'d');bub.innerHTML=txt.replace(/\n/g,'<br>');
+  var t=document.createElement('div');t.className='btime';t.textContent=gt();
+  wrap.appendChild(bub);wrap.appendChild(t);row.appendChild(av);row.appendChild(wrap);chatArea.appendChild(row);sc();
+  chatMessages.push({role:isU?'Patient':'Hey Doc!',text:txt,time:gt()});
+}
+function showTy(){var row=document.createElement('div');row.className='tyrow';row.id='ty';var av=document.createElement('div');av.className='mav';av.innerHTML='&#x1FA7A;';var bub=document.createElement('div');bub.className='tybub';bub.innerHTML='<div class="tyd"></div><div class="tyd"></div><div class="tyd"></div>';row.appendChild(av);row.appendChild(bub);chatArea.appendChild(row);sc();}
+function hideTy(){var t=document.getElementById('ty');if(t)t.remove();}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+
+async function poll(sid,jid){
+  var ah=KEY.includes(':')?KEY:(RP+':'+KEY);
+  var pu='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
+  for(var i=0;i<60;i++){
+    await sleep(2000);
+    try{
+      var r=await fetch(pu,{headers:{'Authorization':ah}});var d=await r.json();
+      var ups=d.updates||[];
+      for(var k=0;k<ups.length;k++){
+        var u=ups[k];
+        if(u.type==='chain-success'){if(u.output&&u.output.output&&u.output.output.answer)return u.output.output.answer;if(u.output&&u.output.answer)return u.output.answer;if(u.output&&u.output.message)return u.output.message;if(u.output&&u.output.text)return u.output.text;}
+        if(u.type==='agent-complete'){if(u.output&&u.output.answer)return u.output.answer;if(u.message&&u.message.content)return u.message.content;}
+        if(u.type==='message'&&u.message&&u.message.role==='assistant')return u.message.content||u.message.text||'';
+      }
+      if(d.done===true||d.type==='complete'){if(d.output&&d.output.answer)return d.output.answer;for(var j=ups.length-1;j>=0;j--){var uu=ups[j];if(uu.message&&uu.message.role==='assistant')return uu.message.content||uu.message.text||'';if(uu.role==='assistant')return uu.content||uu.text||'';}}
+      if(d.type==='failed')return 'La requete a echoue.';
+    }catch(e){console.error('poll',e);}
+  }
+  return 'Temps depasse.';
+}
+
+var DKEYS=['diagnostic','recommande','prescri','traitement','consultez','symptome','paludisme','fievre','infection','medicament','posologie','preconise','conclus','filariose','loa loa','parasite','maladie','suspicion','bilan','analyse','pathologie'];
+
+async function send(){
+  var txt=ui.value.trim();if(!txt)return;
+  if(!KEY){showSetupAgain();return;}
+  ui.value='';ui.style.height='auto';
+  document.getElementById('qr').style.display='none';
+  addMsg(txt,true);showTy();
+  var ah=KEY.includes(':')?KEY:(RP+':'+KEY);
+  try{
+    var b={message:{role:'user',content:txt},agent_id:RA};if(CID)b.conversation_id=CID;
+    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
+    var d=await r.json();
+    if(d.conversation_id)CID=d.conversation_id;
+    var sid=d.job_info&&d.job_info.studio_id?d.job_info.studio_id:null;
+    var jid=d.job_info&&d.job_info.job_id?d.job_info.job_id:null;
+    if(sid&&jid){
+      var rep=await poll(sid,jid);hideTy();
+      // Extraire et masquer le bloc ===MEDECIN=== avant affichage
+      var medFromAgent=parseMedecinFromAgent(rep||'');
+      var repClean=(rep||'Pas de reponse.').replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').trim();
+      addMsg(repClean,false);
+      if(medFromAgent){showRecoFromAgent(medFromAgent);}
+      else if(DKEYS.some(function(w){return rep.toLowerCase().includes(w);})){showRecoFromAgent(null);}
+    }else{hideTy();addMsg('Erreur: '+JSON.stringify(d).substring(0,100),false);}
+  }catch(e){hideTy();addMsg('Erreur: '+e.message,false);}
+}
+
+// ══════════════════════════════════════
+// RECO MEDECINS + EMAIL
+// Source unique : BDD Notion (jamais les données locales)
+// ══════════════════════════════════════
+var SMAP=[
+  {keys:['loa loa','filariose','ver','parasite','filaire','onchocercose','trypanosomiase','leishmania','tropical'],spec:['Infectiologue','Generaliste']},
+  {keys:['paludisme','malaria','plasmodium'],spec:['Infectiologue','Generaliste']},
+  {keys:['fievre','infection','bacterie','virus'],spec:['Infectiologue','Generaliste']},
+  {keys:['coeur','cardiaque','cardio'],spec:['Cardiologue']},
+  {keys:['enfant','pediatrie','nourrisson'],spec:['Pediatre']},
+  {keys:['grossesse','gyneco','uterus'],spec:['Gynecologie']},
+  {keys:['peau','derma','eruption'],spec:['Dermatologue','Generaliste']}
+];
+
+function showRecoFromAgent(med){
+  var rs=document.getElementById('recoScroll');
+  document.getElementById('recoHdr').classList.add('on');
+  rs.classList.add('on');
+  if(!med){
+    document.getElementById('recoSub').textContent='Aucun medecin trouve dans BDD Notion';
+    rs.innerHTML='<div style="padding:16px;font-size:12px;color:var(--gt);text-align:center;">L\'agent n\'a pas trouve de medecin adapte.</div>';
+    sc();return;
+  }
+  BEST_MED=med;
+  // Ajouter ce médecin à la liste si pas déjà présent
+  var dejaDans=notionMedecins.some(function(m){return m.nom===med.nom;});
+  if(!dejaDans)notionMedecins.push(med);
+  document.getElementById('recoSub').textContent='Recommande • BDD Notion';
+  var stars='';for(var s=0;s<5;s++)stars+=s<Math.floor(med.note||4)?'&#x2B50;':'&#x2606;';
+  var emailSafe=(med.email||'').replace(/'/g,"\\'");
+  var nomSafe=(med.nom||'').replace(/'/g,"\\'");
+  rs.innerHTML='';
+  var card=document.createElement('div');card.className='reco-card best';
+  card.innerHTML=
+    '<div style="font-size:9px;font-weight:700;color:var(--go);margin-bottom:4px;">&#x2714; MEILLEUR CHOIX</div>'+
+    '<div style="font-size:12px;font-weight:600;color:var(--bd);margin-bottom:2px;">'+med.nom+'</div>'+
+    '<div style="font-size:10px;color:var(--ba);font-weight:500;margin-bottom:6px;">'+med.spec+'</div>'+
+    '<div style="font-size:10.5px;color:var(--gt);margin-bottom:2px;">'+stars+' '+(med.note||'N/A')+'</div>'+
+    '<div style="font-size:10.5px;color:var(--gt);margin-bottom:4px;">&#x1F4B0; '+(med.tarif?med.tarif.toLocaleString()+' '+(med.devise||'FCFA'):'N/A')+'</div>'+
+    (med.tel?'<a href="tel:'+med.tel+'" class="r-btn" style="background:linear-gradient(135deg,var(--go),#16A085);">&#x1F4DE; Appeler</a>':'')+
+    (med.email?'<button class="r-btn" style="background:linear-gradient(135deg,var(--bd),var(--ba));margin-top:4px;" onclick="envoyerEmail(\''+emailSafe+'\',\''+nomSafe+'\')">&#x1F4E7; Dossier</button>':
+               '<div style="font-size:10px;color:var(--gm);margin-top:4px;">Pas d\'email dans Notion</div>');
+  rs.appendChild(card);
+  if(med.email){
+    document.getElementById('emailBanner').classList.add('on');
+    setTimeout(function(){envoyerEmail(med.email,med.nom);},1500);
+  }
+  sc();
+}
+
+function sendEmailMedecin(){
+  if(BEST_MED&&BEST_MED.email)envoyerEmail(BEST_MED.email,BEST_MED.nom);
+  else toast('Aucun email disponible pour ce medecin.');
+}
+
+function envoyerEmail(dest,nomMed){
+  var nom=CURRENT_PROFIL?CURRENT_PROFIL.nom:'Patient';
+  var age=CURRENT_PROFIL?CURRENT_PROFIL.age:'';
+  var date=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  var resume=chatMessages.map(function(m){return '['+m.time+'] '+m.role+' : '+m.text;}).join('\n');
+  var sub=encodeURIComponent('[Hey Doc!] Nouveau patient - '+nom+' - '+date);
+  var body=encodeURIComponent('Bonjour '+nomMed+',\n\nLa plateforme Hey Doc! vous adresse le dossier d\'un patient.\n\n=== PATIENT ===\nNom : '+nom+'\nAge : '+age+' ans\nDate : '+date+'\n\n=== CONSULTATION ===\n\n'+resume+'\n\n---\nGenere par Hey Doc! - Outil d\'aide a la decision.');
+  window.location.href='mailto:'+dest+'?subject='+sub+'&body='+body;
+  document.getElementById('emailBanner').classList.remove('on');
+  toast('Email ouvert pour '+nomMed+' !');
+}
+
+// ══════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════
+function toast(msg){var t=document.createElement('div');t.className='toast-msg';t.innerHTML=msg;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(function(){t.remove();},400);},2200);}
+</script>
+</body>
+</html>
