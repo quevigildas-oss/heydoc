@@ -13,6 +13,7 @@
   --grad:linear-gradient(135deg,#00C896,#4A9EFF);
   --sb:env(safe-area-inset-bottom,0px);--st:env(safe-area-inset-top,0px);
 }
+/* ══ THÈME — géré dynamiquement par JS ══ */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden;}
 #app{height:100%;position:relative;}
@@ -153,6 +154,11 @@ select.finput option{background:var(--bg3);}
 .chat-inp{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:10px 13px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);outline:none;resize:none;max-height:90px;transition:border-color .2s;line-height:1.5;}
 .chat-inp:focus{border-color:var(--accent);}
 .chat-inp::placeholder{color:var(--text3);}
+.mic-btn{width:40px;height:40px;background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .2s;}
+.mic-btn svg{width:18px;height:18px;fill:var(--text2);}
+.mic-btn.on{background:rgba(217,48,37,.1);border-color:var(--danger);animation:pulse 1s infinite;}
+.mic-btn.on svg{fill:var(--danger);}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
 .send-btn{width:40px;height:40px;background:var(--grad);border:none;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
 .send-btn:active{opacity:.8;}
 .send-btn svg{width:17px;height:17px;fill:#fff;}
@@ -184,6 +190,66 @@ select.finput option{background:var(--bg3);}
 .geo-search:focus{border-color:var(--accent);}
 .no-geo{text-align:center;padding:32px 16px;color:var(--text3);font-size:13px;}
 
+/* ══ ESPACE PROFIL ══ */
+.profil-home{flex:1;overflow-y:auto;padding:16px;}
+.profil-home::-webkit-scrollbar{display:none;}
+.profil-banner{background:var(--grad);border-radius:16px;padding:18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;}
+.profil-banner-av{width:52px;height:52px;border-radius:15px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fff;flex-shrink:0;}
+.profil-banner-nom{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;color:#fff;}
+.profil-banner-info{font-size:12px;color:rgba(255,255,255,.75);margin-top:2px;}
+.menu-section{margin-bottom:18px;}
+.menu-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:all .2s;}
+.menu-card:active{transform:scale(.98);border-color:var(--accent);}
+.menu-ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.menu-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);}
+.menu-sub{font-size:11px;color:var(--text2);margin-top:1px;}
+.menu-arr{margin-left:auto;color:var(--text3);font-size:18px;}
+
+/* ══ DOSSIER MÉDICAL ══ */
+.dossier-list{flex:1;overflow-y:auto;padding:16px;}
+.dossier-list::-webkit-scrollbar{display:none;}
+.doss-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:all .2s;}
+.doss-card:active{transform:scale(.98);}
+.doss-ico{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.doss-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);}
+.doss-sub{font-size:11px;color:var(--text2);margin-top:1px;}
+.doss-count{margin-left:auto;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:600;color:var(--text2);}
+
+/* ══ DETAIL DOSSIER ══ */
+.detail-body{flex:1;overflow-y:auto;padding:16px;}
+.detail-body::-webkit-scrollbar{display:none;}
+.detail-empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px;}
+.detail-item{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;}
+.detail-item-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.detail-item-val{font-size:12px;color:var(--text2);line-height:1.6;}
+.detail-item-date{font-size:10px;color:var(--text3);margin-top:6px;}
+.add-item-btn{background:var(--bg3);border:1px dashed var(--border);border-radius:14px;padding:13px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text2);width:100%;margin-bottom:10px;}
+.add-item-btn:active{border-color:var(--accent);}
+
+/* ══ HISTORIQUE ══ */
+.histo-list{flex:1;overflow-y:auto;padding:16px;}
+.histo-list::-webkit-scrollbar{display:none;}
+.histo-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;cursor:pointer;transition:all .2s;}
+.histo-card:active{transform:scale(.98);}
+.histo-date{font-size:10px;color:var(--text3);margin-bottom:4px;}
+.histo-diag{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.histo-symp{font-size:11px;color:var(--text2);line-height:1.4;}
+.histo-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.2);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--accent);margin-top:6px;}
+
+/* ══ GRILLE DOSSIER ══ */
+.doss-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+.doss-tile{background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:16px 14px;cursor:pointer;transition:all .2s;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.doss-tile:active{transform:scale(.96);border-color:var(--accent);}
+.doss-tile-ico{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 10px;}
+.doss-tile-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.doss-tile-sub{font-size:10px;color:var(--text2);}
+
+/* ══ TOGGLE THÈME ══ */
+.theme-toggle{width:46px;height:26px;border-radius:13px;background:var(--bg3);border:2px solid var(--border);position:relative;cursor:pointer;transition:all .3s;flex-shrink:0;}
+.theme-toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--text3);transition:all .3s;}
+.theme-toggle.on{background:var(--accent);border-color:var(--accent);}
+.theme-toggle.on::after{left:22px;background:#fff;}
+
 /* ══ TOAST ══ */
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.1);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:9px 16px;font-size:12px;color:#fff;z-index:999;white-space:nowrap;}
 
@@ -196,8 +262,11 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ ACCUEIL ══ -->
 <div class="screen on" id="accueilScreen">
+  <div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px;padding-top:calc(10px + var(--st));display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Dokita</div>
+    <button onclick="openParametres()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">⚙️</button>
+  </div>
   <div class="hero">
-    <div class="logo">Dokita</div>
     <div class="logo-tag">Plateforme médicale • Afrique & Maladies tropicales</div>
     <div class="hero-badges">
       <div class="hbadge">🌍 Afrique</div>
@@ -278,7 +347,7 @@ select.finput option{background:var(--bg3);}
   <div class="profil-list" id="profilList"></div>
   <div class="consult-footer">
     <button class="btn-eph" onclick="nav('ephemereScreen')">⚡ Éphémère</button>
-    <button class="btn-consult" id="btnConsult" disabled onclick="lancerConsult()">Consulter →</button>
+    <button class="btn-consult" id="btnConsult" disabled style="opacity:.4">Sélectionnez un profil</button>
   </div>
 </div>
 
@@ -333,7 +402,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ CHAT ══ -->
 <div class="screen" id="chatScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div></div>
   <div class="chat-profil" id="chatPBar" style="display:none;">
     <div class="cp-av" id="chatPAv"></div>
     <div><div class="cp-nom" id="chatPNom"></div><div class="cp-info" id="chatPInfo"></div></div>
@@ -344,11 +413,111 @@ select.finput option{background:var(--bg3);}
     <div class="reco-scroll" id="recoScroll"></div>
   </div>
   <div class="inp-wrap">
+    <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Dictée vocale">
+      <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </button>
     <textarea class="chat-inp" id="chatInp" placeholder="Décrivez vos symptômes..." rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
     <button class="send-btn" onclick="sendMsg()">
       <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
     </button>
   </div>
+  <!-- Panneau debug temporaire -->
+  <div id="debugPanel" style="display:none;background:#0a0a0a;color:#00ff88;font-size:9px;font-family:monospace;padding:8px;max-height:120px;overflow-y:auto;flex-shrink:0;border-top:1px solid #333;">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+      <span style="font-weight:bold;">🔧 Debug</span>
+      <span onclick="document.getElementById('debugPanel').style.display='none'" style="cursor:pointer;color:#ff4444;">✕ Fermer</span>
+    </div>
+    <div id="debugLog"></div>
+  </div>
+</div>
+
+<!-- ══ ESPACE PROFIL ══ -->
+<div class="screen" id="espaceProfilScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('profilsScreen')">←</div>
+    <div class="hdr-ico" id="epIco"></div>
+    <div style="flex:1"><div class="hdr-title" id="epNom"></div><div class="hdr-sub" id="epInfo"></div></div>
+  </div>
+  <div class="profil-home">
+    <div class="profil-banner">
+      <div class="profil-banner-av" id="epBannerAv"></div>
+      <div>
+        <div class="profil-banner-nom" id="epBannerNom"></div>
+        <div class="profil-banner-info" id="epBannerInfo"></div>
+      </div>
+    </div>
+    <div class="menu-section">
+      <div class="sec-lbl">Consultation</div>
+      <div class="menu-card" onclick="lancerConsult()">
+        <div class="menu-ico" style="background:rgba(0,200,150,.12);">➕</div>
+        <div><div class="menu-title">Nouvelle consultation</div><div class="menu-sub">Décrivez vos symptômes, obtenez un diagnostic</div></div>
+        <div class="menu-arr">›</div>
+      </div>
+      <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique()">
+        <div class="menu-ico" style="background:rgba(74,158,255,.12);">📋</div>
+        <div><div class="menu-title">Reprendre une consultation</div><div class="menu-sub">Historique de vos sessions</div></div>
+        <div class="menu-arr">›</div>
+      </div>
+    </div>
+    <div class="menu-section">
+      <div class="sec-lbl">Dossier médical</div>
+      <div class="doss-grid">
+        <div class="doss-tile" onclick="ouvrirDossier('ordonnances_med','📋','Ordonnances médicaments','Prescriptions médicamenteuses')">
+          <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📋</div>
+          <div class="doss-tile-title">Ordonnances</div>
+          <div class="doss-tile-sub">Médicaments</div>
+        </div>
+        <div class="doss-tile" onclick="ouvrirDossier('ordonnances_bio','🧪','Ordonnances biologiques','Analyses et bilans')">
+          <div class="doss-tile-ico" style="background:rgba(130,80,220,.1);">🧪</div>
+          <div class="doss-tile-title">Analyses</div>
+          <div class="doss-tile-sub">Bilans biologiques</div>
+        </div>
+        <div class="doss-tile" onclick="ouvrirDossier('traitements','💊','Traitements réguliers','Médicaments chroniques')">
+          <div class="doss-tile-ico" style="background:rgba(0,168,120,.1);">💊</div>
+          <div class="doss-tile-title">Traitements</div>
+          <div class="doss-tile-sub">Chroniques</div>
+        </div>
+        <div class="doss-tile" onclick="ouvrirDossier('allergies','⚠️','Allergies','Allergies connues')">
+          <div class="doss-tile-ico" style="background:rgba(232,146,10,.1);">⚠️</div>
+          <div class="doss-tile-title">Allergies</div>
+          <div class="doss-tile-sub">Connues</div>
+        </div>
+        <div class="doss-tile" onclick="ouvrirDossier('vaccins','💉','Vaccins','Carnet de vaccination')">
+          <div class="doss-tile-ico" style="background:rgba(45,125,210,.1);">💉</div>
+          <div class="doss-tile-title">Vaccins</div>
+          <div class="doss-tile-sub">Carnet</div>
+        </div>
+        <div class="doss-tile" onclick="ouvrirDossier('chirurgie','🏥','Opérations chirurgicales','Antécédents chirurgicaux')">
+          <div class="doss-tile-ico" style="background:rgba(217,48,37,.07);">🏥</div>
+          <div class="doss-tile-title">Chirurgie</div>
+          <div class="doss-tile-sub">Antécédents</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DETAIL DOSSIER ══ -->
+<div class="screen" id="dossierDetailScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" id="ddIco"></div>
+    <div style="flex:1"><div class="hdr-title" id="ddTitle"></div><div class="hdr-sub" id="ddSub"></div></div>
+  </div>
+  <div class="detail-body">
+    <div class="add-item-btn" onclick="ajouterEntree()" id="ddAddBtn">＋ Ajouter une entrée</div>
+    <div id="ddList"></div>
+  </div>
+</div>
+
+<!-- ══ HISTORIQUE ══ -->
+<div class="screen" id="historiqueScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico">📋</div>
+    <div style="flex:1"><div class="hdr-title">Historique</div><div class="hdr-sub">Consultations précédentes</div></div>
+  </div>
+  <div class="histo-list" id="histoList"></div>
 </div>
 
 <!-- ══ CLINIQUE / HÔPITAL ══ -->
@@ -382,6 +551,54 @@ select.finput option{background:var(--bg3);}
   <div class="sbody">
     <input class="geo-search" id="pharmacieSearch" placeholder="Rechercher une pharmacie..." oninput="filterGeo('pharmacie',this.value)"/>
     <div id="pharmacieList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
+  </div>
+</div>
+
+<!-- ══ PARAMÈTRES ══ -->
+<div class="screen" id="parametresScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('accueilScreen')">←</div>
+    <div class="hdr-ico">⚙️</div>
+    <div style="flex:1"><div class="hdr-title">Paramètres</div></div>
+  </div>
+  <div class="sbody">
+    <div class="sec-lbl" style="margin-bottom:12px;">Apparence</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">🌙 Mode sombre</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Fond foncé — confort nocturne</div>
+        </div>
+        <div class="theme-toggle" id="toggleSombre" onclick="setTheme('dark')"></div>
+      </div>
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">☀️ Mode clair</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Fond clair — utilisation en journée</div>
+        </div>
+        <div class="theme-toggle" id="toggleClair" onclick="setTheme('light')"></div>
+      </div>
+    </div>
+
+    <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">Données</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">👥 Profils enregistrés</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;" id="paramProfilCount">Chargement...</div>
+        </div>
+      </div>
+      <div style="padding:16px;cursor:pointer;" onclick="clearAllData()">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--danger);">🗑 Effacer toutes les données</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px;">Profils, historique, dossiers médicaux</div>
+      </div>
+    </div>
+
+    <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">À propos</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita v1.0</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.</div>
+    </div>
   </div>
 </div>
 
@@ -565,7 +782,7 @@ function renderProfils(){
   } else {
     PROFILS.forEach(function(p,i){
       var a=calcAge(p.naiss);
-      h+='<div class="p-card'+(SEL===i?' sel':'')+'" onclick="selP('+i+')">'+
+      h+='<div class="p-card'+(SEL===i?' sel':'')+'" onclick="ouvrirEspaceProfil('+i+')">'+
         '<div class="p-av '+AVC[i%8]+'">'+p.prenom.charAt(0).toUpperCase()+'</div>'+
         '<div style="flex:1">'+
           '<div class="p-nom">'+p.prenom+' '+p.nom+'</div>'+
@@ -584,7 +801,7 @@ function renderProfils(){
   }
   el.innerHTML=h;
   var btn=document.getElementById('btnConsult');
-  btn.disabled=SEL<0;
+  btn.disabled=true; // on passe par l'espace profil maintenant
 }
 
 function selP(i){SEL=i;renderProfils();}
@@ -664,6 +881,9 @@ function startChat(){
   document.getElementById('msgsList').innerHTML='';
   document.getElementById('recoBox').style.display='none';
   document.getElementById('chatInp').value='';
+  // Reset debug
+  var dl=document.getElementById('debugLog');if(dl)dl.innerHTML='';
+  var dp=document.getElementById('debugPanel');if(dp)dp.style.display='none';
 
   var p=CURRENT;
   var a=p._age||calcAge(p.naiss);
@@ -729,7 +949,8 @@ async function sendMsg(){
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+'] ';
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
-  var fullTxt=isFirst?ctx+txt:txt;
+  // N'envoyer le contexte patient que sur le 1er message d'une NOUVELLE consultation
+  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
     var ah=RP+':'+KEY;
     var b={message:{role:'user',content:fullTxt},agent_id:RA};
@@ -745,18 +966,53 @@ async function sendMsg(){
 
 async function poll(sid,jid,ah){
   var u='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
-  for(var i=0;i<30;i++){
+  for(var i=0;i<50;i++){
     await new Promise(function(r){setTimeout(r,2000);});
     try{
       var r=await fetch(u,{headers:{'Authorization':ah}});
       var d=await r.json();
-      for(var up of(d.updates||[])){
+      // Log visible dans l'app
+      dbg('[poll#'+i+'] status='+d.status+' types='+(d.updates||[]).map(function(u){return u.type;}).join(','));
+      var updates=d.updates||[];
+
+      for(var up of updates){
+        // Format 1 : agent-complete
         if(up.type==='agent-complete'){
           if(up.output&&up.output.answer)return up.output.answer;
+          if(up.output&&up.output.output)return up.output.output;
           if(up.message&&up.message.content)return up.message.content;
         }
+        // Format 2 : chain-success (format Relevance AI agent)
+        if(up.type==='chain-success'){
+          var o=up.output||{};
+          // La réponse est dans output.output (imbriqué)
+          var inner=o.output||{};
+          dbg('inner keys: '+Object.keys(inner).join(','));
+          if(typeof inner==='string'&&inner.length>10)return inner;
+          if(inner.answer&&typeof inner.answer==='string')return inner.answer;
+          if(inner.response&&typeof inner.response==='string')return inner.response;
+          if(inner.text&&typeof inner.text==='string')return inner.text;
+          if(inner.message&&typeof inner.message==='string')return inner.message;
+          // Chercher récursivement la première string longue
+          for(var k in inner){
+            if(typeof inner[k]==='string'&&inner[k].length>30)return inner[k];
+          }
+          // Fallback : chercher directement dans o
+          for(var k2 in o){
+            if(typeof o[k2]==='string'&&o[k2].length>30)return o[k2];
+          }
+        }
+        // Format 3 : message assistant
+        if(up.type==='message'&&up.message&&up.message.role==='assistant'){
+          if(up.message.content)return up.message.content;
+        }
       }
-      if(d.status==='complete'||d.status==='failed')break;
+
+      if(d.output&&d.output.answer)return d.output.answer;
+      if(d.answer)return d.answer;
+      if(d.status==='failed')break;
+      if(d.status==='complete'&&i>2)break;
+
     }catch(e){}
   }
   return null;
@@ -817,26 +1073,430 @@ async function envoyerDossier(email,nomMed){
   var nom=p.prenom+(p.nom?' '+p.nom:'');
   var dateISO=new Date().toISOString().split('T')[0];
   var id='DOS-'+Date.now().toString().slice(-6);
-  var symptomes=msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500);
-  var diagIA=msgs.filter(function(m){return m.role==='ai'&&m.text.length>80;}).slice(-2).map(function(m){return m.text;}).join(' ').slice(0,800);
-  var payload={id:id,patient_nom:nom,patient_age:String(a||''),
-    patient_poids:String(p.poids||''),patient_ville:'Non renseignée',patient_voyage:'Aucun',
-    symptomes:symptomes,diagnostic_ia:diagIA,recommandations_oms:'',examens_recommandes:'',
-    statut:'en_attente',medecin:nomMed,date:dateISO};
+
+  toast('⏳ Résumé en cours...');
+  dbg('Étape 1 : appel RESUME_CONSULTATION...');
+
+  // ── ÉTAPE 1 : demander le résumé JSON à l'agent ──
+  var resume={};
   try{
-    await fetch(MAKE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    var ah=RP+':'+KEY;
+    var b={message:{role:'user',content:'RESUME_CONSULTATION'},agent_id:RA};
+    if(CID)b.conversation_id=CID;
+    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
+    var d=await r.json();
+    var sid=d.job_info&&d.job_info.studio_id;
+    var jid=d.job_info&&d.job_info.job_id;
+    dbg('Étape 1 : sid='+sid+' jid='+jid);
+    if(sid&&jid){
+      var rep=await poll(sid,jid,ah);
+      dbg('Étape 1 : réponse agent = '+(rep?rep.slice(0,80):'null'));
+      if(rep){
+        var clean=rep.replace(/```json|```/g,'').trim();
+        var start=clean.indexOf('{');
+        if(start>=0)clean=clean.slice(start);
+        resume=JSON.parse(clean);
+        dbg('Étape 1 : JSON parsé OK — nom='+resume.nom);
+      }
+    }
+  }catch(e){
+    dbg('Étape 1 ERREUR: '+e.message+' → fallback');
+    resume={
+      nom:nom,age:String(a||''),poids:String(p.poids||''),
+      ville:'Non renseignée',voyage:'Aucun',
+      symptomes:msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500),
+      diagnostic:msgs.filter(function(m){return m.role==='ai'&&m.text.length>80;}).slice(-1).map(function(m){return m.text;}).join('').slice(0,800),
+      recommandations:'',examens:''
+    };
+  }
+
+  // ── ÉTAPE 2 : construire le payload Notion ──
+  var payload={
+    id:id,
+    patient_nom:resume.nom||nom,
+    patient_age:String(resume.age||a||''),
+    patient_poids:String(resume.poids||p.poids||''),
+    patient_ville:(resume.ville||'Non renseignée').replace(/,/g,' -').slice(0,50),
+    patient_voyage:(resume.voyage||'Aucun').replace(/,/g,' -').slice(0,80),
+    symptomes:(resume.symptomes||'').slice(0,500),
+    diagnostic_ia:(resume.diagnostic||'').slice(0,800),
+    recommandations_oms:(resume.recommandations||'').slice(0,500),
+    examens_recommandes:(resume.examens||'').slice(0,500),
+    statut:'en_attente',
+    medecin:nomMed,
+    date:dateISO
+  };
+  dbg('Étape 2 : payload prêt — symptomes='+(payload.symptomes?'OK':'VIDE'));
+
+  // ── ÉTAPE 3 : envoyer à Make → Notion (AVANT le mailto) ──
+  try{
+    dbg('Étape 3 : envoi Make webhook...');
+    var resp=await fetch(MAKE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    dbg('Étape 3 : réponse Make status='+resp.status);
+    sauvegarderSession(resume);
     toast('✅ Dossier envoyé à '+nomMed);
-  }catch(e){toast('⚠️ Erreur: '+e.message);}
+  }catch(e){
+    dbg('Étape 3 ERREUR: '+e.message);
+    toast('⚠️ Erreur Notion: '+e.message);
+  }
+
+  // ── ÉTAPE 4 : email au médecin — délai pour laisser le fetch se terminer ──
+  await new Promise(function(r){setTimeout(r,800);});
+  dbg('Étape 4 : ouverture email...');
   var ds=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
-  var resume=msgs.map(function(m){return '['+m.time+'] '+(m.role==='user'?'Patient':'IA')+': '+m.text;}).join('\n');
+  var emailResume='SYMPTÔMES:\n'+(resume.symptomes||'')+'\n\nDIAGNOSTIC IA:\n'+(resume.diagnostic||'')+'\n\nRECOMMANDATIONS OMS:\n'+(resume.recommandations||'')+'\n\nEXAMENS:\n'+(resume.examens||'');
   var sub=encodeURIComponent('[Dokita] Dossier — '+nom+' — '+ds);
-  var body=encodeURIComponent('Bonjour Dr. '+nomMed+',\n\nNouveau dossier patient Dokita!\n\nPatient: '+nom+'\nÂge: '+a+' ans\nSexe: '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\nPoids: '+(p.poids||'—')+'kg\n\nConsultation:\n'+resume+'\n\n---\nDokita — Outil d\'aide à la décision médicale');
+  var body=encodeURIComponent('Bonjour Dr. '+nomMed+',\n\nNouveau dossier patient Dokita.\n\n=== PATIENT ===\nNom: '+(resume.nom||nom)+'\nÂge: '+(resume.age||a)+' ans\nSexe: '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\nPoids: '+(resume.poids||p.poids||'—')+'kg\nVille: '+(resume.ville||'—')+'\n\n=== CONSULTATION ===\n'+emailResume+'\n\n---\nDokita — Outil d\'aide à la décision médicale');
   window.location.href='mailto:'+email+'?subject='+sub+'&body='+body;
 }
 
 // ══════════════════════════════
-// UTILS
+// ESPACE PROFIL
 // ══════════════════════════════
+var DOSSIER_TYPE=''; // type de dossier en cours
+
+function ouvrirEspaceProfil(i){
+  SEL=i;
+  var p=PROFILS[i];
+  var a=calcAge(p.naiss);
+  var nom=p.prenom+' '+p.nom;
+  var info=(a!==null?a+' ans':'')+
+    (p.sx?' · '+(p.sx==='H'?'Masculin':'Féminin'):'')+
+    (p.poids?' · '+p.poids+'kg':'');
+
+  document.getElementById('epIco').textContent=p.prenom.charAt(0).toUpperCase();
+  document.getElementById('epIco').style.background='var(--grad)';
+  document.getElementById('epIco').style.fontFamily="'Syne',sans-serif";
+  document.getElementById('epIco').style.fontWeight='800';
+  document.getElementById('epIco').style.color='#fff';
+  document.getElementById('epNom').textContent=nom;
+  document.getElementById('epInfo').textContent=info;
+
+  document.getElementById('epBannerAv').textContent=p.prenom.charAt(0).toUpperCase();
+  document.getElementById('epBannerNom').textContent=nom;
+  document.getElementById('epBannerInfo').textContent=info+' · Espace de santé Dokita';
+
+  CURRENT=Object.assign({},p,{_idx:i,_eph:false});
+  nav('espaceProfilScreen');
+}
+
+// ══════════════════════════════
+// DOSSIER MÉDICAL
+// ══════════════════════════════
+function getDossierKey(type){return 'dossier_'+PROFILS[SEL].prenom+'_'+SEL+'_'+type;}
+
+function ouvrirDossier(type,ico,title,sub){
+  DOSSIER_TYPE=type;
+  document.getElementById('ddIco').textContent=ico;
+  document.getElementById('ddIco').style.background='var(--bg3)';
+  document.getElementById('ddTitle').textContent=title;
+  document.getElementById('ddSub').textContent=sub;
+  renderDossierDetail(type);
+  nav('dossierDetailScreen');
+}
+
+function renderDossierDetail(type){
+  var key=getDossierKey(type);
+  var items=[];
+  try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
+  var el=document.getElementById('ddList');
+  if(!items.length){
+    el.innerHTML='<div class="detail-empty">📂 Aucune entrée pour l\'instant.<br>Appuyez sur + pour ajouter.</div>';
+    return;
+  }
+  el.innerHTML=items.map(function(it,i){
+    return '<div class="detail-item">'+
+      '<div class="detail-item-title">'+escHtml(it.titre)+'</div>'+
+      '<div class="detail-item-val">'+escHtml(it.valeur).replace(/\n/g,'<br>')+'</div>'+
+      '<div class="detail-item-date" style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<span>'+it.date+'</span>'+
+        '<span onclick="supprimerEntree('+i+')" style="color:var(--danger);cursor:pointer;font-size:12px;">🗑 Supprimer</span>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function ajouterEntree(){
+  var type=DOSSIER_TYPE;
+  var labels={
+    ordonnances_med:'Ex: Amoxicilline 500mg — 3x/jour — 7 jours',
+    ordonnances_bio:'Ex: NFS, Glycémie, Créatinine',
+    traitements:'Ex: Metformine 850mg — 2x/jour (chronique)',
+    allergies:'Ex: Pénicilline — réaction urticaire',
+    vaccins:'Ex: Vaccin Fièvre jaune — 12/03/2024',
+    chirurgie:'Ex: Appendicectomie — Clinique du Plateau — 2019'
+  };
+  var titreLabels={
+    ordonnances_med:'Médicament / Posologie',
+    ordonnances_bio:'Examen demandé',
+    traitements:'Traitement',
+    allergies:'Allergie',
+    vaccins:'Vaccin',
+    chirurgie:'Opération'
+  };
+
+  // Modal inline simple
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;';
+  modal.innerHTML='<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px;width:100%;padding-bottom:calc(24px + var(--sb));">'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:16px;">Nouvelle entrée</div>'+
+    '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">'+titreLabels[type]+'</label>'+
+    '<input id="modalTitre" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;" placeholder="'+titreLabels[type]+'..."/></div>'+
+    '<div style="margin-bottom:16px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">Détails</label>'+
+    '<textarea id="modalVal" rows="3" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--text);outline:none;resize:none;" placeholder="'+labels[type]+'"></textarea></div>'+
+    '<div style="display:flex;gap:10px;">'+
+    '<button onclick="this.closest(\'div[style]\').remove()" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+    '<button id="modalOk" style="flex:1;background:var(--grad);border:none;border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">Enregistrer</button>'+
+    '</div></div>';
+  document.body.appendChild(modal);
+  document.getElementById('modalTitre').focus();
+  document.getElementById('modalOk').onclick=function(){
+    var titre=(document.getElementById('modalTitre').value||'').trim();
+    var valeur=(document.getElementById('modalVal').value||'').trim();
+    if(!titre){document.getElementById('modalTitre').style.borderColor='var(--danger)';return;}
+    var key=getDossierKey(type);
+    var items=[];
+    try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
+    items.unshift({titre:titre,valeur:valeur,date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})});
+    try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
+    modal.remove();
+    renderDossierDetail(type);
+    toast('✅ Entrée ajoutée');
+  };
+}
+
+function supprimerEntree(i){
+  if(!confirm('Supprimer cette entrée ?'))return;
+  var key=getDossierKey(DOSSIER_TYPE);
+  var items=[];
+  try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
+  items.splice(i,1);
+  try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
+  renderDossierDetail(DOSSIER_TYPE);
+  toast('🗑 Entrée supprimée');
+}
+
+// ══════════════════════════════
+// HISTORIQUE CONSULTATIONS
+// ══════════════════════════════
+function getHistoKey(){return 'histo_'+PROFILS[SEL].prenom+'_'+SEL;}
+
+function sauvegarderSession(resume){
+  if(!CURRENT||CURRENT._eph||!msgs.length)return;
+  if(CURRENT._reprise)return;
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  // Utiliser le résumé de l'agent si disponible, sinon fallback
+  var symp=resume&&resume.symptomes?resume.symptomes.slice(0,120):
+    msgs.filter(function(m){return m.role==='user';}).slice(0,3).map(function(m){return m.text;}).join(', ').slice(0,120);
+  var diag=resume&&resume.diagnostic?resume.diagnostic.slice(0,150):
+    msgs.filter(function(m){return m.role==='ai'&&m.text.length>80;}).slice(-1).map(function(m){return m.text;}).join('').slice(0,150);
+  sessions.unshift({
+    date:new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}),
+    symptomes:symp,
+    diagnostic:diag,
+    messages:msgs.slice(0,30),
+    cid:CID||null
+  });
+  if(sessions.length>20)sessions=sessions.slice(0,20);
+  try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
+}
+
+function renderHistorique(){
+  var el=document.getElementById('histoList');
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  if(!sessions.length){
+    el.innerHTML='<div class="detail-empty">📋 Aucune consultation enregistrée.<br>Vos sessions apparaîtront ici après envoi d\'un dossier.</div>';
+    return;
+  }
+  var h='<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">'+
+    '<div onclick="viderHistorique()" style="background:rgba(217,48,37,.08);border:1px solid rgba(217,48,37,.2);border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Tout effacer</div>'+
+  '</div>';
+  h+=sessions.map(function(s,i){
+    return '<div class="histo-card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+        '<div class="histo-date">'+s.date+'</div>'+
+        '<span onclick="supprimerSession('+i+')" style="font-size:11px;color:var(--danger);cursor:pointer;padding:2px 6px;">✕</span>'+
+      '</div>'+
+      (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
+      (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;">'+escHtml(s.diagnostic.slice(0,100))+'...</div>':'')+
+      '<div class="histo-badge" onclick="reprendreSession('+i+')">Voir la consultation →</div>'+
+    '</div>';
+  }).join('');
+  el.innerHTML=h;
+}
+
+function viderHistorique(){
+  if(!confirm('Effacer tout l\'historique des consultations ?'))return;
+  try{localStorage.removeItem(getHistoKey());}catch(e){}
+  renderHistorique();
+  toast('🗑 Historique effacé');
+}
+
+function supprimerSession(i){
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  sessions.splice(i,1);
+  try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
+  renderHistorique();
+}
+
+function reprendreSession(i){
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  var session=sessions[i];
+  if(!session)return;
+  // Marquer comme reprise pour ne pas dupliquer dans l'historique
+  CURRENT._reprise=true;
+  CID=session.cid||null; // restaurer le CID si sauvegardé
+  msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
+  document.getElementById('msgsList').innerHTML='';
+  document.getElementById('recoBox').style.display='none';
+  document.getElementById('chatInp').value='';
+
+  var p=CURRENT;
+  var nom=p.prenom+(p.nom?' '+p.nom:'');
+  document.getElementById('chatPBar').style.display='flex';
+  var av=document.getElementById('chatPAv');
+  av.textContent=p.prenom.charAt(0).toUpperCase();
+  av.className='cp-av '+(p._idx>=0?AVC[p._idx%8]:'av0');
+  document.getElementById('chatPNom').textContent=nom;
+  document.getElementById('chatPInfo').textContent='Reprise — '+session.date;
+  document.getElementById('chatSub').textContent='Session du '+session.date;
+
+  // Recharger les messages sans déclencher addMsg (pour éviter de re-pousser dans msgs[])
+  session.messages.forEach(function(m){
+    msgs.push(m);
+    var d=document.createElement('div');
+    d.className='msg '+m.role;
+    d.innerHTML='<div class="msg-b">'+
+      m.text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').replace(/\n/g,'<br>')+
+    '</div><div class="msg-t">'+m.time+'</div>';
+    document.getElementById('msgsList').appendChild(d);
+  });
+  document.getElementById('msgsList').scrollTop=999999;
+
+  // Message de reprise sans le pousser dans msgs (ne pas polluer la conversation)
+  var d=document.createElement('div');
+  d.className='msg ai';
+  d.innerHTML='<div class="msg-b" style="background:rgba(0,168,120,.08);border:1px dashed var(--accent);"><em>Session reprise. Posez vos nouvelles questions.</em></div>';
+  document.getElementById('msgsList').appendChild(d);
+  document.getElementById('msgsList').scrollTop=999999;
+
+  nav('chatScreen');
+}
+
+function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function dbg(msg){
+  var panel=document.getElementById('debugPanel');
+  var log=document.getElementById('debugLog');
+  if(!panel||!log)return;
+  panel.style.display='flex';
+  panel.style.flexDirection='column';
+  var line=document.createElement('div');
+  line.textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' '+msg;
+  log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ══════════════════════════════
+// THÈME
+// ══════════════════════════════
+var THEMES={
+  dark:{
+    '--bg':'#0D1B2A','--bg2':'#162232','--bg3':'#1E2E40','--card':'#1A2B3C',
+    '--border':'#253D54','--accent':'#00C896','--accent2':'#4A9EFF',
+    '--warn':'#F5A623','--danger':'#FF4D4D',
+    '--text':'#F0F6FF','--text2':'#8BA8C4','--text3':'#4A6A8A',
+    '--grad':'linear-gradient(135deg,#00C896,#4A9EFF)'
+  },
+  light:{
+    '--bg':'#EEF4F0','--bg2':'#FFFFFF','--bg3':'#F4F8F5','--card':'#FFFFFF',
+    '--border':'#D6E8DF','--accent':'#00A878','--accent2':'#2D7DD2',
+    '--warn':'#E8920A','--danger':'#D93025',
+    '--text':'#0D2318','--text2':'#4A6B5A','--text3':'#9DBDAD',
+    '--grad':'linear-gradient(135deg,#00A878,#2D7DD2)'
+  }
+};
+function initTheme(){
+  var t=localStorage.getItem('dokita_theme')||'dark';
+  applyThemeVars(t);
+}
+function setTheme(t){
+  localStorage.setItem('dokita_theme',t);
+  applyThemeVars(t);
+  syncToggles(t);
+}
+function applyThemeVars(t){
+  var vars=THEMES[t]||THEMES.dark;
+  var root=document.documentElement;
+  for(var k in vars)root.style.setProperty(k,vars[k]);
+}
+function syncToggles(t){
+  var ts=document.getElementById('toggleSombre');
+  var tc=document.getElementById('toggleClair');
+  if(!ts||!tc)return;
+  if(t==='light'){tc.classList.add('on');ts.classList.remove('on');}
+  else{ts.classList.add('on');tc.classList.remove('on');}
+}
+function applyTheme(){}
+function openParametres(){
+  var n=PROFILS.length;
+  var el=document.getElementById('paramProfilCount');
+  if(el)el.textContent=n+' profil'+(n>1?'s':'')+(n?' : '+PROFILS.map(function(p){return p.prenom;}).join(', '):'');
+  nav('parametresScreen');
+  syncToggles(localStorage.getItem('dokita_theme')||'dark');
+}
+function clearAllData(){
+  if(!confirm('Effacer TOUTES les données Dokita ?\nProfils, historique, dossiers médicaux.\nCette action est irréversible.'))return;
+  localStorage.clear();
+  PROFILS=[];SEL=-1;CURRENT=null;KEY='';
+  toast('🗑 Toutes les données effacées');
+  setTimeout(function(){nav('accueilScreen');},1000);
+}
+initTheme();
+
+// ══════════════════════════════
+// DICTÉE VOCALE
+// ══════════════════════════════
+var recognition=null,isListening=false;
+function toggleVoice(){
+  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('⚠️ Dictée vocale non supportée sur ce navigateur');return;}
+  if(isListening){stopVoice();return;}
+  startVoice();
+}
+function startVoice(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=new SR();
+  recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=true;
+  recognition.onstart=function(){
+    isListening=true;
+    document.getElementById('micBtn').classList.add('on');
+    document.getElementById('chatInp').placeholder='🎙 Parlez maintenant...';
+  };
+  recognition.onresult=function(e){
+    var t='';
+    for(var i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    document.getElementById('chatInp').value=t;
+    autoH(document.getElementById('chatInp'));
+  };
+  recognition.onend=function(){stopVoice();};
+  recognition.onerror=function(e){stopVoice();if(e.error!=='aborted')toast('⚠️ Erreur micro: '+e.error);};
+  recognition.start();
+}
+function stopVoice(){
+  isListening=false;
+  if(recognition){try{recognition.stop();}catch(e){}}
+  var btn=document.getElementById('micBtn');if(btn)btn.classList.remove('on');
+  var inp=document.getElementById('chatInp');if(inp)inp.placeholder='Décrivez vos symptômes...';
+}
+
 function toast(msg){
   var t=document.createElement('div');t.className='toast';t.textContent=msg;
   document.body.appendChild(t);
