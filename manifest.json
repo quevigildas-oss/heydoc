@@ -1,0 +1,26 @@
+{
+  "name": "Dokita",
+  "short_name": "Dokita",
+  "description": "Plateforme médicale IA — Afrique & Maladies tropicales",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0D1B2A",
+  "theme_color": "#00C896",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%230D1B2A'/><text x='96' y='130' font-size='100' text-anchor='middle'>🩺</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='100' fill='%230D1B2A'/><text x='256' y='340' font-size='280' text-anchor='middle'>🩺</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "medical"],
+  "lang": "fr"
+}
