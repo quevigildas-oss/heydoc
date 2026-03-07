@@ -1509,5 +1509,16 @@ function toast(msg){
   setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(function(){t.remove();},300);},2500);
 }
 </script>
+
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/sw.js').then(function(reg){
+      // Vérifier les mises à jour à chaque ouverture
+      reg.update();
+    });
+  });
+}
+</script>
 </body>
 </html>
