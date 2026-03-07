@@ -468,7 +468,7 @@ select.finput option{background:var(--bg3);}
     <div class="menu-section">
       <div class="sec-lbl">Dossier médical</div>
       <div class="doss-grid">
-        <div class="doss-tile" onclick="ouvrirDossier('ordonnances_med','📋','Ordonnances médicaments','Prescriptions médicamenteuses')">
+        <div class="doss-tile" onclick="ouvrirOrdonnancesNotion()">
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📋</div>
           <div class="doss-tile-title">Ordonnances</div>
           <div class="doss-tile-sub">Médicaments</div>
@@ -522,6 +522,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Historique</div><div class="hdr-sub">Consultations précédentes</div></div>
+    <div onclick="actualiserStatutConsultations()" style="background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:10px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;">↻ Actualiser</div>
   </div>
   <div class="histo-list" id="histoList"></div>
 </div>
@@ -1303,7 +1304,8 @@ function sauvegarderSession(resume){
     symptomes:symp,
     diagnostic:diag,
     messages:msgs.slice(0,30),
-    cid:CID||null
+    cid:CID||null,
+    statut:'en_attente' // sera mis à jour depuis Notion
   });
   if(sessions.length>20)sessions=sessions.slice(0,20);
   try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
@@ -1322,14 +1324,22 @@ function renderHistorique(){
     '<div onclick="viderHistorique()" style="background:rgba(217,48,37,.08);border:1px solid rgba(217,48,37,.2);border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Tout effacer</div>'+
   '</div>';
   h+=sessions.map(function(s,i){
+    var traite=s.statut==='valide'||s.statut==='traite';
+    var statutBadge=traite
+      ?'<span style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--accent);">✅ Traité</span>'
+      :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:#fbbf24;">⏳ En attente</span>';
     return '<div class="histo-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
         '<div class="histo-date">'+s.date+'</div>'+
         '<span onclick="supprimerSession('+i+')" style="font-size:11px;color:var(--danger);cursor:pointer;padding:2px 6px;">✕</span>'+
       '</div>'+
+      '<div style="margin-bottom:6px;">'+statutBadge+'</div>'+
       (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
       (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;">'+escHtml(s.diagnostic.slice(0,100))+'...</div>':'')+
-      '<div class="histo-badge" onclick="reprendreSession('+i+')">Voir la consultation →</div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+
+        '<div class="histo-badge" onclick="reprendreSession('+i+')">Voir la consultation →</div>'+
+        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnance('+i+')">📋 Ordonnance</div>':'')+ 
+      '</div>'+
     '</div>';
   }).join('');
   el.innerHTML=h;
@@ -1340,6 +1350,91 @@ function viderHistorique(){
   try{localStorage.removeItem(getHistoKey());}catch(e){}
   renderHistorique();
   toast('🗑 Historique effacé');
+}
+
+async function actualiserStatutConsultations(){
+  if(!PROFILS[SEL])return;
+  var nom=PROFILS[SEL].prenom+' '+(PROFILS[SEL].nom||'');
+  var dossier=await chargerDossierPatientNotion(nom.trim());
+  if(!dossier)return;
+
+  // Récupérer ordonnances depuis BDD Patients
+  var ordonnances=[];
+  try{if(dossier.ordonnances)ordonnances=JSON.parse(dossier.ordonnances);}catch(e){}
+
+  // Mettre à jour les sessions locales avec statut + ordonnance
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+
+  if(ordonnances.length&&sessions.length){
+    // Matcher ordonnances avec sessions par date approximative
+    ordonnances.forEach(function(ord){
+      // Chercher la session la plus proche de la date de l'ordonnance
+      var ordDate=new Date(ord.date).getTime();
+      var bestIdx=-1;var bestDiff=Infinity;
+      sessions.forEach(function(s,i){
+        var sDate=new Date(s.date).getTime();
+        var diff=Math.abs(sDate-ordDate);
+        if(diff<bestDiff&&s.statut!=='valide'){bestDiff=diff;bestIdx=i;}
+      });
+      if(bestIdx>=0&&bestDiff<7*24*3600*1000){ // dans la même semaine
+        sessions[bestIdx].statut='valide';
+        sessions[bestIdx].ordonnance=ord;
+      }
+    });
+    try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
+  }
+  renderHistorique();
+  toast('✅ Consultations actualisées');
+}
+
+function voirOrdonnance(i){
+  var key=getHistoKey();
+  var sessions=[];
+  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  var ord=sessions[i]&&sessions[i].ordonnance;
+  if(!ord){toast('Ordonnance non disponible');return;}
+  var meds=(ord.medicaments||[]).map(function(m){return '• '+m;}).join('\n');
+  var txt='📋 ORDONNANCE\n'+'─'.repeat(30)+'\n'+
+    'Date : '+ord.date+'\n'+
+    'Médecin : '+ord.medecin+(ord.specialite?' ('+ord.specialite+')':'')+'\n'+
+    'Diagnostic : '+ord.diagnostic+'\n\n'+
+    'MÉDICAMENTS :\n'+meds+
+    (ord.notes?'\n\nNotes : '+ord.notes:'');
+  alert(txt); // TODO: remplacer par un beau modal
+}
+
+async function ouvrirOrdonnancesNotion(){
+  if(!PROFILS[SEL])return;
+  nav('ordonnancesScreen');
+  var el=document.getElementById('ordonnancesList');
+  if(!el)return;
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  var nom=PROFILS[SEL].prenom+' '+(PROFILS[SEL].nom||'');
+  var dossier=await chargerDossierPatientNotion(nom.trim());
+  var ordonnances=[];
+  if(dossier&&dossier.ordonnances){
+    try{ordonnances=JSON.parse(dossier.ordonnances);}catch(e){}
+  }
+  if(!ordonnances.length){
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📋 Aucune ordonnance disponible.<br><br>Vos ordonnances apparaîtront ici après validation par votre médecin.</div>';
+    return;
+  }
+  el.innerHTML=ordonnances.map(function(ord,i){
+    var meds=(ord.medicaments||[]).map(function(m){
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text);">• '+escHtml(m)+'</div>';
+    }).join('');
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+        '<div style="font-family:Syne,sans-serif;font-weight:700;font-size:13px;color:var(--text);">'+escHtml(ord.diagnostic||'Consultation')+'</div>'+
+        '<div style="font-size:10px;color:var(--text3);">'+escHtml(ord.date||'')+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--accent);margin-bottom:10px;">👨‍⚕️ '+escHtml(ord.medecin||'')+(ord.specialite?' — '+escHtml(ord.specialite):'')+'</div>'+
+      meds+
+      (ord.notes?'<div style="margin-top:8px;font-size:11px;color:var(--text2);font-style:italic;">📝 '+escHtml(ord.notes)+'</div>':'')+
+    '</div>';
+  }).join('');
 }
 
 function supprimerSession(i){
@@ -1409,6 +1504,46 @@ function dbg(msg){
   line.textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' '+msg;
   log.appendChild(line);
   log.scrollTop=log.scrollHeight;
+}
+
+// ══════════════════════════════
+// CONFIG NOTION
+// ══════════════════════════════
+var DOKITA_PROXY='https://heydoc-medecin.vercel.app/api/notion';
+var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb';
+
+async function notionPatientRequest(endpoint,method,body){
+  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
+  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  var r=await fetch(url,opts);
+  if(!r.ok)throw new Error('Notion '+r.status);
+  return await r.json();
+}
+
+async function chargerDossierPatientNotion(nom){
+  try{
+    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Nom complet',title:{contains:nom}},
+      page_size:1
+    });
+    if(data.results&&data.results.length>0){
+      var p=data.results[0];
+      var props=p.properties||{};
+      function txt(k){
+        if(!props[k])return '';
+        var t=props[k].type;
+        if(t==='title')return (props[k].title||[]).map(function(x){return x.plain_text;}).join('');
+        if(t==='rich_text')return (props[k].rich_text||[]).map(function(x){return x.plain_text;}).join('');
+        return '';
+      }
+      return {
+        notionId:p.id,
+        ordonnances:txt('Ordonnances')
+      };
+    }
+  }catch(e){console.log('Notion patient err:',e.message);}
+  return null;
 }
 
 // ══════════════════════════════
