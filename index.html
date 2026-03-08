@@ -969,12 +969,13 @@ async function sendMsg(){
   // N'envoyer le contexte patient que sur le 1er message d'une NOUVELLE consultation
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
-    var sysPrompt='Tu es Dokita, assistant médical pour l\'Afrique subsaharienne. RÈGLES STRICTES:\n'+
-      '1. Pose UNE SEULE question à la fois — jamais de liste de questions.\n'+
-      '2. Quand tu as assez d\'infos (3-4 échanges minimum), donne une suspicion diagnostique COURTE : juste le nom de la maladie probable sans explication. Ex: "Suspicion : syndrome grippal léger."\n'+
-      '3. Après la suspicion, dis : "Je vais vous proposer un médecin." — ne dis rien d\'autre.\n'+
-      '4. Ne recommande JAMAIS de médicaments.\n'+
-      '5. Réponds en français. Maximum 3 phrases par réponse.';
+    var sysPrompt='Tu es Dokita, assistant médical pour l\'Afrique subsaharienne.\n'+
+      'RÈGLES ABSOLUES:\n'+
+      '1. Pose UNE SEULE question courte à la fois. Jamais de liste.\n'+
+      '2. Après 3 échanges, tu DOIS écrire exactement: "Suspicion : [nom maladie]." sur une ligne seule. Puis: "Je vais vous proposer un médecin."\n'+
+      '3. Ne donne JAMAIS de médicaments, dosages ou traitements.\n'+
+      '4. Maximum 2 phrases par réponse.\n'+
+      '5. Toujours en français.';
     // Construire historique conversation
     var histPrompt=msgs.slice(-10).map(function(m){
       return (m.role==='user'?'Patient: ':'Dokita: ')+m.text;
@@ -1089,26 +1090,42 @@ async function envoyerDossier(email,nomMed){
   };
   dbg('Étape 2 : payload prêt — symptomes='+(payload.symptomes?'OK':'VIDE'));
 
-  // ── ÉTAPE 3 : envoyer à Make → Notion (AVANT le mailto) ──
+  // ── ÉTAPE 3 : envoyer à Make → Notion ──
+  var makeOk=false;
   try{
     dbg('Étape 3 : envoi Make webhook...');
-    var resp=await fetch(MAKE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    var resp=await fetch(MAKE_WEBHOOK,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      keepalive:true
+    });
     dbg('Étape 3 : réponse Make status='+resp.status);
+    makeOk=resp.ok||resp.status===200||resp.status===202;
     sauvegarderSession(resume);
-    toast('✅ Dossier envoyé');
-    addMsg('ai','Votre dossier a bien été transmis au médecin. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
   }catch(e){
     dbg('Étape 3 ERREUR: '+e.message);
-    toast('⚠️ Erreur Notion: '+e.message);
   }
 
-  // ── ÉTAPE 4 : email au médecin — délai pour laisser le fetch se terminer ──
-  await new Promise(function(r){setTimeout(r,800);});
+  addMsg('ai','Votre dossier a bien été transmis. Un médecin va examiner votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
+  toast(makeOk?'✅ Dossier envoyé':'⚠️ Vérifiez votre connexion');
+
+  // ── ÉTAPE 4 : email médecin après délai ──
+  await new Promise(function(r){setTimeout(r,1500);});
   dbg('Étape 4 : ouverture email...');
   var ds=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
-  var emailResume='SYMPTÔMES:\n'+(resume.symptomes||'')+'\n\nDIAGNOSTIC IA:\n'+(resume.diagnostic||'')+'\n\nRECOMMANDATIONS OMS:\n'+(resume.recommandations||'')+'\n\nEXAMENS:\n'+(resume.examens||'');
-  var sub=encodeURIComponent('[Dokita] Dossier — '+nom+' — '+ds);
-  var body=encodeURIComponent('Bonjour Dr. '+nomMed+',\n\nNouveau dossier patient Dokita.\n\n=== PATIENT ===\nNom: '+(resume.nom||nom)+'\nÂge: '+(resume.age||a)+' ans\nSexe: '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\nPoids: '+(resume.poids||p.poids||'—')+'kg\nVille: '+(resume.ville||'—')+'\n\n=== CONSULTATION ===\n'+emailResume+'\n\n---\nDokita — Outil d\'aide à la décision médicale');
+  var sub=encodeURIComponent('[Dokita] Nouveau dossier — '+nom+' — '+ds);
+  var body=encodeURIComponent(
+    'Bonjour Dr. '+nomMed+',\n\n'+
+    'Un nouveau dossier patient vous a été transmis via Dokita.\n\n'+
+    '=== PATIENT ===\n'+
+    'Nom: '+(resume.nom||nom)+'\n'+
+    'Âge: '+(resume.age||a)+' ans\n'+
+    'Sexe: '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\n'+
+    'Poids: '+(resume.poids||p.poids||'—')+'kg\n\n'+
+    '=== SYMPTÔMES ===\n'+(resume.symptomes||'')+
+    '\n\n---\nConnectez-vous à Dokita Pro pour consulter le dossier complet.'
+  );
   window.location.href='mailto:'+email+'?subject='+sub+'&body='+body;
 }
 
