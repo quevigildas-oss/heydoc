@@ -1068,19 +1068,23 @@ async function envoyerDossier(email,nomMed){
   }
 
   // ── ÉTAPE 2 : payload Make/Notion ──
+  function clean(v,max){
+    return String(v||'').replace(/[\u0000-\u001F]/g,' ').replace(/,/g,' -').trim().slice(0,max||200);
+  }
   var payload={
     id:id,
-    patient_nom:String(resume.nom||nom).slice(0,100),
-    patient_age:String(resume.age||a||''),
-    patient_poids:String(resume.poids||p.poids||''),
-    patient_ville:String(resume.ville||'Non renseignée').replace(/,/g,' -').slice(0,50),
-    patient_voyage:String(resume.voyage||'Aucun').replace(/,/g,' -').slice(0,80),
-    symptomes:String(resume.symptomes||'').slice(0,500),
-    diagnostic_ia:String(resume.diagnostic||'').slice(0,800),
-    recommandations_oms:String(resume.recommandations||'').slice(0,500),
-    examens_recommandes:String(resume.examens||'').slice(0,300),
+    patient_nom:clean(resume.nom||nom,100),
+    patient_age:clean(resume.age||a||'',20),
+    patient_poids:clean(resume.poids||p.poids||'',20),
+    patient_ville:clean(resume.ville||p.ville||'Non renseignee',50),
+    patient_voyage:clean(resume.voyage||'Aucun',80),
+    patient_sexe:p.sx==='H'?'Masculin':p.sx==='F'?'Feminin':'',
+    symptomes:clean(resume.symptomes,500),
+    diagnostic_ia:clean(resume.diagnostic,800),
+    recommandations_oms:clean(resume.recommandations,500),
+    examens_recommandes:clean(resume.examens,300),
     statut:'en_attente',
-    medecin:nomMed,
+    medecin:clean(nomMed,100),
     date:dateISO
   };
   dbg('Payload: '+JSON.stringify(payload).slice(0,150));
@@ -1114,7 +1118,7 @@ async function envoyerDossier(email,nomMed){
     'Âge : '+(resume.age||a||'—')+' ans\n'+
     'Sexe : '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\n'+
     'Poids : '+(resume.poids||p.poids||'—')+'kg\n'+
-    'Ville : '+(resume.ville||p.ville||'—')+'\n'+
+    'Ville : '+(p.ville||resume.ville||'—')+'\n'+
     (emailPatient?'Email patient : '+emailPatient+'\n':'')+
     '\n=== SYMPTÔMES ===\n'+String(resume.symptomes||'')+
     '\n\n---\nConnectez-vous à Dokita Pro pour consulter et valider le dossier complet.'
