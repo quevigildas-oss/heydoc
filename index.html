@@ -969,12 +969,12 @@ async function sendMsg(){
   // N'envoyer le contexte patient que sur le 1er message d'une NOUVELLE consultation
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
-    var sysPrompt='Tu es un assistant médical Dokita pour l\'Afrique subsaharienne. '+
-      'Tu aides les patients à décrire leurs symptômes. '+
-      'Pose des questions courtes et claires. '+
-      'Donne une suspicion diagnostique UNIQUEMENT quand tu as assez d\'informations. '+
-      'Ne recommande JAMAIS un médecin pendant la consultation — attend que le patient clique sur Envoyer le dossier.'+
-      'Réponds toujours en français. Sois concis (3-4 phrases max).';
+    var sysPrompt='Tu es Dokita, assistant médical pour l\'Afrique subsaharienne. RÈGLES STRICTES:\n'+
+      '1. Pose UNE SEULE question à la fois — jamais de liste de questions.\n'+
+      '2. Quand tu as assez d\'infos (3-4 échanges minimum), donne une suspicion diagnostique COURTE : juste le nom de la maladie probable sans explication. Ex: "Suspicion : syndrome grippal léger."\n'+
+      '3. Après la suspicion, dis : "Je vais vous proposer un médecin." — ne dis rien d\'autre.\n'+
+      '4. Ne recommande JAMAIS de médicaments.\n'+
+      '5. Réponds en français. Maximum 3 phrases par réponse.';
     // Construire historique conversation
     var histPrompt=msgs.slice(-10).map(function(m){
       return (m.role==='user'?'Patient: ':'Dokita: ')+m.text;
@@ -988,9 +988,12 @@ async function sendMsg(){
 
 
 
-// Les médecins sont chargés uniquement au moment d'envoyer le dossier
+// Charger médecins après suspicion diagnostique
 function checkDiag(txt){
-  // Ne plus déclencher automatiquement — voir envoyerDossier
+  var lower=txt.toLowerCase();
+  if(lower.indexOf('suspicion')>=0||lower.indexOf('je vais vous proposer')>=0){
+    loadMeds();
+  }
 }
 
 async function loadMeds(){
@@ -1092,7 +1095,8 @@ async function envoyerDossier(email,nomMed){
     var resp=await fetch(MAKE_WEBHOOK,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     dbg('Étape 3 : réponse Make status='+resp.status);
     sauvegarderSession(resume);
-    toast('✅ Dossier envoyé à '+nomMed);
+    toast('✅ Dossier envoyé');
+    addMsg('ai','Votre dossier a bien été transmis au médecin. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
   }catch(e){
     dbg('Étape 3 ERREUR: '+e.message);
     toast('⚠️ Erreur Notion: '+e.message);
