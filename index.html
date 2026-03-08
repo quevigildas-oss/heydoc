@@ -1039,8 +1039,7 @@ async function envoyerDossier(email,nomMed){
   var dateISO=new Date().toISOString().split('T')[0];
   var id='DOS-'+Date.now().toString().slice(-6);
 
-  toast('⏳ Résumé en cours...');
-  dbg('Étape 1 : appel RESUME_CONSULTATION...');
+  toast('⏳ Envoi en cours...');
 
   // ── ÉTAPE 1 : résumé JSON via Claude ──
   var resume={};
@@ -1048,85 +1047,81 @@ async function envoyerDossier(email,nomMed){
     var convHistory=msgs.slice(-20).map(function(m){
       return (m.role==='user'?'Patient: ':'Dokita: ')+m.text;
     }).join('\n');
-    var resumePrompt='Voici la consultation:\n'+convHistory+
-      '\n\nRéponds UNIQUEMENT avec un objet JSON valide (pas de markdown) avec ces champs exactement:'+
-      '{"nom":"'+nom+'","age":"'+String(a||'')+'","poids":"'+String(p.poids||'')+'",'+
-      '"ville":"'+String(p.ville||'Non renseignée')+'","voyage":"Aucun",'+
-      '"symptomes":"résumé des symptômes en 1 phrase",'+
-      '"diagnostic":"suspicion diagnostique principale",'+
-      '"recommandations":"recommandations OMS pertinentes",'+
-      '"examens":"examens recommandés si nécessaire"}';
-    var rep=await callClaude(resumePrompt,'Tu es un assistant médical. Réponds UNIQUEMENT en JSON valide sans markdown.');
-    dbg('Résumé Claude: '+(rep?rep.slice(0,80):'null'));
+    var resumePrompt='Résume cette consultation en JSON strict (pas de markdown).\n'+convHistory+
+      '\nJSON avec exactement ces clés: nom, age, poids, ville, voyage, symptomes, diagnostic, recommandations, examens.'+
+      '\nValeurs par défaut: nom="'+nom+'", age="'+String(a||'')+'", poids="'+String(p.poids||'')+'", ville="'+String(p.ville||'Non renseignée')+'", voyage="Aucun".';
+    var rep=await callClaude(resumePrompt,'Réponds UNIQUEMENT avec un objet JSON valide. Pas de texte avant ou après. Pas de ```.');
     var clean=rep.replace(/```json|```/g,'').trim();
     var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
+    var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
     resume=JSON.parse(clean);
+    dbg('Résumé OK: '+resume.symptomes);
   }catch(e){
-    dbg('Résumé ERREUR: '+e.message+' → fallback');
+    dbg('Résumé fallback: '+e.message);
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
       ville:String(p.ville||'Non renseignée'),voyage:'Aucun',
       symptomes:msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500),
-      diagnostic:msgs.filter(function(m){return m.role==='ai'&&m.text.length>80;}).slice(-1).map(function(m){return m.text;}).join('').slice(0,800),
+      diagnostic:msgs.filter(function(m){return m.role==='ai';}).slice(-1).map(function(m){return m.text;}).join('').slice(0,300),
       recommandations:'',examens:''
     };
   }
 
-  // ── ÉTAPE 2 : construire le payload Notion ──
+  // ── ÉTAPE 2 : payload Make/Notion ──
   var payload={
     id:id,
-    patient_nom:resume.nom||nom,
+    patient_nom:String(resume.nom||nom).slice(0,100),
     patient_age:String(resume.age||a||''),
     patient_poids:String(resume.poids||p.poids||''),
-    patient_ville:(resume.ville||'Non renseignée').replace(/,/g,' -').slice(0,50),
-    patient_voyage:(resume.voyage||'Aucun').replace(/,/g,' -').slice(0,80),
-    symptomes:(resume.symptomes||'').slice(0,500),
-    diagnostic_ia:(resume.diagnostic||'').slice(0,800),
-    recommandations_oms:(resume.recommandations||'').slice(0,500),
-    examens_recommandes:(resume.examens||'').slice(0,500),
+    patient_ville:String(resume.ville||'Non renseignée').replace(/,/g,' -').slice(0,50),
+    patient_voyage:String(resume.voyage||'Aucun').replace(/,/g,' -').slice(0,80),
+    symptomes:String(resume.symptomes||'').slice(0,500),
+    diagnostic_ia:String(resume.diagnostic||'').slice(0,800),
+    recommandations_oms:String(resume.recommandations||'').slice(0,500),
+    examens_recommandes:String(resume.examens||'').slice(0,300),
     statut:'en_attente',
     medecin:nomMed,
     date:dateISO
   };
-  dbg('Étape 2 : payload prêt — symptomes='+(payload.symptomes?'OK':'VIDE'));
+  dbg('Payload: '+JSON.stringify(payload).slice(0,150));
 
-  // ── ÉTAPE 3 : envoyer à Make → Notion ──
+  // ── ÉTAPE 3 : Make → Notion ──
   var makeOk=false;
   try{
-    dbg('Étape 3 : envoi Make webhook...');
     var resp=await fetch(MAKE_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
-      keepalive:true
+      body:JSON.stringify(payload)
     });
-    dbg('Étape 3 : réponse Make status='+resp.status);
-    makeOk=resp.ok||resp.status===200||resp.status===202;
-    sauvegarderSession(resume);
-  }catch(e){
-    dbg('Étape 3 ERREUR: '+e.message);
-  }
+    makeOk=resp.status>=200&&resp.status<300;
+    dbg('Make status='+resp.status+' ok='+makeOk);
+    if(makeOk)sauvegarderSession(resume);
+  }catch(e){dbg('Make erreur: '+e.message);}
 
-  addMsg('ai','Votre dossier a bien été transmis. Un médecin va examiner votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
-  toast(makeOk?'✅ Dossier envoyé':'⚠️ Vérifiez votre connexion');
+  // ── ÉTAPE 4 : message patient ──
+  addMsg('ai','Votre dossier a bien été transmis au Dr. '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
+  toast(makeOk?'✅ Dossier envoyé au médecin':'⚠️ Erreur envoi — réessayez');
 
-  // ── ÉTAPE 4 : email médecin après délai ──
-  await new Promise(function(r){setTimeout(r,1500);});
-  dbg('Étape 4 : ouverture email...');
+  // ── ÉTAPE 5 : email médecin (après 2s pour laisser Make terminer) ──
   var ds=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
-  var sub=encodeURIComponent('[Dokita] Nouveau dossier — '+nom+' — '+ds);
+  var emailPatient=p.email||'';
+  var sub=encodeURIComponent('[Dokita] Nouveau dossier — '+(resume.nom||nom)+' — '+ds);
   var body=encodeURIComponent(
     'Bonjour Dr. '+nomMed+',\n\n'+
     'Un nouveau dossier patient vous a été transmis via Dokita.\n\n'+
     '=== PATIENT ===\n'+
-    'Nom: '+(resume.nom||nom)+'\n'+
-    'Âge: '+(resume.age||a)+' ans\n'+
-    'Sexe: '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\n'+
-    'Poids: '+(resume.poids||p.poids||'—')+'kg\n\n'+
-    '=== SYMPTÔMES ===\n'+(resume.symptomes||'')+
-    '\n\n---\nConnectez-vous à Dokita Pro pour consulter le dossier complet.'
+    'Nom : '+(resume.nom||nom)+'\n'+
+    'Âge : '+(resume.age||a||'—')+' ans\n'+
+    'Sexe : '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\n'+
+    'Poids : '+(resume.poids||p.poids||'—')+'kg\n'+
+    'Ville : '+(resume.ville||p.ville||'—')+'\n'+
+    (emailPatient?'Email patient : '+emailPatient+'\n':'')+
+    '\n=== SYMPTÔMES ===\n'+String(resume.symptomes||'')+
+    '\n\n---\nConnectez-vous à Dokita Pro pour consulter et valider le dossier complet.'
   );
-  window.location.href='mailto:'+email+'?subject='+sub+'&body='+body;
+  setTimeout(function(){
+    window.location.href='mailto:'+email+'?subject='+sub+'&body='+body;
+  },2000);
 }
 
 // ══════════════════════════════
