@@ -619,9 +619,10 @@ var RG='d7b62b',RP='428dc1d8-2fa4-46da-b226-c26a52653ed0',RA='7d26fda3-fe2d-405c
 var TURL='https://api-'+RG+'.stack.tryrelevance.com/latest/agents/trigger';
 var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
-async function poll(sid,jid,ah){
+async function poll(sid,jid,ah,maxIter){
+  maxIter=maxIter||40;
   var u='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
-  for(var i=0;i<40;i++){
+  for(var i=0;i<maxIter;i++){
     await new Promise(function(r){setTimeout(r,2000);});
     try{
       var r=await fetch(u,{headers:{'Authorization':ah}});
@@ -1028,7 +1029,7 @@ async function loadMeds(){
     var d=await r.json();
     var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
     if(sid&&jid){
-      var rep=await poll(sid,jid,ah);
+      var rep=await poll(sid,jid,ah,150);
       if(rep){
         var c=rep.replace(/```json|```/g,'').trim();
         var idx=c.indexOf('[');if(idx>=0)c=c.slice(idx);
@@ -1087,7 +1088,7 @@ async function envoyerDossier(email,nomMed){
     var sid=d.job_info&&d.job_info.studio_id;
     var jid=d.job_info&&d.job_info.job_id;
     if(sid&&jid){
-      var rep=await poll(sid,jid,ah);
+      var rep=await poll(sid,jid,ah,150);
       if(rep){
         var clean=rep.replace(/```json|```/g,'').trim();
         var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
