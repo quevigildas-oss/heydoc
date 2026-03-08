@@ -1122,6 +1122,9 @@ async function envoyerDossier(email,nomMed){
     diagnostic_ia:cleanStr(resume.diagnostic,800),
     recommandations_oms:cleanStr(resume.recommandations,500),
     examens_recommandes:cleanStr(resume.examens,300),
+    medicaments_oms:cleanStr(resume.medicaments_oms,500),
+    contre_indications:cleanStr(resume.contre_indications,300),
+    sources_oms:cleanStr(resume.sources,300),
     statut:'en_attente',
     medecin:cleanStr(nomMed,100),
     date:dateISO
