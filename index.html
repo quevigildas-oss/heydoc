@@ -1000,8 +1000,10 @@ async function sendMsg(){
     if(CID)b.conversation_id=CID;
     var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
     var d=await r.json();
+    dbg("RA status="+r.status+" keys="+Object.keys(d).join(",")+" detail="+(d.detail||d.message||d.error||""));
     if(d.conversation_id)CID=d.conversation_id;
     var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
+    dbg("sid="+sid+" jid="+jid);
     if(sid&&jid){var rep=await poll(sid,jid,ah);hideTyping();if(rep){addMsg('ai',rep);checkDiag(rep);}else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}}
     else{hideTyping();addMsg('ai','Une erreur est survenue.');}
   }catch(e){hideTyping();addMsg('ai','Erreur: '+e.message);}
