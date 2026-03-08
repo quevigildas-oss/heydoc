@@ -627,6 +627,8 @@ async function poll(sid,jid,ah,maxIter){
     try{
       var r=await fetch(u,{headers:{'Authorization':ah}});
       var d=await r.json();
+      if(i===0)dbg('poll[0] status='+r.status+' keys='+Object.keys(d).join(','));
+      if(i===0&&d.updates&&d.updates.length)dbg('poll[0] update types='+d.updates.map(function(u){return u.type;}).join(','));
       var updates=d.updates||[];
       for(var up of updates){
         if(up.type==='agent-complete'){
