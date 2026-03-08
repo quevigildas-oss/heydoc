@@ -615,8 +615,18 @@ select.finput option{background:var(--bg3);}
 // ══════════════════════════════
 // CONFIG
 // ══════════════════════════════
-var RG='d7b62b',RP='428dc1d8-2fa4-46da-b226-c26a52653ed0',RA='7d26fda3-fe2d-405c-8aed-645df10baa12';
-var TURL='https://api-'+RG+'.stack.tryrelevance.com/latest/agents/trigger';
+var CLAUDE_PROXY='https://heydoc-medecin.vercel.app/api/claude';
+
+async function callClaude(prompt,system){
+  var r=await fetch(CLAUDE_PROXY,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-dokita-key':'dk-2026-prod-x9f7m'},
+    body:JSON.stringify({prompt:prompt,system:system||''})
+  });
+  var d=await r.json();
+  if(d.error)throw new Error(d.error);
+  return d.answer||'';
+}
 var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
 // ══════════════════════════════
@@ -959,94 +969,38 @@ async function sendMsg(){
   // N'envoyer le contexte patient que sur le 1er message d'une NOUVELLE consultation
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:fullTxt},agent_id:RA};
-    if(CID)b.conversation_id=CID;
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
-    var d=await r.json();
-    if(d.conversation_id)CID=d.conversation_id;
-    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
-    if(sid&&jid){var rep=await poll(sid,jid,ah);hideTyping();if(rep){addMsg('ai',rep);checkDiag(rep);}}
-    else{hideTyping();addMsg('ai','Une erreur est survenue.');}
+    var sysPrompt='Tu es un assistant médical Dokita pour l\'Afrique subsaharienne. '+
+      'Tu aides les patients à décrire leurs symptômes. '+
+      'Pose des questions courtes et claires. '+
+      'Donne une suspicion diagnostique UNIQUEMENT quand tu as assez d\'informations. '+
+      'Ne recommande JAMAIS un médecin pendant la consultation — attend que le patient clique sur Envoyer le dossier.'+
+      'Réponds toujours en français. Sois concis (3-4 phrases max).';
+    // Construire historique conversation
+    var histPrompt=msgs.slice(-10).map(function(m){
+      return (m.role==='user'?'Patient: ':'Dokita: ')+m.text;
+    }).join('\n')+'\nPatient: '+fullTxt;
+    var rep=await callClaude(histPrompt,sysPrompt);
+    hideTyping();
+    if(rep){addMsg('ai',rep);checkDiag(rep);}
+    else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}
   }catch(e){hideTyping();addMsg('ai','Erreur: '+e.message);}
 }
 
-async function poll(sid,jid,ah){
-  var u='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
-  for(var i=0;i<50;i++){
-    await new Promise(function(r){setTimeout(r,2000);});
-    try{
-      var r=await fetch(u,{headers:{'Authorization':ah}});
-      var d=await r.json();
-      // Log visible dans l'app
-      dbg('[poll#'+i+'] status='+d.status+' types='+(d.updates||[]).map(function(u){return u.type;}).join(','));
-      var updates=d.updates||[];
 
-      for(var up of updates){
-        // Format 1 : agent-complete
-        if(up.type==='agent-complete'){
-          if(up.output&&up.output.answer)return up.output.answer;
-          if(up.output&&up.output.output)return up.output.output;
-          if(up.message&&up.message.content)return up.message.content;
-        }
-        // Format 2 : chain-success (format Relevance AI agent)
-        if(up.type==='chain-success'){
-          var o=up.output||{};
-          // La réponse est dans output.output (imbriqué)
-          var inner=o.output||{};
-          dbg('inner keys: '+Object.keys(inner).join(','));
-          if(typeof inner==='string'&&inner.length>10)return inner;
-          if(inner.answer&&typeof inner.answer==='string')return inner.answer;
-          if(inner.response&&typeof inner.response==='string')return inner.response;
-          if(inner.text&&typeof inner.text==='string')return inner.text;
-          if(inner.message&&typeof inner.message==='string')return inner.message;
-          // Chercher récursivement la première string longue
-          for(var k in inner){
-            if(typeof inner[k]==='string'&&inner[k].length>30)return inner[k];
-          }
-          // Fallback : chercher directement dans o
-          for(var k2 in o){
-            if(typeof o[k2]==='string'&&o[k2].length>30)return o[k2];
-          }
-        }
-        // Format 3 : message assistant
-        if(up.type==='message'&&up.message&&up.message.role==='assistant'){
-          if(up.message.content)return up.message.content;
-        }
-      }
 
-      if(d.output&&d.output.answer)return d.output.answer;
-      if(d.answer)return d.answer;
-      if(d.status==='failed')break;
-      if(d.status==='complete'&&i>2)break;
-
-    }catch(e){}
-  }
-  return null;
-}
-
-var DKEYS=['diagnostic','recommande','traitement','consultez','paludisme','fievre','infection','medicament','maladie','suspicion','bilan','pathologie','urgence','typhoide','tuberculose','trypanosomiase'];
+// Les médecins sont chargés uniquement au moment d'envoyer le dossier
 function checkDiag(txt){
-  if(DKEYS.some(function(k){return txt.toLowerCase().indexOf(k)>=0;}))loadMeds();
+  // Ne plus déclencher automatiquement — voir envoyerDossier
 }
 
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
-  try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'},agent_id:RA};
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
-    var d=await r.json();
-    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
-    if(sid&&jid){
-      var rep=await poll(sid,jid,ah);
-      if(rep){
-        var c=rep.replace(/```json|```/g,'').trim();
-        var idx=c.indexOf('[');if(idx>=0)c=c.slice(idx);
-        NOTION_MEDS=JSON.parse(c);MEDS_LOADED=true;renderMeds(NOTION_MEDS);
-      }
-    }
-  }catch(e){renderMeds([]);}
+  // Médecins hardcodés pour l'instant — à remplacer par query Notion directe
+  NOTION_MEDS=[
+    {nom:'Dr. Quevi Gildas',specialite:'Infectiologue',tel:'',email:'quevi.gildas@gmail.com',tarif:'',note:'',referent:true}
+  ];
+  MEDS_LOADED=true;
+  renderMeds(NOTION_MEDS);
 }
 
 function renderMeds(list){
@@ -1084,33 +1038,30 @@ async function envoyerDossier(email,nomMed){
   toast('⏳ Résumé en cours...');
   dbg('Étape 1 : appel RESUME_CONSULTATION...');
 
-  // ── ÉTAPE 1 : demander le résumé JSON à l'agent ──
+  // ── ÉTAPE 1 : résumé JSON via Claude ──
   var resume={};
   try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:'RESUME_CONSULTATION'},agent_id:RA};
-    if(CID)b.conversation_id=CID;
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
-    var d=await r.json();
-    var sid=d.job_info&&d.job_info.studio_id;
-    var jid=d.job_info&&d.job_info.job_id;
-    dbg('Étape 1 : sid='+sid+' jid='+jid);
-    if(sid&&jid){
-      var rep=await poll(sid,jid,ah);
-      dbg('Étape 1 : réponse agent = '+(rep?rep.slice(0,80):'null'));
-      if(rep){
-        var clean=rep.replace(/```json|```/g,'').trim();
-        var start=clean.indexOf('{');
-        if(start>=0)clean=clean.slice(start);
-        resume=JSON.parse(clean);
-        dbg('Étape 1 : JSON parsé OK — nom='+resume.nom);
-      }
-    }
+    var convHistory=msgs.slice(-20).map(function(m){
+      return (m.role==='user'?'Patient: ':'Dokita: ')+m.text;
+    }).join('\n');
+    var resumePrompt='Voici la consultation:\n'+convHistory+
+      '\n\nRéponds UNIQUEMENT avec un objet JSON valide (pas de markdown) avec ces champs exactement:'+
+      '{"nom":"'+nom+'","age":"'+String(a||'')+'","poids":"'+String(p.poids||'')+'",'+
+      '"ville":"'+String(p.ville||'Non renseignée')+'","voyage":"Aucun",'+
+      '"symptomes":"résumé des symptômes en 1 phrase",'+
+      '"diagnostic":"suspicion diagnostique principale",'+
+      '"recommandations":"recommandations OMS pertinentes",'+
+      '"examens":"examens recommandés si nécessaire"}';
+    var rep=await callClaude(resumePrompt,'Tu es un assistant médical. Réponds UNIQUEMENT en JSON valide sans markdown.');
+    dbg('Résumé Claude: '+(rep?rep.slice(0,80):'null'));
+    var clean=rep.replace(/```json|```/g,'').trim();
+    var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
+    resume=JSON.parse(clean);
   }catch(e){
-    dbg('Étape 1 ERREUR: '+e.message+' → fallback');
+    dbg('Résumé ERREUR: '+e.message+' → fallback');
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
-      ville:'Non renseignée',voyage:'Aucun',
+      ville:String(p.ville||'Non renseignée'),voyage:'Aucun',
       symptomes:msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500),
       diagnostic:msgs.filter(function(m){return m.role==='ai'&&m.text.length>80;}).slice(-1).map(function(m){return m.text;}).join('').slice(0,800),
       recommandations:'',examens:''
