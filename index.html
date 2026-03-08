@@ -1304,6 +1304,7 @@ function supprimerEntree(i){
 function getHistoKey(){return 'histo_'+PROFILS[SEL].prenom+'_'+SEL;}
 
 function sauvegarderSession(resume){
+  dbg('sauvegarder: eph='+!!(CURRENT&&CURRENT._eph)+' reprise='+!!(CURRENT&&CURRENT._reprise)+' msgs='+msgs.length);
   if(!CURRENT||CURRENT._eph||!msgs.length)return;
   if(CURRENT._reprise)return;
   var key=getHistoKey();
@@ -1427,7 +1428,9 @@ async function ouvrirOrdonnancesNotion(){
   if(!el)return;
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
   var nom=PROFILS[SEL].prenom+' '+(PROFILS[SEL].nom||'');
+  dbg('Recherche ordo pour: '+nom.trim());
   var dossier=await chargerDossierPatientNotion(nom.trim());
+  dbg('Dossier trouvé: '+(dossier?'OUI ordo='+(dossier.ordonnances?'OUI':'NON'):'NON'));
   var ordonnances=[];
   if(dossier&&dossier.ordonnances){
     try{ordonnances=JSON.parse(dossier.ordonnances);}catch(e){}
