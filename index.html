@@ -1045,7 +1045,8 @@ async function sendMsg(){
   var ctx='[PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
     (a?', '+a+' ans':'')+
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
-    (p.poids?', '+p.poids+'kg':'')+'] ';
+    (p.poids?', '+p.poids+'kg':'')+
+    (p.ville?', '+p.ville:'')+'] ';
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
@@ -1613,11 +1614,12 @@ async function creerOuMettreAJourPatientNotion(patId,p,resume){
     if(p.ville)props['Ville']={rich_text:[{text:{content:p.ville}}]};
     if(p.poids)props['Poids']={number:parseFloat(p.poids)||0};
     if(p.sx)props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};
-    await notionPatientRequest('/pages','POST',{
+    var res=await notionPatientRequest('/pages','POST',{
       parent:{database_id:NOTION_PATIENTS_DB},
       properties:props
     });
-    dbg('Fiche patient créée: '+patId);
+    if(res.id)dbg('Fiche patient créée: '+patId);
+    else dbg('Notion erreur: '+(res.message||res.code||JSON.stringify(res).slice(0,100)));
   }catch(e){dbg('Erreur création patient: '+e.message);}
 }
 
