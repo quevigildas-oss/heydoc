@@ -1,4 +1,11 @@
 <!DOCTYPE html>
+<!-- ============================================
+     DOKITA — App Patient
+     VERSION : V1 VALIDÉ
+     DATE    : 2026-03-09
+     STACK   : Relevance AI (agent médical) + Make + Notion
+     STATUS  : Workflow complet validé
+============================================ -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
@@ -660,11 +667,12 @@ var RG='d7b62b',RP='428dc1d8-2fa4-46da-b226-c26a52653ed0',RA='7d26fda3-fe2d-405c
 var TURL='https://api-'+RG+'.stack.tryrelevance.com/latest/agents/trigger';
 var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
-async function poll(sid,jid,ah,maxIter){
+async function poll(sid,jid,ah,maxIter,interval){
   maxIter=maxIter||40;
+  interval=interval||1500;
   var u='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
   for(var i=0;i<maxIter;i++){
-    await new Promise(function(r){setTimeout(r,2000);});
+    await new Promise(function(r){setTimeout(r,i<5?800:interval);});
     try{
       var r=await fetch(u,{headers:{'Authorization':ah}});
       var d=await r.json();
@@ -1143,7 +1151,7 @@ async function envoyerDossier(email,nomMed){
     var sid=d.job_info&&d.job_info.studio_id;
     var jid=d.job_info&&d.job_info.job_id;
     if(sid&&jid){
-      var rep=await poll(sid,jid,ah,150);
+      var rep=await poll(sid,jid,ah,150,2000);
       if(rep){
         var clean=rep.replace(/```json|```/g,'').trim();
         var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
@@ -1608,18 +1616,25 @@ async function creerOuMettreAJourPatientNotion(patId,p,resume){
       'ID Patient':{rich_text:[{text:{content:patId}}]},
       'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
     };
-    if(p.naiss)props['Date naissance']={date:{start:p.naiss}};
-    if(p.tel)props['Téléphone']={phone_number:p.tel};
-    if(p.email)props['Email']={email:p.email};
-    if(p.ville)props['Ville']={rich_text:[{text:{content:p.ville}}]};
-    if(p.poids)props['Poids']={number:parseFloat(p.poids)||0};
-    if(p.sx)props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};
+    if(p.naiss){try{props['Date naissance']={date:{start:p.naiss}};}catch(e){}}
+    if(p.tel){try{props['Téléphone']={phone_number:p.tel};}catch(e){}}
+    if(p.email){try{props['Email']={email:p.email};}catch(e){}}
+    if(p.ville){try{props['Ville']={rich_text:[{text:{content:p.ville}}]};}catch(e){}}
+    if(p.poids){try{props['Poids']={number:parseFloat(p.poids)||0};}catch(e){}}
+    if(p.sx){try{props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};}catch(e){}}
+    // Envoyer d'abord les champs obligatoires, retry sans optionnels si erreur
     var res=await notionPatientRequest('/pages','POST',{
       parent:{database_id:NOTION_PATIENTS_DB},
       properties:props
     });
-    if(res.id)dbg('Fiche patient créée: '+patId);
-    else dbg('Notion erreur: '+(res.message||res.code||JSON.stringify(res).slice(0,100)));
+    if(res.id){dbg('Fiche patient créée: '+patId);}
+    else{
+      dbg('Création patient — retry champs de base...');
+      var propsMin={'Nom complet':props['Nom complet'],'Nom':props['Nom'],'Prenom':props['Prenom'],'ID Patient':props['ID Patient'],'Première consultation':props['Première consultation']};
+      var res2=await notionPatientRequest('/pages','POST',{parent:{database_id:NOTION_PATIENTS_DB},properties:propsMin});
+      if(res2.id)dbg('Fiche créée (min): '+patId);
+      else dbg('Notion erreur: '+(res2.message||res2.code||JSON.stringify(res2).slice(0,80)));
+    }
   }catch(e){dbg('Erreur création patient: '+e.message);}
 }
 
