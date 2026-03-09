@@ -625,6 +625,32 @@ select.finput option{background:var(--bg3);}
 </div><!-- /app -->
 
 <script>
+
+// ══════════════════════════════
+// GÉNÉRATION ID PATIENT
+// ══════════════════════════════
+function genPatientId(prenom,nom,naiss){
+  var ini=(prenom.charAt(0)+(nom.charAt(0))).toUpperCase();
+  var dob=(naiss||'').replace(/-/g,'').slice(0,8);
+  var base='PAT-'+ini+'-'+dob+'-';
+  // Chercher les profils existants avec le même base
+  var count=1;
+  PROFILS.forEach(function(p){
+    if(p.patientId&&p.patientId.indexOf(base)===0){
+      var n=parseInt(p.patientId.slice(-3));
+      if(n>=count)count=n+1;
+    }
+  });
+  return base+String(count).padStart(3,'0');
+}
+
+function genConsultId(patientId){
+  var now=new Date();
+  var d=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
+  var h=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+  return 'DOS-'+(patientId||'PAT')+'-'+d+'-'+h;
+}
+
 // ══════════════════════════════
 // CONFIG
 // ══════════════════════════════
@@ -908,7 +934,13 @@ function saveProfil(){
     poids:document.getElementById('fPoids').value||'',
     tel:document.getElementById('fTel').value||'',
     lien:document.getElementById('fLien').value||'moi'};
-  if(EDIT_I>=0)PROFILS[EDIT_I]=p;else PROFILS.push(p);
+  if(EDIT_I>=0){
+    p.patientId=PROFILS[EDIT_I].patientId||genPatientId(pr,no,na);
+    PROFILS[EDIT_I]=p;
+  }else{
+    p.patientId=genPatientId(pr,no,na);
+    PROFILS.push(p);
+  }
   SEL=EDIT_I>=0?EDIT_I:PROFILS.length-1;
   saveProfils();renderProfils();
   nav('profilsScreen');toast('✅ Profil enregistré');
@@ -1088,7 +1120,8 @@ async function envoyerDossier(email,nomMed){
   var a=p._age||calcAge(p.naiss);
   var nom=p.prenom+(p.nom?' '+p.nom:'');
   var dateISO=new Date().toISOString().split('T')[0];
-  var id='DOS-'+Date.now().toString().slice(-6);
+  var patId=p.patientId||genPatientId(p.prenom||'',p.nom||'',p.naiss||'');
+  var id=genConsultId(patId);
 
   toast('⏳ Résumé en cours...');
 
@@ -1128,6 +1161,7 @@ async function envoyerDossier(email,nomMed){
   }
   var payload={
     id:id,
+    patient_id:cleanStr(patId,50),
     patient_nom:cleanStr(resume.nom||nom,100),
     patient_age:cleanStr(resume.age||a||'',20),
     patient_poids:cleanStr(resume.poids||p.poids||'',20),
@@ -1156,7 +1190,11 @@ async function envoyerDossier(email,nomMed){
     });
     makeOk=resp.status>=200&&resp.status<300;
     dbg('Make status='+resp.status);
-    if(makeOk)sauvegarderSession(resume);
+    if(makeOk){
+      sauvegarderSession(resume);
+      // Créer fiche patient dans BDD Patients si elle n'existe pas
+      creerOuMettreAJourPatientNotion(patId,p,resume);
+    }
   }catch(e){dbg('Make erreur: '+e.message);}
 
   // ── ÉTAPE 4 : message patient ──
@@ -1314,7 +1352,7 @@ function supprimerEntree(i){
 // ══════════════════════════════
 // HISTORIQUE CONSULTATIONS
 // ══════════════════════════════
-function getHistoKey(){return 'histo_'+PROFILS[SEL].prenom+'_'+SEL;}
+function getHistoKey(){var p=PROFILS[SEL];return 'histo_'+(p.patientId||SEL+'_'+(p.prenom||'')+'_'+(p.nom||''));}
 
 function sauvegarderSession(resume){
   dbg('sauvegarder: eph='+!!(CURRENT&&CURRENT._eph)+' reprise='+!!(CURRENT&&CURRENT._reprise)+' msgs='+msgs.length);
@@ -1384,7 +1422,8 @@ function viderHistorique(){
 async function actualiserStatutConsultations(){
   if(!PROFILS[SEL])return;
   var nom=PROFILS[SEL].prenom+' '+(PROFILS[SEL].nom||'');
-  var dossier=await chargerDossierPatientNotion(nom.trim());
+  var patId=PROFILS[SEL].patientId||null;
+  var dossier=await chargerDossierPatientNotion(nom.trim(),patId);
   if(!dossier)return;
 
   // Récupérer ordonnances depuis BDD Patients
@@ -1537,6 +1576,39 @@ function dbg(msg){
   log.scrollTop=log.scrollHeight;
 }
 
+
+// ══════════════════════════════
+// CRÉATION AUTO FICHE PATIENT NOTION
+// ══════════════════════════════
+async function creerOuMettreAJourPatientNotion(patId,p,resume){
+  try{
+    // Chercher par ID Patient
+    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'ID Patient',rich_text:{equals:patId}},
+      page_size:1
+    });
+    var nom=(p.prenom||'')+' '+(p.nom||'');
+    if(data.results&&data.results.length>0){
+      // Fiche existante — pas de mise à jour automatique
+      dbg('Patient Notion existant: '+patId);
+      return;
+    }
+    // Créer nouvelle fiche
+    var props={
+      'Nom complet':{title:[{text:{content:nom.trim()}}]},
+      'ID Patient':{rich_text:[{text:{content:patId}}]},
+      'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
+    };
+    if(p.naiss)props['Date naissance']={date:{start:p.naiss}};
+    if(p.tel)props['Téléphone']={phone_number:p.tel};
+    await notionPatientRequest('/pages','POST',{
+      parent:{database_id:NOTION_PATIENTS_DB},
+      properties:props
+    });
+    dbg('Fiche patient créée: '+patId);
+  }catch(e){dbg('Erreur création patient: '+e.message);}
+}
+
 // ══════════════════════════════
 // CONFIG NOTION
 // ══════════════════════════════
@@ -1552,10 +1624,13 @@ async function notionPatientRequest(endpoint,method,body){
   return await r.json();
 }
 
-async function chargerDossierPatientNotion(nom){
+async function chargerDossierPatientNotion(nom,patId){
   try{
+    var filter=patId
+      ?{property:'ID Patient',rich_text:{equals:patId}}
+      :{property:'Nom complet',title:{contains:nom}};
     var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Nom complet',title:{contains:nom}},
+      filter:filter,
       page_size:1
     });
     if(data.results&&data.results.length>0){
