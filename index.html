@@ -374,6 +374,8 @@ select.finput option{background:var(--bg3);}
       <div class="field"><label class="flabel">Poids (kg)</label><input class="finput" id="fPoids" type="number" placeholder="70" min="2" max="300"/></div>
     </div>
     <div class="field"><label class="flabel">Téléphone</label><input class="finput" id="fTel" type="tel" placeholder="+225 07 00 00 00"/></div>
+    <div class="field"><label class="flabel">Email</label><input class="finput" id="fEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
+    <div class="field"><label class="flabel">Ville</label><input class="finput" id="fVille" placeholder="ex: Abidjan" autocomplete="off"/></div>
     <div class="field"><label class="flabel">Lien familial</label>
       <select class="finput" id="fLien">
         <option value="moi">Moi-même</option><option value="enfant">Mon enfant</option>
@@ -904,7 +906,7 @@ function setESx(s){ESX=s;document.getElementById('esxH').classList.toggle('on',s
 function openAdd(idx){
   EDIT_I=idx;SX='';
   document.getElementById('addTitle').textContent=idx>=0?'Modifier le profil':'Nouveau profil';
-  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel'].forEach(function(id){document.getElementById(id).value='';});
+  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel','fEmail','fVille'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fLien').value='moi';
   document.getElementById('sxH').classList.remove('on');
   document.getElementById('sxF').classList.remove('on');
@@ -917,6 +919,8 @@ function openAdd(idx){
     document.getElementById('fTaille').value=p.taille||'';
     document.getElementById('fPoids').value=p.poids||'';
     document.getElementById('fTel').value=p.tel||'';
+    document.getElementById('fEmail').value=p.email||'';
+    document.getElementById('fVille').value=p.ville||'';
     document.getElementById('fLien').value=p.lien||'moi';
     if(p.sx)setSx(p.sx);
   }
@@ -933,6 +937,8 @@ function saveProfil(){
     taille:document.getElementById('fTaille').value||'',
     poids:document.getElementById('fPoids').value||'',
     tel:document.getElementById('fTel').value||'',
+    email:document.getElementById('fEmail').value||'',
+    ville:document.getElementById('fVille').value||'',
     lien:document.getElementById('fLien').value||'moi'};
   if(EDIT_I>=0){
     p.patientId=PROFILS[EDIT_I].patientId||genPatientId(pr,no,na);
@@ -1164,7 +1170,7 @@ async function envoyerDossier(email,nomMed){
     patient_id:cleanStr(patId,50),
     patient_nom:cleanStr(resume.nom||nom,100),
     patient_age:cleanStr(resume.age||a||'',20),
-    patient_poids:cleanStr(resume.poids||p.poids||'',20),
+    patient_poids:parseFloat(resume.poids||p.poids||0)||0,
     patient_ville:cleanStr(resume.ville||p.ville||'Non renseignee',50),
     patient_voyage:cleanStr(resume.voyage||'Aucun',80),
     patient_sexe:p.sx==='H'?'Masculin':p.sx==='F'?'Feminin':'',
@@ -1596,11 +1602,17 @@ async function creerOuMettreAJourPatientNotion(patId,p,resume){
     // Créer nouvelle fiche
     var props={
       'Nom complet':{title:[{text:{content:nom.trim()}}]},
+      'Nom':{rich_text:[{text:{content:p.nom||''}}]},
+      'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
       'ID Patient':{rich_text:[{text:{content:patId}}]},
       'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
     };
     if(p.naiss)props['Date naissance']={date:{start:p.naiss}};
     if(p.tel)props['Téléphone']={phone_number:p.tel};
+    if(p.email)props['Email']={email:p.email};
+    if(p.ville)props['Ville']={rich_text:[{text:{content:p.ville}}]};
+    if(p.poids)props['Poids']={number:parseFloat(p.poids)||0};
+    if(p.sx)props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};
     await notionPatientRequest('/pages','POST',{
       parent:{database_id:NOTION_PATIENTS_DB},
       properties:props
