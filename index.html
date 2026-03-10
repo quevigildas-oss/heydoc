@@ -3,7 +3,7 @@
      DOKITA — App Patient
      VERSION : V2.1
      DATE    : 2026-03-10
-     STACK   : Relevance AI (agent médical) + Make + Notion1
+     STACK   : Relevance AI (agent médical) + Make + Notion
      STATUS  : Workflow complet validé
 ============================================ -->
 <html lang="fr">
@@ -589,6 +589,18 @@ select.finput option{background:var(--bg3);}
     <div style="flex:1"><div class="hdr-title">Ordonnances</div><div class="hdr-sub">Prescriptions de votre médecin</div></div>
   </div>
   <div class="sbody" id="ordonnancesList">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+<!-- ══ DÉTAIL CONSULTATION ══ -->
+<div class="screen" id="consultDetailScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('historiqueScreen')">←</div>
+    <div class="hdr-ico">📋</div>
+    <div style="flex:1"><div class="hdr-title">Consultation</div><div class="hdr-sub" id="consultDetailDate"></div></div>
+  </div>
+  <div class="sbody" id="consultDetailBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
   </div>
 </div>
@@ -1574,6 +1586,7 @@ async function renderHistorique(){
   var el=document.getElementById('histoList');
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
   var sessions=await chargerHistoriqueNotion();
+  HISTO_CACHE=sessions;
   if(!sessions.length){
     el.innerHTML='<div class="detail-empty">📋 Aucune consultation enregistrée.<br>Vos sessions apparaîtront ici après envoi d\'un dossier.</div>';
     return;
@@ -1586,14 +1599,16 @@ async function renderHistorique(){
       :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:#fbbf24;">⏳ En attente</span>';
     var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
     return '<div class="histo-card">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
         '<div class="histo-date">'+dateAff+'</div>'+
+        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;margin-top:0;" onclick="event.stopPropagation();voirOrdonnanceHisto(''+s.notionId+'')">📋 Ordonnance</div>':'')+
       '</div>'+
-      '<div style="margin-bottom:6px;">'+statutBadge+'</div>'+
+      '<div style="margin-bottom:8px;">'+statutBadge+'</div>'+
       (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
-      (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;">'+escHtml(s.diagnostic.slice(0,120))+'...</div>':'')+
-      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+
-        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="ouvrirOrdonnancesNotion()">📋 Ordonnances</div>':'')+
+      (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;color:var(--text2);">'+escHtml(s.diagnostic.slice(0,120))+'...</div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px;">'+
+        '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir consultation</div>'+
+        '<div class="histo-badge" style="background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.3);color:var(--accent2);" onclick="reouvriConsultation('+i+')">🔄 Rouvrir</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -1830,6 +1845,8 @@ async function chargerHistoriqueNotion(){
         return '';}
       var statut=txt('Statut')||'en_attente';
       var traite=statut==='valide'||statut==='cloture';
+      var ordRaw=txt('Ordonnance');
+      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){}
       return {
         notionId:page.id,
         date:txt('Date')||'',
@@ -1837,10 +1854,133 @@ async function chargerHistoriqueNotion(){
         diagnostic:txt('Diagnostic IA')||'',
         statut:statut,
         traite:traite,
+        ordonnance:ord,
         dossierId:txt('ID')||page.id.slice(0,8)
       };
     });
   }catch(e){dbg('Erreur chargement historique: '+e.message);return[];}
+}
+
+
+// ══════════════════════════════
+// DÉTAIL CONSULTATION & ORDONNANCE
+// ══════════════════════════════
+var HISTO_CACHE=[];
+
+async function voirDetailConsultation(i){
+  nav('consultDetailScreen');
+  var el=document.getElementById('consultDetailBody');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  
+  // Utiliser le cache ou recharger
+  if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
+  var s=HISTO_CACHE[i];
+  if(!s){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Consultation introuvable</div>';return;}
+  
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+  document.getElementById('consultDetailDate').textContent=dateAff;
+  
+  // Charger la page complète depuis Notion pour avoir tous les champs
+  var html='';
+  try{
+    var page=await notionConsultRequest('/pages/'+s.notionId,'GET');
+    var props=page.properties||{};
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+      if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+      if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+      if(t==='select')return p.select?p.select.name:'';
+      if(t==='date')return p.date?p.date.start:'';
+      return '';}
+    
+    var symptomes=txt('Symptomes');
+    var diagIA=txt('Diagnostic IA');
+    var recommandations=txt('Recommandations OMS');
+    var medecin=txt('Medecin');
+    var statut=txt('Statut');
+    var diagMed=txt('Diagnostic Medecin');
+    var traitementMed=txt('Traitement Prescrit');
+    var ordonnanceRaw=txt('Ordonnance');
+    var ordonnance=null;
+    try{if(ordonnanceRaw)ordonnance=JSON.parse(ordonnanceRaw);}catch(e){}
+    var traite=statut==='valide'||statut==='cloture';
+    
+    html='<div style="display:flex;flex-direction:column;gap:12px;">';
+    
+    // Statut
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
+    html+='<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;">Statut</div>';
+    html+=traite
+      ?'<span style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:3px 10px;font-size:11px;color:var(--accent);">✅ Traité</span>'
+      :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:3px 10px;font-size:11px;color:#fbbf24;">⏳ En attente</span>';
+    html+='</div></div>';
+    
+    // Symptômes
+    if(symptomes){
+      html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
+      html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🤒 SYMPTÔMES</div>';
+      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(symptomes)+'</div></div>';
+    }
+    
+    // Diagnostic IA
+    if(diagIA){
+      html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
+      html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🤖 DIAGNOSTIC IA</div>';
+      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(diagIA).replace(/
+/g,'<br>')+'</div></div>';
+    }
+    
+    // Ordonnance médecin
+    if(ordonnance){
+      html+='<div style="background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.3);border-radius:14px;padding:14px;">';
+      html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#818cf8;margin-bottom:8px;">📋 ORDONNANCE — '+escHtml(ordonnance.medecin||medecin||'')+'</div>';
+      if(ordonnance.diagnostic)html+='<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Diagnostic : '+escHtml(ordonnance.diagnostic)+'</div>';
+      if(ordonnance.medicaments&&ordonnance.medicaments.length){
+        html+='<div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;">MÉDICAMENTS :</div>';
+        ordonnance.medicaments.forEach(function(m){
+          html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text);">• '+escHtml(m)+'</div>';
+        });
+      }
+      if(ordonnance.notes)html+='<div style="margin-top:8px;font-size:11px;color:var(--text2);font-style:italic;">📝 '+escHtml(ordonnance.notes)+'</div>';
+      html+='</div>';
+    }
+    
+    html+='</div>';
+  }catch(e){html='<div style="color:var(--danger);padding:20px;">Erreur chargement: '+e.message+'</div>';}
+  
+  el.innerHTML=html;
+}
+
+async function voirOrdonnanceHisto(notionId){
+  // Chercher dans le cache
+  var s=HISTO_CACHE.find(function(x){return x.notionId===notionId;});
+  if(s){var i=HISTO_CACHE.indexOf(s);voirDetailConsultation(i);}
+}
+
+function reouvriConsultation(i){
+  if(!PROFILS[SEL])return;
+  CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false,_reprise:true});
+  // Charger depuis le cache
+  var s=HISTO_CACHE[i];
+  if(s)CID=s.cid||null;
+  msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
+  document.getElementById('msgsList').innerHTML='';
+  document.getElementById('recoBox').style.display='none';
+  document.getElementById('chatInp').value='';
+  var p=CURRENT;
+  var nom=p.prenom+(p.nom?' '+p.nom:'');
+  document.getElementById('chatPBar').style.display='flex';
+  var av=document.getElementById('chatPAv');
+  av.textContent=p.prenom.charAt(0).toUpperCase();
+  av.className='cp-av '+(p._idx>=0?AVC[p._idx%8]:'av0');
+  document.getElementById('chatPNom').textContent=nom;
+  document.getElementById('chatPInfo').textContent='Nouvelle consultation';
+  document.getElementById('chatSub').textContent='Nouvelle consultation';
+  var d=document.createElement('div');
+  d.className='msg ai';
+  d.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);"><em>Nouvelle consultation ouverte. Décrivez vos symptômes actuels.</em></div>';
+  document.getElementById('msgsList').appendChild(d);
+  nav('chatScreen');
 }
 
 // ══════════════════════════════
