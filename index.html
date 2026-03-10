@@ -780,6 +780,7 @@ async function creerCompte(){
   }catch(e){err.textContent='Erreur: '+e.message;err.classList.add('on');}
 }
 
+function logout(){if(confirm('Se déconnecter ?'))seDeconnecter();}
 function seDeconnecter(){
   SESSION_EMAIL='';SESSION_PATIENT_ID='';
   PROFILS=[];SEL=-1;CURRENT=null;
