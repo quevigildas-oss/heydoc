@@ -1570,11 +1570,10 @@ function sauvegarderSession(resume){
   try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
 }
 
-function renderHistorique(){
+async function renderHistorique(){
   var el=document.getElementById('histoList');
-  var key=getHistoKey();
-  var sessions=[];
-  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  var sessions=await chargerHistoriqueNotion();
   if(!sessions.length){
     el.innerHTML='<div class="detail-empty">📋 Aucune consultation enregistrée.<br>Vos sessions apparaîtront ici après envoi d\'un dossier.</div>';
     return;
