@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V1 VALIDÉ
-     DATE    : 2026-03-09
+     VERSION : V2.1
+     DATE    : 2026-03-10
      STACK   : Relevance AI (agent médical) + Make + Notion
      STATUS  : Workflow complet validé
 ============================================ -->
@@ -297,8 +297,6 @@ select.finput option{background:var(--bg3);}
 
       <!-- Connexion -->
       <div id="panelConnexion">
-        <div class="login-title">Bon retour 👋</div>
-        <div class="login-sub">Connectez-vous avec votre email et code secret</div>
         <div class="field"><label class="flabel">Email</label><input class="finput" id="lEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
         <div class="field" style="margin-top:12px"><label class="flabel">Code secret (4 chiffres)</label><input class="finput" id="lCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
         <div class="login-err" id="lErr"></div>
@@ -669,9 +667,17 @@ select.finput option{background:var(--bg3);}
       </div>
     </div>
 
+    <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">Compte</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      <div style="padding:16px;cursor:pointer;" onclick="logout()">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--danger);">🔓 Se déconnecter</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px;" id="paramEmail">-</div>
+      </div>
+    </div>
+
     <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">À propos</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
-      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita v1.0</div>
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita v2.1</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.</div>
     </div>
   </div>
@@ -1921,6 +1927,7 @@ function openParametres(){
   if(el)el.textContent=n+' profil'+(n>1?'s':'')+(n?' : '+PROFILS.map(function(p){return p.prenom;}).join(', '):'');
   nav('parametresScreen');
   syncToggles(localStorage.getItem('dokita_theme')||'dark');
+  var el2=document.getElementById('paramEmail');if(el2)el2.textContent=SESSION_EMAIL||'';
 }
 function clearAllData(){
   if(!confirm('Effacer TOUTES les données Dokita ?\nProfils, historique, dossiers médicaux.\nCette action est irréversible.'))return;
