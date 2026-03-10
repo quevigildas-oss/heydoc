@@ -1219,7 +1219,7 @@ function addMsg(role,text){
   var d=document.createElement('div');
   d.className='msg '+role;
   d.innerHTML='<div class="msg-b">'+
-    text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').replace(/\n/g,'<br>')+
+    text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').split('\n').join('<br>')+
   '</div><div class="msg-t">'+ti+'</div>';
   document.getElementById('msgsList').appendChild(d);
   document.getElementById('msgsList').scrollTop=999999;
@@ -1484,7 +1484,7 @@ function renderDossierDetail(type){
   el.innerHTML=items.map(function(it,i){
     return '<div class="detail-item">'+
       '<div class="detail-item-title">'+escHtml(it.titre)+'</div>'+
-      '<div class="detail-item-val">'+escHtml(it.valeur).replace(/\n/g,'<br>')+'</div>'+
+      '<div class="detail-item-val">'+escHtml(it.valeur).split('\n').join('<br>')+'</div>'+
       '<div class="detail-item-date" style="display:flex;justify-content:space-between;align-items:center;">'+
         '<span>'+it.date+'</span>'+
         '<span onclick="supprimerEntree('+i+')" style="color:var(--danger);cursor:pointer;font-size:12px;">🗑 Supprimer</span>'+
@@ -1601,7 +1601,7 @@ async function renderHistorique(){
     return '<div class="histo-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
         '<div class="histo-date">'+dateAff+'</div>'+
-        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;margin-top:0;" onclick="event.stopPropagation();voirOrdonnanceHisto(''+s.notionId+'')">📋 Ordonnance</div>':'')+
+        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;margin-top:0;" onclick="event.stopPropagation();voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
       '</div>'+
       '<div style="margin-bottom:8px;">'+statutBadge+'</div>'+
       (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
@@ -1716,7 +1716,7 @@ function reprendreSession(i){
     var d=document.createElement('div');
     d.className='msg '+m.role;
     d.innerHTML='<div class="msg-b">'+
-      m.text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').replace(/\n/g,'<br>')+
+      m.text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').split('\n').join('<br>')+
     '</div><div class="msg-t">'+m.time+'</div>';
     document.getElementById('msgsList').appendChild(d);
   });
@@ -1926,9 +1926,9 @@ async function voirDetailConsultation(i){
     if(diagIA){
       html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
       html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🤖 DIAGNOSTIC IA</div>';
-      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(diagIA).replace(/
-/g,'<br>')+'</div></div>';
+      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(diagIA).split('\\n').join('<br>')+'</div></div>';
     }
+    
     
     // Ordonnance médecin
     if(ordonnance){
