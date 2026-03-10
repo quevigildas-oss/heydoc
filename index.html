@@ -1957,19 +1957,17 @@ async function voirDetailConsultation(i){
   el.innerHTML=html;
 }
 
-async function voirOrdonnanceHisto(notionId){
-  // Chercher dans le cache
-  var s=HISTO_CACHE.find(function(x){return x.notionId===notionId;});
-  if(s){var i=HISTO_CACHE.indexOf(s);voirDetailConsultation(i);}
+async function voirOrdonnanceHisto(i){
+  voirDetailConsultation(i);
 }
 
 function reouvriConsultation(i){
   if(!PROFILS[SEL])return;
   PREV_SCREEN='historiqueScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false,_reprise:true});
-  // Charger depuis le cache
   var s=HISTO_CACHE[i];
-  if(s)CID=s.cid||null;
+  // Nouvelle conversation Relevance AI (pas de CID pour forcer un nouveau contexte)
+  CID=null;
   msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
   document.getElementById('msgsList').innerHTML='';
   document.getElementById('recoBox').style.display='none';
@@ -1983,10 +1981,24 @@ function reouvriConsultation(i){
   document.getElementById('chatPNom').textContent=nom;
   document.getElementById('chatPInfo').textContent='Nouvelle consultation';
   document.getElementById('chatSub').textContent='Nouvelle consultation';
-  var d=document.createElement('div');
-  d.className='msg ai';
-  d.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);"><em>Nouvelle consultation ouverte. Décrivez vos symptômes actuels.</em></div>';
-  document.getElementById('msgsList').appendChild(d);
+  // Afficher le contexte de la consultation précédente
+  if(s){
+    var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+    var ctx=document.createElement('div');
+    ctx.className='msg ai';
+    ctx.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);font-size:12px;">'+
+      '<strong>📋 Reprise — consultation du '+dateAff+'</strong><br>'+
+      (s.symptomes?'Symptômes précédents : '+escHtml(s.symptomes)+'<br>':'')+
+      (s.diagnostic?'Diagnostic IA : '+escHtml(s.diagnostic.slice(0,150))+'...':'')+
+      '<br><br><em>Décrivez vos nouveaux symptômes ou l\'évolution de votre état.</em>'+
+    '</div>';
+    document.getElementById('msgsList').appendChild(ctx);
+  } else {
+    var d=document.createElement('div');
+    d.className='msg ai';
+    d.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);"><em>Nouvelle consultation ouverte. Décrivez vos symptômes actuels.</em></div>';
+    document.getElementById('msgsList').appendChild(d);
+  }
   nav('chatScreen');
 }
 
