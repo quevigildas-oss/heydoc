@@ -1265,7 +1265,7 @@ async function sendMsg(){
     dbg('avant poll sid='+sid+' jid='+jid+' bool='+(!!sid&&!!jid));
     if(sid&&jid){var rep=await poll(sid,jid,ah);hideTyping();if(rep){var repClean=rep.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();addMsg('ai',repClean);checkDiag(rep);}else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}}
     else{hideTyping();addMsg('ai','Une erreur est survenue.');}
-  }catch(e){hideTyping();addMsg('ai','Erreur: '+e.message);}
+  }catch(e){hideTyping();dbg('CATCH: '+e.message+' | '+e.stack);addMsg('ai','Erreur: '+e.message);}
 }
 
 
