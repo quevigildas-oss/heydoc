@@ -836,8 +836,10 @@ var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 async function poll(sid,jid,ah,maxIter,interval){
   maxIter=maxIter||40;
   interval=interval||1500;
+  dbg('poll start sid='+sid+' jid='+jid);
   for(var i=0;i<maxIter;i++){
     await new Promise(function(r){setTimeout(r,i<5?800:interval);});
+    dbg('poll iter='+i);
     try{
       var r=await fetch(RA_POLL_PROXY+'?sid='+encodeURIComponent(sid)+'&jid='+encodeURIComponent(jid),{headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}});
       var d=await r.json();
