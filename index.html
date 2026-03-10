@@ -1254,7 +1254,7 @@ async function sendMsg(){
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
-    var b={message:{role:'human',content:fullTxt}};
+    var b={message:{role:'user',content:fullTxt}};
     if(CID)b.conversation_id=CID;
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
@@ -1280,7 +1280,7 @@ function checkDiag(txt){
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
-    var b={message:{role:'human',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'}};
+    var b={message:{role:'user',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'}};
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
     var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
@@ -1337,7 +1337,7 @@ async function envoyerDossier(email,nomMed){
   // ── ÉTAPE 1 : résumé JSON via Relevance AI (RESUME_CONSULTATION) ──
   var resume={};
   try{
-    var b={message:{role:'human',content:'RESUME_CONSULTATION'}};
+    var b={message:{role:'user',content:'RESUME_CONSULTATION'}};
     if(CID)b.conversation_id=CID;
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
