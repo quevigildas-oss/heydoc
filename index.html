@@ -461,7 +461,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ CHAT ══ -->
 <div class="screen" id="chatScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav(PREV_SCREEN||'espaceProfilScreen');PREV_SCREEN='profilsScreen';">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div></div>
   <div class="chat-profil" id="chatPBar" style="display:none;">
     <div class="cp-av" id="chatPAv"></div>
     <div><div class="cp-nom" id="chatPNom"></div><div class="cp-info" id="chatPInfo"></div></div>
@@ -596,7 +596,7 @@ select.finput option{background:var(--bg3);}
 <!-- ══ DÉTAIL CONSULTATION ══ -->
 <div class="screen" id="consultDetailScreen">
   <div class="hdr">
-    <div class="hdr-back" onclick="nav('historiqueScreen')">←</div>
+    <div class="hdr-back" onclick="nav('historiqueScreen');renderHistorique().catch(function(){})">←</div>
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Consultation</div><div class="hdr-sub" id="consultDetailDate"></div></div>
   </div>
@@ -878,6 +878,7 @@ async function poll(sid,jid,ah,maxIter,interval){
 // ══════════════════════════════
 var CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
 var SESSION_EMAIL='',SESSION_PATIENT_ID='';
+var PREV_SCREEN='profilsScreen';
 var PROFILS=[],SEL=-1,CURRENT=null,SX='',ESX='',EDIT_I=-1;
 var USER_LAT=null,USER_LNG=null;
 var GEO_DATA={clinique:[],labo:[],pharmacie:[]};
@@ -1157,6 +1158,7 @@ function saveProfil(){
 // ══════════════════════════════
 function lancerConsult(){
   if(SEL<0)return;
+  PREV_SCREEN='profilsScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false});
   startChat();
 }
@@ -1601,14 +1603,14 @@ async function renderHistorique(){
     return '<div class="histo-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
         '<div class="histo-date">'+dateAff+'</div>'+
-        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;margin-top:0;" onclick="event.stopPropagation();voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
+        statutBadge+
       '</div>'+
-      '<div style="margin-bottom:8px;">'+statutBadge+'</div>'+
       (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
       (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;color:var(--text2);">'+escHtml(s.diagnostic.slice(0,120))+'...</div>':'')+
-      '<div style="display:flex;gap:8px;margin-top:10px;">'+
-        '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir consultation</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">'+
+        '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir</div>'+
         '<div class="histo-badge" style="background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.3);color:var(--accent2);" onclick="reouvriConsultation('+i+')">🔄 Rouvrir</div>'+
+        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
       '</div>'+
     '</div>';
   }).join('');
@@ -1959,6 +1961,7 @@ async function voirOrdonnanceHisto(notionId){
 
 function reouvriConsultation(i){
   if(!PROFILS[SEL])return;
+  PREV_SCREEN='historiqueScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false,_reprise:true});
   // Charger depuis le cache
   var s=HISTO_CACHE[i];
