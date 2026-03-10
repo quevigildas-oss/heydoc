@@ -267,14 +267,60 @@ select.finput option{background:var(--bg3);}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.1);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:9px 16px;font-size:12px;color:#fff;z-index:999;white-space:nowrap;}
 
 /* Avatar colors */
+.login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--bg);}
+.login-logo{font-family:'Syne',sans-serif;font-size:42px;font-weight:800;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px;}
+.login-tag{font-size:13px;color:var(--text3);margin-bottom:40px;text-align:center;}
+.login-box{width:100%;max-width:360px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:28px 24px;}
+.login-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--text);margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--text3);margin-bottom:24px;}
+.login-tab{display:flex;gap:8px;margin-bottom:24px;background:var(--bg3);border-radius:12px;padding:4px;}
+.login-tab-btn{flex:1;padding:8px;border-radius:9px;border:none;background:transparent;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer;transition:.2s;}
+.login-tab-btn.active{background:var(--bg2);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.15);}
+.login-err{font-size:12px;color:#E74C3C;margin-top:8px;display:none;}
+.login-err.on{display:block;}
 .av0{background:#2E86C1;}.av1{background:#00875A;}.av2{background:#8E44AD;}.av3{background:#E67E22;}.av4{background:#E74C3C;}.av5{background:#16A085;}.av6{background:#2C3E50;}.av7{background:#D35400;}
 </style>
 </head>
 <body>
 <div id="app">
 
+<!-- ══ CONNEXION ══ -->
+<div class="screen on" id="loginScreen">
+  <div class="login-screen">
+    <div class="login-logo">Dokita</div>
+    <div class="login-tag">Plateforme médicale · Afrique & Maladies tropicales</div>
+    <div class="login-box">
+      <div class="login-tab">
+        <button class="login-tab-btn active" id="tabConnexion" onclick="switchLoginTab('connexion')">Se connecter</button>
+        <button class="login-tab-btn" id="tabCreer" onclick="switchLoginTab('creer')">Créer un compte</button>
+      </div>
+
+      <!-- Connexion -->
+      <div id="panelConnexion">
+        <div class="login-title">Bon retour 👋</div>
+        <div class="login-sub">Connectez-vous avec votre email et code secret</div>
+        <div class="field"><label class="flabel">Email</label><input class="finput" id="lEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
+        <div class="field" style="margin-top:12px"><label class="flabel">Code secret (4 chiffres)</label><input class="finput" id="lCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
+        <div class="login-err" id="lErr"></div>
+        <button class="btn-p" style="margin-top:20px;width:100%" onclick="seConnecter()">Se connecter</button>
+      </div>
+
+      <!-- Création compte -->
+      <div id="panelCreer" style="display:none">
+        <div class="login-title">Créer un compte 🌱</div>
+        <div class="login-sub">Votre email sera votre identifiant sur tous vos appareils</div>
+        <div class="field"><label class="flabel">Email</label><input class="finput" id="cEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
+        <div class="field" style="margin-top:12px"><label class="flabel">Code secret (4 chiffres)</label><input class="finput" id="cCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
+        <div class="field" style="margin-top:12px"><label class="flabel">Confirmer le code</label><input class="finput" id="cCode2" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
+        <div class="login-err" id="cErr"></div>
+        <button class="btn-p" style="margin-top:20px;width:100%" onclick="creerCompte()">Créer mon compte</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ ACCUEIL ══ -->
-<div class="screen on" id="accueilScreen">
+<div class="screen" id="accueilScreen">
   <div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px;padding-top:calc(10px + var(--st));display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
     <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Dokita</div>
     <button onclick="openParametres()" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">⚙️</button>
@@ -340,7 +386,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ SETUP CLÉ ══ -->
 <div class="screen" id="setupScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div style="flex:1"><div class="hdr-title">Configuration</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div style="flex:1"><div class="hdr-title">Configuration</div></div><button onclick="logout()" style="background:#E74C3C;color:#fff;border:none;border-radius:10px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Déconnexion</button></div>
   <div class="form-body">
     <div class="form-intro">
       <div class="form-ico">🔑</div>
@@ -635,6 +681,107 @@ select.finput option{background:var(--bg3);}
 
 <script>
 
+
+// ══════════════════════════════
+// CONNEXION / AUTHENTIFICATION
+// ══════════════════════════════
+function switchLoginTab(tab){
+  document.getElementById('tabConnexion').classList.toggle('active',tab==='connexion');
+  document.getElementById('tabCreer').classList.toggle('active',tab==='creer');
+  document.getElementById('panelConnexion').style.display=tab==='connexion'?'':'none';
+  document.getElementById('panelCreer').style.display=tab==='creer'?'':'none';
+}
+
+async function seConnecter(){
+  var email=(document.getElementById('lEmail').value||'').trim().toLowerCase();
+  var code=(document.getElementById('lCode').value||'').trim();
+  var err=document.getElementById('lErr');
+  err.className='login-err';
+  if(!email||!code){err.textContent='Email et code requis';err.classList.add('on');return;}
+  if(!/^\d{4}$/.test(code)){err.textContent='Le code doit contenir 4 chiffres';err.classList.add('on');return;}
+  err.textContent='Connexion en cours...';err.classList.add('on');
+  try{
+    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Email',email:{equals:email}},page_size:1
+    });
+    if(!data.results||data.results.length===0){
+      err.textContent='Aucun compte trouvé pour cet email';err.classList.add('on');return;
+    }
+    var page=data.results[0];
+    var props=page.properties;
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
+    var storedCode=txt('Code');
+    if(storedCode!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
+    // Charger le profil depuis Notion
+    SESSION_EMAIL=email;
+    SESSION_PATIENT_ID=txt('ID Patient');
+    var profil={
+      prenom:txt('Prenom'),nom:txt('Nom'),
+      naiss:txt('Date naissance'),
+      tel:txt('Téléphone'),email:email,
+      ville:txt('Ville'),
+      poids:txt('Poids'),
+      sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',
+      allergies:txt('Allergies'),
+      antecedents:txt('Antécédents'),
+      traitements:txt('Traitements réguliers'),
+      patientId:SESSION_PATIENT_ID,
+      notionPageId:page.id
+    };
+    PROFILS=[profil];SEL=0;
+    err.className='login-err';
+    try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
+    nav('accueilScreen');
+    toast('Bienvenue '+profil.prenom+' 👋');
+  }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
+}
+
+async function creerCompte(){
+  var email=(document.getElementById('cEmail').value||'').trim().toLowerCase();
+  var code=(document.getElementById('cCode').value||'').trim();
+  var code2=(document.getElementById('cCode2').value||'').trim();
+  var err=document.getElementById('cErr');
+  err.className='login-err';
+  if(!email||!code||!code2){err.textContent='Tous les champs sont requis';err.classList.add('on');return;}
+  if(!/^[^@]+@[^@]+\.[^@]+$/.test(email)){err.textContent='Email invalide';err.classList.add('on');return;}
+  if(!/^\d{4}$/.test(code)){err.textContent='Le code doit contenir 4 chiffres';err.classList.add('on');return;}
+  if(code!==code2){err.textContent='Les codes ne correspondent pas';err.classList.add('on');return;}
+  err.textContent='Création du compte...';err.classList.add('on');
+  try{
+    // Vérifier si email déjà utilisé
+    var check=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Email',email:{equals:email}},page_size:1
+    });
+    if(check.results&&check.results.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
+    // Créer la fiche dans Notion
+    var res=await notionPatientRequest('/pages','POST',{
+      parent:{database_id:NOTION_PATIENTS_DB},
+      properties:{
+        'Nom complet':{title:[{text:{content:email}}]},
+        'Email':{email:email},
+        'Code':{rich_text:[{text:{content:code}}]},
+        'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
+      }
+    });
+    if(!res.id){err.textContent='Erreur création compte';err.classList.add('on');return;}
+    SESSION_EMAIL=email;
+    SESSION_PATIENT_ID='';
+    PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',notionPageId:res.id}];
+    SEL=0;
+    err.className='login-err';
+    nav('addProfilScreen');
+    toast('Compte créé ! Complétez votre profil 👤');
+  }catch(e){err.textContent='Erreur: '+e.message;err.classList.add('on');}
+}
+
+function seDeconnecter(){
+  SESSION_EMAIL='';SESSION_PATIENT_ID='';
+  PROFILS=[];SEL=-1;CURRENT=null;
+  try{localStorage.removeItem('dk_session');}catch(e){}
+  nav('loginScreen');
+  toast('Déconnecté');
+}
+
 // ══════════════════════════════
 // GÉNÉRATION ID PATIENT
 // ══════════════════════════════
@@ -663,18 +810,18 @@ function genConsultId(patientId){
 // ══════════════════════════════
 // CONFIG
 // ══════════════════════════════
-var RG='d7b62b',RP='428dc1d8-2fa4-46da-b226-c26a52653ed0',RA='7d26fda3-fe2d-405c-8aed-645df10baa12';
-var TURL='https://api-'+RG+'.stack.tryrelevance.com/latest/agents/trigger';
+var DOKITA_KEY='dk-2026-prod-x9f7m';
+var RA_PROXY='https://heydoc-medecin.vercel.app/api/relevance';
+var RA_POLL_PROXY='https://heydoc-medecin.vercel.app/api/relevance-poll';
 var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
 async function poll(sid,jid,ah,maxIter,interval){
   maxIter=maxIter||40;
   interval=interval||1500;
-  var u='https://api-'+RG+'.stack.tryrelevance.com/latest/studios/'+sid+'/async_poll/'+jid;
   for(var i=0;i<maxIter;i++){
     await new Promise(function(r){setTimeout(r,i<5?800:interval);});
     try{
-      var r=await fetch(u,{headers:{'Authorization':ah}});
+      var r=await fetch(RA_POLL_PROXY+'?sid='+encodeURIComponent(sid)+'&jid='+encodeURIComponent(jid),{headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}});
       var d=await r.json();
       if(i===0)dbg('poll[0] status='+r.status+' keys='+Object.keys(d).join(','));
       if(i===0&&d.updates&&d.updates.length)dbg('poll[0] update types='+d.updates.map(function(u){return u.type;}).join(','));
@@ -711,12 +858,25 @@ async function poll(sid,jid,ah,maxIter,interval){
 // ══════════════════════════════
 // STATE
 // ══════════════════════════════
-var KEY='',CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
+var CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
+var SESSION_EMAIL='',SESSION_PATIENT_ID='';
 var PROFILS=[],SEL=-1,CURRENT=null,SX='',ESX='',EDIT_I=-1;
 var USER_LAT=null,USER_LNG=null;
 var GEO_DATA={clinique:[],labo:[],pharmacie:[]};
 
-try{KEY=localStorage.getItem('hdk')||'';}catch(e){}
+// Clé Relevance AI gérée par proxy Vercel — plus besoin de KEY côté client
+// Restaurer session si email en localStorage
+try{var _sess=localStorage.getItem('dk_session');if(_sess){var _s=JSON.parse(_sess);SESSION_EMAIL=_s.email||'';SESSION_PATIENT_ID=_s.patientId||'';}}catch(e){}
+// Auto-login si session trouvée
+window.addEventListener('DOMContentLoaded',function(){
+  if(SESSION_EMAIL){
+    rechargerSessionNotion().then(function(ok){
+      if(ok){document.getElementById('loginScreen').classList.remove('on');document.getElementById('accueilScreen').classList.add('on');}
+      else{SESSION_EMAIL='';try{localStorage.removeItem('dk_session');}catch(e){}nav('loginScreen');}
+    });
+  }
+});
+
 try{var _p=localStorage.getItem('hd_profils');if(_p)PROFILS=JSON.parse(_p);}catch(e){}
 
 // ══════════════════════════════
@@ -730,7 +890,22 @@ function nav(id){
 // ══════════════════════════════
 // ACCUEIL
 // ══════════════════════════════
-function goPatient(){if(!KEY){nav('setupScreen');return;}renderProfils();nav('profilsScreen');}
+function goPatient(){if(!SESSION_EMAIL){nav('loginScreen');return;}renderProfils();nav('profilsScreen');}
+
+async function rechargerSessionNotion(){
+  if(!SESSION_EMAIL)return false;
+  try{
+    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Email',email:{equals:SESSION_EMAIL}},page_size:1
+    });
+    if(!data.results||data.results.length===0)return false;
+    var page=data.results[0];var props=page.properties;
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
+    SESSION_PATIENT_ID=txt('ID Patient');
+    PROFILS=[{prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),poids:txt('Poids'),sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',allergies:txt('Allergies'),antecedents:txt('Antécédents'),traitements:txt('Traitements réguliers'),patientId:SESSION_PATIENT_ID,notionPageId:page.id}];
+    SEL=0;return true;
+  }catch(e){return false;}
+}
 function goMedecin(){window.open('https://heydoc-medecin.vercel.app','_blank');}
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
 function goLabo(){nav('laboScreen');loadGeo('labo');}
@@ -1058,10 +1233,9 @@ async function sendMsg(){
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
   try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:fullTxt},agent_id:RA};
+    var b={message:{role:'user',content:fullTxt}};
     if(CID)b.conversation_id=CID;
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
+    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
     dbg("RA status="+r.status+" keys="+Object.keys(d).join(",")+" detail="+(d.detail||d.message||d.error||""));
     if(d.conversation_id)CID=d.conversation_id;
@@ -1085,9 +1259,8 @@ function checkDiag(txt){
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'},agent_id:RA};
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
+    var b={message:{role:'user',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'}};
+    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
     var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
     if(sid&&jid){
@@ -1143,10 +1316,9 @@ async function envoyerDossier(email,nomMed){
   // ── ÉTAPE 1 : résumé JSON via Relevance AI (RESUME_CONSULTATION) ──
   var resume={};
   try{
-    var ah=RP+':'+KEY;
-    var b={message:{role:'user',content:'RESUME_CONSULTATION'},agent_id:RA};
+    var b={message:{role:'user',content:'RESUME_CONSULTATION'}};
     if(CID)b.conversation_id=CID;
-    var r=await fetch(TURL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':ah},body:JSON.stringify(b)});
+    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
     var sid=d.job_info&&d.job_info.studio_id;
     var jid=d.job_info&&d.job_info.job_id;
@@ -1592,6 +1764,27 @@ function dbg(msg){
 }
 
 
+
+async function mettreAJourProfilNotion(p){
+  if(!p.notionPageId)return;
+  var nom=(p.prenom||'')+' '+(p.nom||'');
+  var props={
+    'Nom complet':{title:[{text:{content:nom.trim()||p.email||''}}]},
+    'Nom':{rich_text:[{text:{content:p.nom||''}}]},
+    'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
+    'ID Patient':{rich_text:[{text:{content:p.patientId||''}}]}
+  };
+  if(p.naiss)props['Date naissance']={date:{start:p.naiss}};
+  if(p.tel)props['Téléphone']={phone_number:p.tel};
+  if(p.ville)props['Ville']={rich_text:[{text:{content:p.ville}}]};
+  if(p.poids)props['Poids']={number:parseFloat(p.poids)||0};
+  if(p.sx)props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};
+  try{
+    await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{properties:props});
+    dbg('Profil Notion mis à jour');
+  }catch(e){dbg('Erreur MAJ profil: '+e.message);}
+}
+
 // ══════════════════════════════
 // CRÉATION AUTO FICHE PATIENT NOTION
 // ══════════════════════════════
@@ -1732,7 +1925,7 @@ function openParametres(){
 function clearAllData(){
   if(!confirm('Effacer TOUTES les données Dokita ?\nProfils, historique, dossiers médicaux.\nCette action est irréversible.'))return;
   localStorage.clear();
-  PROFILS=[];SEL=-1;CURRENT=null;KEY='';
+  PROFILS=[];SEL=-1;CURRENT=null;
   toast('🗑 Toutes les données effacées');
   setTimeout(function(){nav('accueilScreen');},1000);
 }
