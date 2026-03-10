@@ -1281,22 +1281,40 @@ function checkDiag(txt){
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
-    var b={message:{role:'user',content:'Liste tous les médecins dans la base Notion. Réponds UNIQUEMENT avec un tableau JSON (sans markdown) avec: nom, specialite, tel, email, tarif, note, referent.'}};
-    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
-    var d=await r.json();
-    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
-    if(sid&&jid){
-      var rep=await poll(sid,jid,ah,150);
-      if(rep){
-        var c=rep.replace(/```json|```/g,'').trim();
-        var idx=c.indexOf('[');if(idx>=0)c=c.slice(idx);
-        NOTION_MEDS=JSON.parse(c);MEDS_LOADED=true;renderMeds(NOTION_MEDS);
-        return;
-      }
+    var data=await notionPatientRequest('/databases/'+NOTION_MEDECINS_DB+'/query','POST',{
+      filter:{property:'Statut',select:{equals:'Actif'}},
+      page_size:20
+    });
+    if(data.results&&data.results.length){
+      NOTION_MEDS=data.results.map(function(page){
+        var props=page.properties;
+        function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+          if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+          if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+          if(t==='email')return p.email||'';
+          if(t==='phone_number')return p.phone_number||'';
+          if(t==='select')return p.select?p.select.name:'';
+          if(t==='number')return p.number!=null?p.number:null;
+          return '';}
+        return {
+          nom:'Dr. '+(txt('Prénom')?txt('Prénom')+' ':'')+txt('Nom'),
+          specialite:txt('Spécialité')||txt('Type de médecin')||'Médecin',
+          tel:txt('Numéro de téléphone'),
+          email:txt('Email'),
+          tarif:txt('Tarif consultation')?(txt('Tarif consultation')+' '+(txt('Devise')||'FCFA')):'',
+          note:txt('Note moyenne')||'',
+          referent:txt('Médecin référent')==='Oui'||txt('Médecin référent')===true,
+          ville:txt('Ville'),
+          distance:txt('Consultation à distance')==='Oui'
+        };
+      });
+      MEDS_LOADED=true;
+      renderMeds(NOTION_MEDS);
+      return;
     }
-  }catch(e){}
-  // Fallback hardcodé si l'agent ne répond pas
-  NOTION_MEDS=[{nom:'Dr. Quevi Gildas',specialite:'Infectiologue',tel:'',email:'quevi.gildas@gmail.com',tarif:'',note:'',referent:true}];
+  }catch(e){dbg('loadMeds err: '+e.message);}
+  // Fallback
+  NOTION_MEDS=[{nom:'Dr. Kouassi Amed',specialite:'Infectiologue',tel:'+225 07 12 34 56',email:'amed.kouassi@gmail.com',tarif:'15000 FCFA',note:'4.8',referent:true}];
   MEDS_LOADED=true;renderMeds(NOTION_MEDS);
 }
 
@@ -2006,6 +2024,7 @@ function reouvriConsultation(i){
 // CONFIG NOTION
 // ══════════════════════════════
 var DOKITA_PROXY='https://heydoc-medecin.vercel.app/api/notion';
+var NOTION_MEDECINS_DB='314dce21-e1d3-802e-88a1-fc736fb3bde9';
 var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb';
 var NOTION_CONSULT_DB='319dce21-e1d3-8094-a601-fe3bb4abff3a';
 
