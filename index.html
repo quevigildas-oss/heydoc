@@ -1579,25 +1579,22 @@ function renderHistorique(){
     el.innerHTML='<div class="detail-empty">📋 Aucune consultation enregistrée.<br>Vos sessions apparaîtront ici après envoi d\'un dossier.</div>';
     return;
   }
-  var h='<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">'+
-    '<div onclick="viderHistorique()" style="background:rgba(217,48,37,.08);border:1px solid rgba(217,48,37,.2);border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Tout effacer</div>'+
-  '</div>';
+  var h='';
   h+=sessions.map(function(s,i){
-    var traite=s.statut==='valide'||s.statut==='traite';
+    var traite=s.statut==='valide'||s.statut==='cloture'||s.statut==='traite';
     var statutBadge=traite
       ?'<span style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--accent);">✅ Traité</span>'
       :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:#fbbf24;">⏳ En attente</span>';
+    var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
     return '<div class="histo-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
-        '<div class="histo-date">'+s.date+'</div>'+
-        '<span onclick="supprimerSession('+i+')" style="font-size:11px;color:var(--danger);cursor:pointer;padding:2px 6px;">✕</span>'+
+        '<div class="histo-date">'+dateAff+'</div>'+
       '</div>'+
       '<div style="margin-bottom:6px;">'+statutBadge+'</div>'+
       (s.symptomes?'<div class="histo-symp">🤒 '+escHtml(s.symptomes)+'</div>':'')+
-      (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;">'+escHtml(s.diagnostic.slice(0,100))+'...</div>':'')+
+      (s.diagnostic?'<div class="histo-diag" style="margin-top:6px;font-size:12px;">'+escHtml(s.diagnostic.slice(0,120))+'...</div>':'')+
       '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">'+
-        '<div class="histo-badge" onclick="reprendreSession('+i+')">Voir la consultation →</div>'+
-        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnance('+i+')">📋 Ordonnance</div>':'')+ 
+        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="ouvrirOrdonnancesNotion()">📋 Ordonnances</div>':'')+
       '</div>'+
     '</div>';
   }).join('');
@@ -1612,40 +1609,7 @@ function viderHistorique(){
 }
 
 async function actualiserStatutConsultations(){
-  if(!PROFILS[SEL])return;
-  var nom=PROFILS[SEL].prenom+' '+(PROFILS[SEL].nom||'');
-  var patId=PROFILS[SEL].patientId||null;
-  var dossier=await chargerDossierPatientNotion(nom.trim(),patId);
-  if(!dossier)return;
-
-  // Récupérer ordonnances depuis BDD Patients
-  var ordonnances=[];
-  try{if(dossier.ordonnances)ordonnances=JSON.parse(dossier.ordonnances);}catch(e){}
-
-  // Mettre à jour les sessions locales avec statut + ordonnance
-  var key=getHistoKey();
-  var sessions=[];
-  try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
-
-  if(ordonnances.length&&sessions.length){
-    // Matcher ordonnances avec sessions par date approximative
-    ordonnances.forEach(function(ord){
-      // Chercher la session la plus proche de la date de l'ordonnance
-      var ordDate=new Date(ord.date).getTime();
-      var bestIdx=-1;var bestDiff=Infinity;
-      sessions.forEach(function(s,i){
-        var sDate=new Date(s.date).getTime();
-        var diff=Math.abs(sDate-ordDate);
-        if(diff<bestDiff&&s.statut!=='valide'){bestDiff=diff;bestIdx=i;}
-      });
-      if(bestIdx>=0&&bestDiff<7*24*3600*1000){ // dans la même semaine
-        sessions[bestIdx].statut='valide';
-        sessions[bestIdx].ordonnance=ord;
-      }
-    });
-    try{localStorage.setItem(key,JSON.stringify(sessions));}catch(e){}
-  }
-  renderHistorique();
+  await renderHistorique();
   toast('✅ Consultations actualisées');
 }
 
@@ -1842,11 +1806,57 @@ async function creerOuMettreAJourPatientNotion(patId,p,resume){
   }catch(e){dbg('Erreur création patient: '+e.message);}
 }
 
+
+async function chargerHistoriqueNotion(){
+  if(!PROFILS[SEL])return[];
+  var patId=PROFILS[SEL].patientId||'';
+  if(!patId)return[];
+  try{
+    var data=await notionConsultRequest('/databases/'+NOTION_CONSULT_DB+'/query','POST',{
+      filter:{property:'Patient ID',rich_text:{equals:patId}},
+      sorts:[{property:'Date',direction:'descending'}],
+      page_size:20
+    });
+    if(!data.results)return[];
+    return data.results.map(function(page){
+      var props=page.properties||{};
+      function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+        if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+        if(t==='title')return(p.title[0]||{}).plain_text||'';
+        if(t==='select')return p.select?p.select.name:'';
+        if(t==='date')return p.date?p.date.start:'';
+        if(t==='number')return p.number!=null?String(p.number):'';
+        return '';}
+      var statut=txt('Statut')||'en_attente';
+      var traite=statut==='valide'||statut==='cloture';
+      return {
+        notionId:page.id,
+        date:txt('Date')||'',
+        symptomes:txt('Symptomes')||'',
+        diagnostic:txt('Diagnostic IA')||'',
+        statut:statut,
+        traite:traite,
+        dossierId:txt('ID')||page.id.slice(0,8)
+      };
+    });
+  }catch(e){dbg('Erreur chargement historique: '+e.message);return[];}
+}
+
 // ══════════════════════════════
 // CONFIG NOTION
 // ══════════════════════════════
 var DOKITA_PROXY='https://heydoc-medecin.vercel.app/api/notion';
 var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb';
+var NOTION_CONSULT_DB='319dce21-e1d3-8094-a601-fe3bb4abff3a';
+
+async function notionConsultRequest(endpoint,method,body){
+  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
+  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  var r=await fetch(url,opts);
+  if(!r.ok)throw new Error('Notion '+r.status);
+  return await r.json();
+}
 
 async function notionPatientRequest(endpoint,method,body){
   var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
