@@ -763,10 +763,9 @@ async function creerCompte(){
     var res=await notionPatientRequest('/pages','POST',{
       parent:{database_id:NOTION_PATIENTS_DB},
       properties:{
-        'Nom complet':{title:[{text:{content:email}}]},
+        'Nom complet':{title:[{text:{content:' '}}]},
         'Email':{email:email},
-        'Code':{rich_text:[{text:{content:code}}]},
-        'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
+        'Code':{rich_text:[{text:{content:code}}]}
       }
     });
     if(!res.id){err.textContent='Erreur création compte';err.classList.add('on');return;}
@@ -1130,15 +1129,14 @@ function saveProfil(){
     email:document.getElementById('fEmail').value||'',
     ville:document.getElementById('fVille').value||'',
     lien:document.getElementById('fLien').value||'moi'};
-  if(EDIT_I>=0){
-    p.patientId=PROFILS[EDIT_I].patientId||genPatientId(pr,no,na);
-    PROFILS[EDIT_I]=p;
-  }else{
-    p.patientId=genPatientId(pr,no,na);
-    PROFILS.push(p);
-  }
-  SEL=EDIT_I>=0?EDIT_I:PROFILS.length-1;
+  var oldP=EDIT_I>=0?PROFILS[EDIT_I]:(PROFILS[0]||{});
+  p.patientId=oldP.patientId||genPatientId(pr,no,na);
+  p.notionPageId=oldP.notionPageId||'';
+  p.email=oldP.email||SESSION_EMAIL||document.getElementById('fEmail').value||'';
+  if(EDIT_I>=0){PROFILS[EDIT_I]=p;}else{if(PROFILS.length>0)PROFILS[0]=p;else PROFILS.push(p);}
+  SEL=0;
   saveProfils();renderProfils();
+  mettreAJourProfilNotion(p);
   nav('profilsScreen');toast('✅ Profil enregistré');
 }
 
@@ -1803,18 +1801,24 @@ async function creerOuMettreAJourPatientNotion(patId,p,resume){
       page_size:1
     });
     var nom=(p.prenom||'')+' '+(p.nom||'');
+    var today=new Date().toISOString().slice(0,10);
     if(data.results&&data.results.length>0){
-      // Fiche existante — pas de mise à jour automatique
-      dbg('Patient Notion existant: '+patId);
+      // Fiche existante — mettre à jour ID Patient et date première consultation
+      var pageId=data.results[0].id;
+      dbg('Patient Notion existant: '+patId+' — MAJ ID et date');
+      await notionPatientRequest('/pages/'+pageId,'PATCH',{properties:{
+        'ID Patient':{rich_text:[{text:{content:patId}}]},
+        'Première consultation':{date:{start:today}}
+      }});
       return;
     }
-    // Créer nouvelle fiche
+    // Créer nouvelle fiche (cas sans compte préalable)
     var props={
       'Nom complet':{title:[{text:{content:nom.trim()}}]},
       'Nom':{rich_text:[{text:{content:p.nom||''}}]},
       'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
       'ID Patient':{rich_text:[{text:{content:patId}}]},
-      'Première consultation':{date:{start:new Date().toISOString().slice(0,10)}}
+      'Première consultation':{date:{start:today}}
     };
     if(p.naiss){try{props['Date naissance']={date:{start:p.naiss}};}catch(e){}}
     if(p.tel){try{props['Téléphone']={phone_number:p.tel};}catch(e){}}
