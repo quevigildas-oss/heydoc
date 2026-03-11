@@ -2010,11 +2010,23 @@ async function voirOrdonnanceHisto(i){
   // Construire le template ordonnance HTML
   // template construit via buildOrdHtml(i)
   
-  var html=
+  // Boutons action
+  var btnHtml=
+    '<div style="display:flex;gap:10px;margin-top:12px;">'+
+      (deja?
+        '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée</div>'
+      :
+        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'+
+        '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'
+      )+
+    '</div>';
+
+  document.getElementById('ordDetailBody').innerHTML=
     '<div style="overflow-y:auto;-webkit-overflow-scrolling:touch;">'+
       buildOrdHtml(i)+
-    '</div>';
-    nav('ordonnanceDetailScreen');
+    '</div>'+btnHtml;
+
+  nav('ordonnanceDetailScreen');
 }
 
 function telechargerOrdonnance(i){
