@@ -1997,6 +1997,7 @@ async function voirDetailConsultation(i){
 async function voirOrdonnanceHisto(i){
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
+  dbg('voirOrdHisto i='+i+' s='+(s?'OK':'NULL')+' ord='+(s&&s.ordonnance?'OK':'NULL')+' statut='+(s&&s.statut));
   if(!s||!s.ordonnance){toast('Ordonnance non disponible');return;}
   
   // Vérifier usage unique — stocker dans localStorage
