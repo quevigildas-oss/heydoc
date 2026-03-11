@@ -2008,79 +2008,13 @@ async function voirOrdonnanceHisto(i){
   document.getElementById('ordDetailSub').textContent=dateAff;
   
   // Construire le template ordonnance HTML
-  var medsHtml=(ord.medicaments||[]).map(function(m,idx){
-    var bg=idx%2===0?'#fff':'#f9fafb';
-    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
-      '<div style="width:24px;height:24px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
-      '<div style="flex:1;">'+
-        '<div style="font-weight:700;font-size:13px;color:#1A2B3C;">'+escHtml(m)+'</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
+  // template construit via buildOrdHtml(i)
   
   var html=
-    '<div style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,.08);margin-bottom:16px;">'+
-      // En-tête
-      '<div style="background:#0A7E6A;padding:16px;text-align:center;">'+
-        '<div style="font-size:11px;color:rgba(255,255,255,.8);margin-bottom:2px;">DOKITA PRO</div>'+
-        '<div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div>'+
-        '<div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;">Réf : '+escHtml(s.dossierId||'-')+'</div>'+
-      '</div>'+
-      // Bloc médecin + patient
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;background:#E8F5F2;">'+
-        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:10px;padding:12px;">'+
-          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PRESCRIPTEUR</div>'+
-          '<div style="font-size:13px;font-weight:700;color:#1A2B3C;">'+escHtml(ord.medecin||'-')+'</div>'+
-          '<div style="font-size:11px;color:#6B7280;font-style:italic;">'+escHtml(ord.specialite||'-')+'</div>'+
-          '<div style="font-size:10px;color:#1A2B3C;margin-top:6px;">'+escHtml(ord.date||dateAff)+'</div>'+
-        '</div>'+
-        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:10px;padding:12px;">'+
-          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PATIENT</div>'+
-          '<div style="font-size:13px;font-weight:700;color:#1A2B3C;">'+(PROFILS[SEL]?escHtml((PROFILS[SEL].prenom||'')+' '+(PROFILS[SEL].nom||'')):'-')+'</div>'+
-          '<div style="font-size:10px;color:#6B7280;margin-top:4px;">ID : '+escHtml(SESSION_PATIENT_ID||'-')+'</div>'+
-        '</div>'+
-      '</div>'+
-      // Diagnostic
-      (ord.diagnostic?
-        '<div style="padding:10px 14px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;">'+
-          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">DIAGNOSTIC</div>'+
-          '<div style="font-size:12px;color:#1A2B3C;">'+escHtml(ord.diagnostic)+'</div>'+
-        '</div>':'')+
-      // Médicaments
-      '<div style="background:#0A7E6A;padding:8px 14px;">'+
-        '<div style="font-size:9px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div>'+
-      '</div>'+
-      medsHtml+
-      // Notes
-      (ord.notes?
-        '<div style="background:#fffbeb;border:1px solid #f59e0b;padding:12px 14px;">'+
-          '<div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div>'+
-          '<div style="font-size:12px;color:#1A2B3C;">'+escHtml(ord.notes)+'</div>'+
-        '</div>':'')+
-      // Signature
-      '<div style="padding:16px 14px;display:flex;justify-content:flex-end;">'+
-        '<div style="width:180px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
-          '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
-          '<div style="border-top:1px solid #1A2B3C;padding-top:6px;font-size:9px;font-weight:700;color:#1A2B3C;">'+escHtml(ord.medecin||'-')+'</div>'+
-        '</div>'+
-      '</div>'+
-      // Pied de page
-      '<div style="background:#0A7E6A;padding:10px 14px;text-align:center;">'+
-        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
-      '</div>'+
-    '</div>'+
-    // Boutons action
-    '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
-      (deja?
-        '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée / partagée</div>'
-      :
-        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger PDF</button>'+
-        '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'
-      )+
+    '<div style="overflow-y:auto;-webkit-overflow-scrolling:touch;">'+
+      buildOrdHtml(i)+
     '</div>';
-
-  document.getElementById('ordDetailBody').innerHTML=html;
-  nav('ordonnanceDetailScreen');
+    nav('ordonnanceDetailScreen');
 }
 
 function telechargerOrdonnance(i){
