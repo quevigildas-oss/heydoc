@@ -279,6 +279,13 @@ select.finput option{background:var(--bg3);}
 .login-err{font-size:12px;color:#E74C3C;margin-top:8px;display:none;}
 .login-err.on{display:block;}
 .av0{background:#2E86C1;}.av1{background:#00875A;}.av2{background:#8E44AD;}.av3{background:#E67E22;}.av4{background:#E74C3C;}.av5{background:#16A085;}.av6{background:#2C3E50;}.av7{background:#D35400;}
+@media print{
+  #app>div.screen{display:none!important;}
+  #ordonnanceDetailScreen{display:block!important;position:static!important;height:auto!important;overflow:visible!important;}
+  #ordonnanceDetailScreen .hdr{display:none!important;}
+  #ordonnanceDetailScreen .sbody{padding:0!important;overflow:visible!important;height:auto!important;}
+  button{display:none!important;}
+}
 </style>
 </head>
 <body>
@@ -514,17 +521,17 @@ select.finput option{background:var(--bg3);}
       </div>
       <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){console.log(e);})">
         <div class="menu-ico" style="background:rgba(74,158,255,.12);">📋</div>
-        <div><div class="menu-title">Reprendre une consultation</div><div class="menu-sub">Historique de vos sessions</div></div>
+        <div><div class="menu-title">Historique des consultations</div><div class="menu-sub">Archive · Rouvrir · Ordonnance</div></div>
         <div class="menu-arr">›</div>
       </div>
     </div>
     <div class="menu-section">
       <div class="sec-lbl">Dossier médical</div>
       <div class="doss-grid">
-        <div class="doss-tile" onclick="ouvrirOrdonnancesNotion()">
-          <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📋</div>
-          <div class="doss-tile-title">Ordonnances</div>
-          <div class="doss-tile-sub">Médicaments</div>
+        <div class="doss-tile" onclick="ouvrirDossier('rdv','📅','Rendez-vous','Mes RDV médicaux')">
+          <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📅</div>
+          <div class="doss-tile-title">RDV</div>
+          <div class="doss-tile-sub">Rendez-vous</div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossier('ordonnances_bio','🧪','Ordonnances biologiques','Analyses et bilans')">
           <div class="doss-tile-ico" style="background:rgba(130,80,220,.1);">🧪</div>
@@ -601,6 +608,18 @@ select.finput option{background:var(--bg3);}
     <div style="flex:1"><div class="hdr-title">Consultation</div><div class="hdr-sub" id="consultDetailDate"></div></div>
   </div>
   <div class="sbody" id="consultDetailBody">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+<!-- ══ ORDONNANCE ══ -->
+<div class="screen" id="ordonnanceDetailScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('historiqueScreen');renderHistorique().catch(function(){})">←</div>
+    <div class="hdr-ico">📋</div>
+    <div style="flex:1"><div class="hdr-title">Ordonnance</div><div class="hdr-sub" id="ordDetailSub">Prescription médicale</div></div>
+  </div>
+  <div class="sbody" id="ordDetailBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
   </div>
 </div>
@@ -1976,8 +1995,117 @@ async function voirDetailConsultation(i){
 }
 
 async function voirOrdonnanceHisto(i){
-  voirDetailConsultation(i);
+  if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
+  var s=HISTO_CACHE[i];
+  if(!s||!s.ordonnance){toast('Ordonnance non disponible');return;}
+  
+  // Vérifier usage unique — stocker dans localStorage
+  var usageKey='ord_used_'+s.notionId;
+  var deja=localStorage.getItem(usageKey);
+  
+  var ord=s.ordonnance;
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+  document.getElementById('ordDetailSub').textContent=dateAff;
+  
+  // Construire le template ordonnance HTML
+  var medsHtml=(ord.medicaments||[]).map(function(m,idx){
+    var bg=idx%2===0?'#fff':'#f9fafb';
+    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
+      '<div style="width:24px;height:24px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-weight:700;font-size:13px;color:#1A2B3C;">'+escHtml(m)+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  
+  var html=
+    '<div style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,.08);margin-bottom:16px;">'+
+      // En-tête
+      '<div style="background:#0A7E6A;padding:16px;text-align:center;">'+
+        '<div style="font-size:11px;color:rgba(255,255,255,.8);margin-bottom:2px;">DOKITA PRO</div>'+
+        '<div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div>'+
+        '<div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:4px;">Réf : '+escHtml(s.dossierId||'-')+'</div>'+
+      '</div>'+
+      // Bloc médecin + patient
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;background:#E8F5F2;">'+
+        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:10px;padding:12px;">'+
+          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PRESCRIPTEUR</div>'+
+          '<div style="font-size:13px;font-weight:700;color:#1A2B3C;">'+escHtml(ord.medecin||'-')+'</div>'+
+          '<div style="font-size:11px;color:#6B7280;font-style:italic;">'+escHtml(ord.specialite||'-')+'</div>'+
+          '<div style="font-size:10px;color:#1A2B3C;margin-top:6px;">'+escHtml(ord.date||dateAff)+'</div>'+
+        '</div>'+
+        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:10px;padding:12px;">'+
+          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PATIENT</div>'+
+          '<div style="font-size:13px;font-weight:700;color:#1A2B3C;">'+(PROFILS[SEL]?escHtml((PROFILS[SEL].prenom||'')+' '+(PROFILS[SEL].nom||'')):'-')+'</div>'+
+          '<div style="font-size:10px;color:#6B7280;margin-top:4px;">ID : '+escHtml(SESSION_PATIENT_ID||'-')+'</div>'+
+        '</div>'+
+      '</div>'+
+      // Diagnostic
+      (ord.diagnostic?
+        '<div style="padding:10px 14px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;">'+
+          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">DIAGNOSTIC</div>'+
+          '<div style="font-size:12px;color:#1A2B3C;">'+escHtml(ord.diagnostic)+'</div>'+
+        '</div>':'')+
+      // Médicaments
+      '<div style="background:#0A7E6A;padding:8px 14px;">'+
+        '<div style="font-size:9px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div>'+
+      '</div>'+
+      medsHtml+
+      // Notes
+      (ord.notes?
+        '<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:0 0 0 0;padding:12px 14px;">'+
+          '<div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div>'+
+          '<div style="font-size:12px;color:#1A2B3C;">'+escHtml(ord.notes)+'</div>'+
+        '</div>':'')+
+      // Pied de page
+      '<div style="background:#0A7E6A;padding:10px 14px;text-align:center;">'+
+        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
+      '</div>'+
+    '</div>'+
+    // Boutons action
+    '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
+      (deja?
+        '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée / partagée</div>'
+      :
+        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger PDF</button>'+
+        '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'
+      )+
+    '</div>';
+
+  document.getElementById('ordDetailBody').innerHTML=html;
+  nav('ordonnanceDetailScreen');
 }
+
+function telechargerOrdonnance(i){
+  var s=HISTO_CACHE[i];if(!s)return;
+  localStorage.setItem('ord_used_'+s.notionId,'1');
+  window.print();
+  setTimeout(function(){voirOrdonnanceHisto(i);},500);
+}
+
+async function partagerOrdonnance(i){
+  var s=HISTO_CACHE[i];if(!s)return;
+  localStorage.setItem('ord_used_'+s.notionId,'1');
+  if(!s)return;
+  var ord=s.ordonnance;
+  var txt='🏥 ORDONNANCE DOKITA PRO\n\n'+
+    'Médecin: '+(ord.medecin||'-')+'\n'+
+    'Patient: '+((PROFILS[SEL]?((PROFILS[SEL].prenom||'')+' '+(PROFILS[SEL].nom||'')):'-'))+'\n'+
+    'Date: '+(ord.date||'-')+'\n\n'+
+    'MÉDICAMENTS:\n'+(ord.medicaments||[]).map(function(m,i){return (i+1)+'. '+m;}).join('\n')+
+    (ord.notes?'\n\nNotes: '+ord.notes:'')+
+    '\n\nDocument généré par Dokita Pro';
+  if(navigator.share){
+    try{await navigator.share({title:'Ordonnance Dokita',text:txt});}catch(e){}
+  } else {
+    try{await navigator.clipboard.writeText(txt);toast('📋 Copié dans le presse-papier');}catch(e){}
+  }
+  // Recharger
+  setTimeout(function(){
+    if(i>=0)voirOrdonnanceHisto(i);
+  },500);
+}
+
 
 function reouvriConsultation(i){
   if(!PROFILS[SEL])return;
