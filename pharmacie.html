@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dokita — Réponse Pharmacie</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
+.hdr{background:#0A7E6A;padding:16px 20px;display:flex;align-items:center;gap:12px;}
+.hdr-logo{font-size:20px;font-weight:800;color:#fff;letter-spacing:1px;}
+.hdr-sub{font-size:11px;color:rgba(255,255,255,.8);margin-top:2px;}
+.container{max-width:600px;margin:0 auto;padding:16px;}
+.card{background:#fff;border-radius:12px;overflow:hidden;margin-bottom:14px;border:1px solid #e5e7eb;}
+.card-hdr{background:#0A7E6A;padding:10px 14px;font-size:11px;font-weight:700;color:#fff;}
+.card-body{padding:14px;}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.info-box{background:#E8F5F2;border:1px solid #0A7E6A;border-radius:8px;padding:10px;}
+.info-lbl{font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;}
+.info-val{font-size:13px;font-weight:700;}
+.info-sub{font-size:11px;color:#6B7280;margin-top:2px;}
+.med-row{border-bottom:1px solid #e5e7eb;padding:12px 0;}
+.med-row:last-child{border-bottom:none;}
+.med-name{font-size:14px;font-weight:700;color:#1A2B3C;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.med-num{width:24px;height:24px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
+.med-fields{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;}
+.check-label{display:flex;align-items:center;gap:6px;font-size:12px;color:#374151;cursor:pointer;white-space:nowrap;}
+.check-label input[type=checkbox]{width:18px;height:18px;accent-color:#0A7E6A;cursor:pointer;}
+.field-group{display:flex;flex-direction:column;gap:3px;}
+.field-lbl{font-size:9px;font-weight:700;color:#6B7280;text-transform:uppercase;}
+.field-input{border:1px solid #D1D5DB;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;outline:none;}
+.field-input:focus{border-color:#0A7E6A;}
+.field-input:disabled{background:#f9fafb;color:#9CA3AF;}
+.btn-submit{width:100%;padding:16px;background:#0A7E6A;border:none;border-radius:12px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;color:#fff;cursor:pointer;margin-top:8px;}
+.btn-submit:active{background:#085f50;}
+.btn-submit:disabled{background:#9CA3AF;cursor:not-allowed;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1A2B3C;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;display:none;z-index:999;}
+.loading{text-align:center;padding:60px 20px;color:#6B7280;}
+.error{background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:20px;text-align:center;color:#dc2626;margin:20px 0;}
+.success{background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:30px;text-align:center;margin:20px 0;}
+.success-ico{font-size:48px;margin-bottom:12px;}
+.success-title{font-size:18px;font-weight:700;color:#0A7E6A;margin-bottom:8px;}
+.success-sub{font-size:13px;color:#6B7280;}
+.pharm-field{margin-bottom:12px;}
+.pharm-field label{display:block;font-size:11px;font-weight:700;color:#6B7280;margin-bottom:4px;text-transform:uppercase;}
+.pharm-field input{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:10px 14px;font-size:14px;outline:none;}
+.pharm-field input:focus{border-color:#0A7E6A;}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <div class="hdr-logo">DOKITA PRO</div>
+    <div class="hdr-sub">Appel d'offre pharmacie</div>
+  </div>
+</div>
+
+<div class="container">
+  <div id="mainContent">
+    <div class="loading">⏳ Chargement de l'ordonnance...</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var DOKITA_PROXY='https://heydoc-mu.vercel.app/api/notion';
+var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
+
+function toast(msg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.style.display='block';
+  setTimeout(function(){t.style.display='none';},3000);
+}
+
+async function notionReq(endpoint,method,body){
+  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
+  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  var r=await fetch(url,opts);
+  if(!r.ok)throw new Error('Notion '+r.status);
+  return await r.json();
+}
+
+// Lire params URL
+var params=new URLSearchParams(window.location.search);
+var aoId=params.get('id');
+var pharmTel=params.get('tel')||'';
+
+var aoData=null;
+
+async function init(){
+  var el=document.getElementById('mainContent');
+  if(!aoId){
+    el.innerHTML='<div class="error">❌ Lien invalide — paramètre manquant.</div>';
+    return;
+  }
+  try{
+    // Chercher l'appel d'offre dans Notion
+    var res=await notionReq('/databases/'+NOTION_AO_DB+'/query','POST',{
+      filter:{property:'ID',title:{equals:aoId}}
+    });
+    if(!res.results||!res.results.length){
+      el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';
+      return;
+    }
+    var page=res.results[0];
+    var props=page.properties;
+    function txt(k){var p=props[k];if(!p)return '';
+      if(p.type==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+      if(p.type==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+      if(p.type==='select')return p.select?p.select.name:'';
+      if(p.type==='number')return p.number!=null?String(p.number):'';
+      return '';}
+    
+    var statut=txt('Statut');
+    if(statut==='repondu'||statut==='selectionne'){
+      el.innerHTML='<div class="success"><div class="success-ico">✅</div><div class="success-title">Déjà soumis</div><div class="success-sub">Vous avez déjà répondu à cet appel d\'offre.</div></div>';
+      return;
+    }
+
+    aoData={
+      notionPageId: page.id,
+      aoId: aoId,
+      pharmTel: pharmTel,
+      consultId: txt('Consultation ID'),
+      patientId: txt('Patient ID'),
+      pharmNom: txt('Pharmacie Nom'),
+      meds: JSON.parse(txt('Medicaments')||'[]')
+    };
+
+    renderForm(aoData);
+  }catch(e){
+    el.innerHTML='<div class="error">❌ Erreur : '+e.message+'</div>';
+  }
+}
+
+function renderForm(d){
+  var medsHtml=d.meds.map(function(m,i){
+    return '<div class="med-row">'+
+      '<div class="med-name"><div class="med-num">'+(i+1)+'</div>'+m+'</div>'+
+      '<div class="med-fields">'+
+        '<label class="check-label"><input type="checkbox" id="dispo_'+i+'" onchange="toggleDispo('+i+')"> Disponible</label>'+
+        '<div class="field-group">'+
+          '<div class="field-lbl">Quantité</div>'+
+          '<input class="field-input" type="number" id="qty_'+i+'" min="0" placeholder="0" disabled>'+
+        '</div>'+
+        '<div class="field-group">'+
+          '<div class="field-lbl">Prix (FCFA)</div>'+
+          '<input class="field-input" type="number" id="prix_'+i+'" min="0" placeholder="0" disabled>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  document.getElementById('mainContent').innerHTML=
+    // En-tête ordonnance
+    '<div class="card">'+
+      '<div class="card-hdr">📋 ORDONNANCE — Appel d\'offre #'+d.aoId+'</div>'+
+      '<div class="card-body">'+
+        '<div class="info-grid">'+
+          '<div class="info-box"><div class="info-lbl">CONSULTATION</div><div class="info-val">'+d.consultId+'</div></div>'+
+          '<div class="info-box"><div class="info-lbl">PATIENT</div><div class="info-val">'+d.patientId+'</div></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    // Infos pharmacie
+    '<div class="card">'+
+      '<div class="card-hdr">🏪 VOS INFORMATIONS</div>'+
+      '<div class="card-body">'+
+        '<div class="pharm-field"><label>Nom de la pharmacie</label><input id="pharmNom" type="text" placeholder="Pharmacie du Plateau" value="'+escHtml(d.pharmNom)+'"></div>'+
+        '<div class="pharm-field"><label>Téléphone</label><input id="pharmTel" type="tel" placeholder="+225 07 00 00 00 00" value="'+escHtml(d.pharmTel)+'"></div>'+
+      '</div>'+
+    '</div>'+
+    // Médicaments
+    '<div class="card">'+
+      '<div class="card-hdr">💊 MÉDICAMENTS PRESCRITS</div>'+
+      '<div class="card-body">'+medsHtml+'</div>'+
+    '</div>'+
+    '<button class="btn-submit" onclick="soumettre()">✅ Soumettre mon offre</button>'+
+    '<div style="height:30px;"></div>';
+}
+
+function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function toggleDispo(i){
+  var checked=document.getElementById('dispo_'+i).checked;
+  document.getElementById('qty_'+i).disabled=!checked;
+  document.getElementById('prix_'+i).disabled=!checked;
+  if(!checked){
+    document.getElementById('qty_'+i).value='';
+    document.getElementById('prix_'+i).value='';
+  }
+}
+
+async function soumettre(){
+  if(!aoData)return;
+  var nom=document.getElementById('pharmNom').value.trim();
+  var tel=document.getElementById('pharmTel').value.trim();
+  if(!nom||!tel){toast('⚠️ Remplissez le nom et téléphone');return;}
+
+  // Collecter les réponses
+  var offre=aoData.meds.map(function(m,i){
+    var dispo=document.getElementById('dispo_'+i).checked;
+    return {
+      medicament:m,
+      disponible:dispo,
+      quantite:dispo?parseInt(document.getElementById('qty_'+i).value||'0'):0,
+      prix:dispo?parseInt(document.getElementById('prix_'+i).value||'0'):0
+    };
+  });
+
+  var btn=document.querySelector('.btn-submit');
+  btn.disabled=true;btn.textContent='⏳ Envoi en cours...';
+
+  try{
+    // Mettre à jour la page Notion
+    var now=new Date().toISOString();
+    await notionReq('/pages/'+aoData.notionPageId,'PATCH',{
+      properties:{
+        'Pharmacie Nom':{rich_text:[{text:{content:nom}}]},
+        'Pharmacie Tel':{rich_text:[{text:{content:tel}}]},
+        'Offre JSON':{rich_text:[{text:{content:JSON.stringify(offre)}}]},
+        'Statut':{select:{name:'repondu'}},
+        'Date reponse':{date:{start:now}}
+      }
+    });
+
+    document.getElementById('mainContent').innerHTML=
+      '<div class="success">'+
+        '<div class="success-ico">🎉</div>'+
+        '<div class="success-title">Offre soumise avec succès !</div>'+
+        '<div class="success-sub">Merci '+escHtml(nom)+'. Votre offre a bien été transmise à Dokita.<br>Le patient sera notifié.</div>'+
+      '</div>';
+  }catch(e){
+    btn.disabled=false;btn.textContent='✅ Soumettre mon offre';
+    toast('❌ Erreur : '+e.message);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
