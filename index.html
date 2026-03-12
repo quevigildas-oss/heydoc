@@ -1628,7 +1628,9 @@ function sauvegarderSession(resume){
 async function renderHistorique(){
   var el=document.getElementById('histoList');
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  dbg('chargerHisto start');
   var sessions=await chargerHistoriqueNotion();
+  dbg('chargerHisto done sessions='+sessions.length);
   HISTO_CACHE=sessions;
   if(sessions.length)dbg('histo[0] statut='+sessions[0].statut+' ord='+(sessions[0].ordonnance?'OUI':'NULL')+' traite='+(sessions[0].statut==='valide'||sessions[0].statut==='cloture'));
   if(!sessions.length){
