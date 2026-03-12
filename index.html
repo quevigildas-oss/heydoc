@@ -2001,9 +2001,11 @@ async function voirOrdonnanceHisto(i){
   // Si ordonnance pas encore dans le cache, recharger depuis Notion
   if(!s.ordonnance){
     try{
+      dbg('reload ord notionId='+s.notionId);
       var page=await notionConsultRequest('/pages/'+s.notionId,'GET');
       var props=page.properties||{};
       var ordRaw=(props['Ordonnance']&&props['Ordonnance'].rich_text||[]).map(function(x){return x.plain_text;}).join('');
+      dbg('ordRaw len='+(ordRaw?ordRaw.length:0));
       if(ordRaw)s.ordonnance=JSON.parse(ordRaw);
     }catch(e){dbg('reload ord err: '+e.message);}
   }
