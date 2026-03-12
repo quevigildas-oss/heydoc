@@ -1883,8 +1883,8 @@ async function chargerHistoriqueNotion(){
     return data.results.map(function(page){
       var props=page.properties||{};
       function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-        if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
-        if(t==='title')return(p.title[0]||{}).plain_text||'';
+        if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+        if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
         if(t==='select')return p.select?p.select.name:'';
         if(t==='date')return p.date?p.date.start:'';
         if(t==='number')return p.number!=null?String(p.number):'';
