@@ -519,7 +519,7 @@ select.finput option{background:var(--bg3);}
         <div><div class="menu-title">Nouvelle consultation</div><div class="menu-sub">Décrivez vos symptômes, obtenez un diagnostic</div></div>
         <div class="menu-arr">›</div>
       </div>
-      <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){console.log(e);})">
+      <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){dbg('HISTO ERR: '+e.message);})">
         <div class="menu-ico" style="background:rgba(74,158,255,.12);">📋</div>
         <div><div class="menu-title">Historique des consultations</div><div class="menu-sub">Archive · Rouvrir · Ordonnance</div></div>
         <div class="menu-arr">›</div>
@@ -1669,7 +1669,7 @@ function viderHistorique(){
 }
 
 async function actualiserStatutConsultations(){
-  await renderHistorique();
+  try{await renderHistorique();}catch(e){dbg('ACTU ERR: '+e.message);}
   toast('✅ Consultations actualisées');
 }
 
