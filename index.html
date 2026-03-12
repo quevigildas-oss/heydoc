@@ -1940,6 +1940,9 @@ async function lancerAppelOffre(i){
   if(!meds.length){toast('Aucun médicament dans l\'ordonnance');return;}
 
   toast('📍 Géolocalisation en cours...');
+  // TEST MODE — coords Abidjan Plateau
+  var lat=5.3467,lon=-4.0167;
+  /* PROD: décommenter et supprimer les 2 lignes au dessus
   var pos;
   try{
     pos=await new Promise(function(res,rej){
@@ -1950,6 +1953,7 @@ async function lancerAppelOffre(i){
     return;
   }
   var lat=pos.coords.latitude,lon=pos.coords.longitude;
+  */
   await envoyerAux(s,meds,lat,lon,5,i);
 }
 
@@ -1960,14 +1964,15 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     if(rayon===5)await envoyerAux(s,meds,lat,lon,10,cacheIdx);
     return;
   }
-  toast('📤 Envoi à '+proches.length+' pharmacie(s) dans '+rayon+'km...');
+  toast('📤 Création des offres pour '+proches.length+' pharmacie(s)...');
 
+  // Créer une entrée Notion par pharmacie et collecter les liens
+  var lignes=[];
+  var now=new Date().toISOString();
   for(var k=0;k<proches.length;k++){
     var ph=proches[k];
     var aoId=genAoId();
-    var now=new Date().toISOString();
     try{
-      // Créer entrée Notion
       await notionConsultRequest('/pages','POST',{
         parent:{database_id:NOTION_AO_DB},
         properties:{
@@ -1982,17 +1987,20 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
           'Date envoi':{date:{start:now}}
         }
       });
-      // Construire lien WhatsApp
       var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
-      var medsList=meds.map(function(m,idx){return (idx+1)+'. '+m;}).join('%0A');
-      var msg='Bonjour '+encodeURIComponent(ph.nom)+',%0A%0ADokita vous envoie un appel d%27offre pour une ordonnance.%0A%0AM%C3%A9dicaments demand%C3%A9s :%0A'+medsList+'%0A%0ACliquez ici pour r%C3%A9pondre :%0A'+encodeURIComponent(lien)+'%0A%0AMerci de r%C3%A9pondre dans les 30 minutes.%0A%E2%80%94 %C3%89quipe Dokita';
-      var waUrl='https://wa.me/'+ph.tel.replace(/[^0-9]/g,'')+'?text='+msg;
-      window.open(waUrl,'_blank');
-      await new Promise(function(r){setTimeout(r,800);});
+      lignes.push(encodeURIComponent(ph.nom)+' : '+encodeURIComponent(lien));
     }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
   }
 
-  toast('✅ Appel d\'offre envoyé à '+proches.length+' pharmacie(s)');
+  if(!lignes.length){toast('Erreur création des offres');return;}
+
+  // Un seul WhatsApp vers numéro de test avec tous les liens
+  var medsList=meds.map(function(m,idx){return (idx+1)+'. '+encodeURIComponent(m);}).join('%0A');
+  var msg='%F0%9F%8F%AA%20Appel%20d%27offre%20Dokita%0A%0AM%C3%A9dicaments%20:%0A'+medsList+'%0A%0ALiens%20par%20pharmacie%20:%0A'+lignes.join('%0A')+'%0A%0AMerci%20de%20r%C3%A9pondre%20dans%2030%20min.';
+  var waUrl='https://wa.me/33781787293?text='+msg;
+  window.open(waUrl,'_blank');
+
+  toast('✅ WhatsApp ouvert — '+proches.length+' pharmacie(s) dans '+rayon+'km');
 
   // Timer 30min — relance à 10km si rayon=5
   if(rayon===5){
