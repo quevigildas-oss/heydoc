@@ -1651,7 +1651,7 @@ async function renderHistorique(){
       '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">'+
         '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir</div>'+
         '<div class="histo-badge" style="background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.3);color:var(--accent2);" onclick="reouvriConsultation('+i+')">🔄 Rouvrir</div>'+
-        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
+        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="toast(String('+i+'));voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
       '</div>'+
     '</div>';
   }).join('');
