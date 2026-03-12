@@ -1651,7 +1651,7 @@ async function renderHistorique(){
       '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">'+
         '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir</div>'+
         '<div class="histo-badge" style="background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.3);color:var(--accent2);" onclick="reouvriConsultation('+i+')">🔄 Rouvrir</div>'+
-        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="dbg(\"btn ord i='+i+'\");voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
+        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
       '</div>'+
     '</div>';
   }).join('');
@@ -1997,7 +1997,17 @@ async function voirDetailConsultation(i){
 async function voirOrdonnanceHisto(i){
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
-  if(!s||!s.ordonnance){toast('Ordonnance non disponible');return;}
+  if(!s){toast('Consultation introuvable');return;}
+  // Si ordonnance pas encore dans le cache, recharger depuis Notion
+  if(!s.ordonnance){
+    try{
+      var page=await notionConsultRequest('/pages/'+s.notionId,'GET');
+      var props=page.properties||{};
+      var ordRaw=(props['Ordonnance']&&props['Ordonnance'].rich_text||[]).map(function(x){return x.plain_text;}).join('');
+      if(ordRaw)s.ordonnance=JSON.parse(ordRaw);
+    }catch(e){dbg('reload ord err: '+e.message);}
+  }
+  if(!s.ordonnance){toast('Ordonnance non disponible');return;}
   
   // Vérifier usage unique — stocker dans localStorage
   var usageKey='ord_used_'+s.notionId;
