@@ -1892,7 +1892,8 @@ async function chargerHistoriqueNotion(){
       var statut=txt('Statut')||'en_attente';
       var traite=statut==='valide'||statut==='cloture';
       var ordRaw=txt('Ordonnance');
-      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){}
+      dbg('ordRaw len='+(ordRaw?ordRaw.length:0)+' val='+ordRaw.slice(0,50));
+      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){dbg('ordParse err: '+e.message);}
       return {
         notionId:page.id,
         date:txt('Date')||'',
