@@ -519,7 +519,7 @@ select.finput option{background:var(--bg3);}
         <div><div class="menu-title">Nouvelle consultation</div><div class="menu-sub">Décrivez vos symptômes, obtenez un diagnostic</div></div>
         <div class="menu-arr">›</div>
       </div>
-      <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){dbg('HISTO ERR: '+e.message);})">
+      <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){dbg(e.message);})">
         <div class="menu-ico" style="background:rgba(74,158,255,.12);">📋</div>
         <div><div class="menu-title">Historique des consultations</div><div class="menu-sub">Archive · Rouvrir · Ordonnance</div></div>
         <div class="menu-arr">›</div>
@@ -1628,11 +1628,8 @@ function sauvegarderSession(resume){
 async function renderHistorique(){
   var el=document.getElementById('histoList');
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
-  dbg('chargerHisto start');
   var sessions=await chargerHistoriqueNotion();
-  dbg('chargerHisto done sessions='+sessions.length);
   HISTO_CACHE=sessions;
-  if(sessions.length)dbg('histo[0] statut='+sessions[0].statut+' ord='+(sessions[0].ordonnance?'OUI':'NULL')+' traite='+(sessions[0].statut==='valide'||sessions[0].statut==='cloture'));
   if(!sessions.length){
     el.innerHTML='<div class="detail-empty">📋 Aucune consultation enregistrée.<br>Vos sessions apparaîtront ici après envoi d\'un dossier.</div>';
     return;
@@ -1654,7 +1651,7 @@ async function renderHistorique(){
       '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;">'+
         '<div class="histo-badge" onclick="voirDetailConsultation('+i+')">👁 Voir</div>'+
         '<div class="histo-badge" style="background:rgba(74,158,255,.1);border-color:rgba(74,158,255,.3);color:var(--accent2);" onclick="reouvriConsultation('+i+')">🔄 Rouvrir</div>'+
-        (traite&&s.ordonnance?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
+        (traite?'<div class="histo-badge" style="background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.3);color:#818cf8;" onclick="voirOrdonnanceHisto('+i+')">📋 Ordonnance</div>':'')+
       '</div>'+
     '</div>';
   }).join('');
@@ -1892,8 +1889,7 @@ async function chargerHistoriqueNotion(){
       var statut=txt('Statut')||'en_attente';
       var traite=statut==='valide'||statut==='cloture';
       var ordRaw=txt('Ordonnance');
-      dbg('ordRaw len='+(ordRaw?ordRaw.length:0)+' val='+ordRaw.slice(0,50));
-      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){dbg('ordParse err: '+e.message);}
+      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){}
       return {
         notionId:page.id,
         date:txt('Date')||'',
@@ -2001,7 +1997,6 @@ async function voirDetailConsultation(i){
 async function voirOrdonnanceHisto(i){
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
-  dbg('voirOrdHisto i='+i+' s='+(s?'OK':'NULL')+' ord='+(s&&s.ordonnance?'OK':'NULL')+' statut='+(s&&s.statut));
   if(!s||!s.ordonnance){toast('Ordonnance non disponible');return;}
   
   // Vérifier usage unique — stocker dans localStorage
