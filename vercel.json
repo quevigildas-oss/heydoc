@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/pharmacie", "destination": "/pharmacie.html" }
+  ]
+}
