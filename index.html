@@ -1909,6 +1909,114 @@ async function chargerHistoriqueNotion(){
 // DÉTAIL CONSULTATION & ORDONNANCE
 // ══════════════════════════════
 var HISTO_CACHE=[];
+var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
+var PHARMA_URL='https://heydoc-mu.vercel.app/pharmacie';
+
+var PHARMACIES=[
+  {nom:'Pharmacie du Plateau',tel:'+22527203412',lat:5.3467,lon:-4.0167},
+  {nom:'Pharmacie Sainte Marie',tel:'+22527213456',lat:5.3489,lon:-4.0201},
+  {nom:'Pharmacie Centrale',tel:'+22527224567',lat:5.3445,lon:-4.0189},
+  {nom:'Pharmacie Cocody',tel:'+22527234578',lat:5.3567,lon:-3.9834},
+  {nom:'Pharmacie Angré',tel:'+22527245689',lat:5.3678,lon:-3.9723},
+  {nom:'Pharmacie Riviera',tel:'+22527256790',lat:5.3612,lon:-3.9801},
+  {nom:'Pharmacie Yopougon',tel:'+22527267891',lat:5.3234,lon:-4.0678},
+  {nom:'Pharmacie Niangon',tel:'+22527278902',lat:5.3189,lon:-4.0712},
+  {nom:'Pharmacie Marcory',tel:'+22527289013',lat:5.3123,lon:-4.0034},
+  {nom:'Pharmacie Treichville',tel:'+22527290124',lat:5.3078,lon:-4.0056}
+];
+
+function distKm(lat1,lon1,lat2,lon2){
+  var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function genAoId(){return 'AO-'+Date.now().toString(36).toUpperCase();}
+
+async function lancerAppelOffre(i){
+  var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return;
+  var ord=s.ordonnance;
+  var meds=ord.medicaments||[];
+  if(!meds.length){toast('Aucun médicament dans l\'ordonnance');return;}
+
+  toast('📍 Géolocalisation en cours...');
+  var pos;
+  try{
+    pos=await new Promise(function(res,rej){
+      navigator.geolocation.getCurrentPosition(res,rej,{timeout:10000});
+    });
+  }catch(e){
+    toast('❌ Géolocalisation refusée — activez la localisation');
+    return;
+  }
+  var lat=pos.coords.latitude,lon=pos.coords.longitude;
+  await envoyerAux(s,meds,lat,lon,5,i);
+}
+
+async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
+  var proches=PHARMACIES.filter(function(p){return distKm(lat,lon,p.lat,p.lon)<=rayon;});
+  if(!proches.length){
+    toast('Aucune pharmacie dans ce rayon de '+rayon+'km');
+    if(rayon===5)await envoyerAux(s,meds,lat,lon,10,cacheIdx);
+    return;
+  }
+  toast('📤 Envoi à '+proches.length+' pharmacie(s) dans '+rayon+'km...');
+
+  for(var k=0;k<proches.length;k++){
+    var ph=proches[k];
+    var aoId=genAoId();
+    var now=new Date().toISOString();
+    try{
+      // Créer entrée Notion
+      await notionConsultRequest('/pages','POST',{
+        parent:{database_id:NOTION_AO_DB},
+        properties:{
+          'ID':{title:[{text:{content:aoId}}]},
+          'Consultation ID':{rich_text:[{text:{content:s.notionId||''}}]},
+          'Patient ID':{rich_text:[{text:{content:SESSION_PATIENT_ID||''}}]},
+          'Pharmacie Nom':{rich_text:[{text:{content:ph.nom}}]},
+          'Pharmacie Tel':{rich_text:[{text:{content:ph.tel}}]},
+          'Medicaments':{rich_text:[{text:{content:JSON.stringify(meds)}}]},
+          'Statut':{select:{name:'en_attente'}},
+          'Rayon':{number:rayon},
+          'Date envoi':{date:{start:now}}
+        }
+      });
+      // Construire lien WhatsApp
+      var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
+      var medsList=meds.map(function(m,idx){return (idx+1)+'. '+m;}).join('%0A');
+      var msg='Bonjour '+encodeURIComponent(ph.nom)+',%0A%0ADokita vous envoie un appel d%27offre pour une ordonnance.%0A%0AM%C3%A9dicaments demand%C3%A9s :%0A'+medsList+'%0A%0ACliquez ici pour r%C3%A9pondre :%0A'+encodeURIComponent(lien)+'%0A%0AMerci de r%C3%A9pondre dans les 30 minutes.%0A%E2%80%94 %C3%89quipe Dokita';
+      var waUrl='https://wa.me/'+ph.tel.replace(/[^0-9]/g,'')+'?text='+msg;
+      window.open(waUrl,'_blank');
+      await new Promise(function(r){setTimeout(r,800);});
+    }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
+  }
+
+  toast('✅ Appel d\'offre envoyé à '+proches.length+' pharmacie(s)');
+
+  // Timer 30min — relance à 10km si rayon=5
+  if(rayon===5){
+    setTimeout(async function(){
+      var reps=await compterReponses(s.notionId);
+      if(reps===0){
+        toast('⏰ Aucune réponse — relance à 10km...');
+        await envoyerAux(s,meds,lat,lon,10,cacheIdx);
+      }
+    },30*60*1000);
+  }
+}
+
+async function compterReponses(consultId){
+  try{
+    var res=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
+      filter:{and:[
+        {property:'Consultation ID',rich_text:{equals:consultId}},
+        {property:'Statut',select:{equals:'repondu'}}
+      ]}
+    });
+    return res.results?res.results.length:0;
+  }catch(e){return 0;}
+}
 
 async function voirDetailConsultation(i){
   nav('consultDetailScreen');
@@ -2036,6 +2144,9 @@ function buildOrdHtml(i){
         '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
         '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
       '</div>'+
+    '</div>'+
+    '<div style="padding:12px 14px;background:#fff;border-top:2px solid #e5e7eb;">'+
+      '<button onclick="lancerAppelOffre('+i+')" style="width:100%;padding:13px;background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:10px;font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">🏪 J\'ach&#232;te moins cher avec Dokita</button>'+
     '</div>'+
     '<div style="background:#0A7E6A;padding:8px 14px;text-align:center;">'+
       '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
