@@ -1994,6 +1994,55 @@ async function voirDetailConsultation(i){
   el.innerHTML=html;
 }
 
+
+function buildOrdHtml(i){
+  var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return '<div style="padding:20px;color:#666;">Ordonnance non disponible</div>';
+  var ord=s.ordonnance;
+  var p=PROFILS[SEL]||{};
+  var patNom=((p.prenom||'')+' '+(p.nom||'')).trim()||'-';
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+  function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  var medsHtml=(ord.medicaments||[]).map(function(m,idx){
+    var bg=idx%2===0?'#fff':'#f9fafb';
+    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
+      '<div style="width:22px;height:22px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
+      '<div style="flex:1;font-size:13px;color:#1A2B3C;font-weight:500;">'+esc(m)+'</div>'+
+    '</div>';
+  }).join('');
+  return '<div style="background:#fff;font-family:Arial,sans-serif;color:#1A2B3C;border-radius:12px;overflow:hidden;">'+
+    '<div style="background:#0A7E6A;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">'+
+      '<div><div style="font-size:10px;color:rgba(255,255,255,.8);">DOKITA PRO</div>'+
+      '<div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div></div>'+
+      '<div style="text-align:right;font-size:10px;color:rgba(255,255,255,.8);"><div>Réf: '+esc(s.dossierId||'-')+'</div><div>'+dateAff+'</div></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;background:#E8F5F2;">'+
+      '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:10px;">'+
+        '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">PRESCRIPTEUR</div>'+
+        '<div style="font-size:12px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
+        '<div style="font-size:10px;color:#6B7280;font-style:italic;">'+esc(ord.specialite||'-')+'</div>'+
+      '</div>'+
+      '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:10px;">'+
+        '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">PATIENT</div>'+
+        '<div style="font-size:12px;font-weight:700;">'+esc(patNom)+'</div>'+
+        '<div style="font-size:10px;color:#6B7280;margin-top:3px;">ID: '+esc(SESSION_PATIENT_ID||'-')+'</div>'+
+      '</div>'+
+    '</div>'+
+    (ord.diagnostic?'<div style="padding:8px 14px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;"><div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:3px;">DIAGNOSTIC</div><div style="font-size:12px;">'+esc(ord.diagnostic)+'</div></div>':'')+
+    '<div style="background:#0A7E6A;padding:7px 14px;"><div style="font-size:9px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div></div>'+
+    medsHtml+
+    (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:10px 14px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:3px;">NOTES</div><div style="font-size:12px;">'+esc(ord.notes)+'</div></div>':'')+
+    '<div style="padding:16px;display:flex;justify-content:flex-end;">'+
+      '<div style="width:170px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
+        '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
+        '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="background:#0A7E6A;padding:8px 14px;text-align:center;">'+
+      '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
+    '</div>'+
+  '</div>';
+}
+
 async function voirOrdonnanceHisto(i){
   try{
   toast('chargement...');
