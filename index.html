@@ -996,11 +996,24 @@ async function seConnecter(){
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
 
     // Charger les membres en arrière-plan sans bloquer l'UI
-    notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Compte parent',email:{equals:email}},
-      page_size:10
-    }).then(function(dataMembres){
-      if(!dataMembres.results||!dataMembres.results.length)return;
+    // Double filtre : Email et rich_text pour couvrir les deux types de champ Notion
+    Promise.all([
+      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+        filter:{property:'Compte parent',email:{equals:email}},
+        page_size:10
+      }).catch(function(){return {results:[]};}),
+      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+        filter:{property:'Compte parent',rich_text:{equals:email}},
+        page_size:10
+      }).catch(function(){return {results:[]};})
+    ]).then(function(res){
+      // Fusionner les résultats et dédupliquer par notionPageId
+      var tous=(res[0].results||[]).concat(res[1].results||[]);
+      var vus={};
+      var dataMembres={results:tous.filter(function(p){
+        if(vus[p.id])return false;vus[p.id]=true;return true;
+      })};
+      if(!dataMembres.results.length)return;
       var membres=dataMembres.results.map(function(mp){
         var pp=mp.properties;
         function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
@@ -1207,22 +1220,32 @@ function goPatient(){if(!SESSION_EMAIL){nav('loginScreen');return;}renderProfils
 async function rechargerSessionNotion(){
   if(!SESSION_EMAIL)return false;
   try{
-    // ── Lancement parallèle des 2 requêtes Notion ──
+    // ── Lancement parallèle des 3 requêtes Notion ──
     var results=await Promise.all([
       // Requête 1 : profil principal (par email)
       notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
         filter:{property:'Email',email:{equals:SESSION_EMAIL}},
         page_size:1
       }),
-      // Requête 2 : membres famille (par Compte parent)
+      // Requête 2a : membres famille (Compte parent = Email)
       notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
         filter:{property:'Compte parent',email:{equals:SESSION_EMAIL}},
         page_size:10
-      })
+      }).catch(function(){return {results:[]};}),
+      // Requête 2b : membres famille (Compte parent = Text) — fallback si champ mal typé
+      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+        filter:{property:'Compte parent',rich_text:{equals:SESSION_EMAIL}},
+        page_size:10
+      }).catch(function(){return {results:[]};})
     ]);
 
     var dataPrincipal=results[0];
-    var dataMembres=results[1];
+    // Fusionner 2a + 2b et dédupliquer
+    var tousMembers=(results[1].results||[]).concat(results[2].results||[]);
+    var vus={};
+    var dataMembres={results:tousMembers.filter(function(p){
+      if(vus[p.id])return false;vus[p.id]=true;return true;
+    })};
 
     if(!dataPrincipal.results||!dataPrincipal.results.length)return false;
 
