@@ -1,10 +1,16 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V3.1
-     DATE    : 2026-03-10
-     STACK   : Relevance AI (agent médical) + Make + Notion
-     STATUS  : Workflow complet validé
+     VERSION : V3.2
+     DATE    : 2026-03-13
+     STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
+     STATUS  : Traitements chroniques + Sync Notion login
+     CHANGELOG:
+       V3.2 — 2026-03-13 : Écran Traitements chroniques (offline-first + sync Notion)
+                           Sync ALD login/auto-login depuis Notion
+                           Badge compteur tuile Traitements
+                           Injection traitements actifs dans contexte IA
+       V3.1 — 2026-03-10 : Workflow consultation complet validé
 ============================================ -->
 <html lang="fr">
 <head>
@@ -789,8 +795,8 @@ select.finput option{background:var(--bg3);}
 
     <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">À propos</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
-      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita v2.1</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.</div>
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita V3.2</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.<br><span style="color:var(--text3);font-size:10px;">13 mars 2026</span></div>
     </div>
   </div>
 </div>
@@ -849,6 +855,8 @@ async function seConnecter(){
     PROFILS=[profil];SEL=0;
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
+    // ── Sync traitements ALD depuis Notion → localStorage tuile Traitements
+    syncTraitementsDepuisNotion(profil);
     nav('accueilScreen');
     toast('Bienvenue '+profil.prenom+' 👋');
   }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
@@ -1024,13 +1032,118 @@ async function rechargerSessionNotion(){
     function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
     SESSION_PATIENT_ID=txt('ID Patient');
     PROFILS=[{prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),poids:txt('Poids'),sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',allergies:txt('Allergies'),antecedents:txt('Antécédents'),traitements:txt('Traitements réguliers'),patientId:SESSION_PATIENT_ID,notionPageId:page.id}];
-    SEL=0;return true;
+    SEL=0;
+    // ── Sync traitements ALD depuis Notion → localStorage tuile Traitements
+    syncTraitementsDepuisNotion(PROFILS[0]);
+    return true;
   }catch(e){return false;}
 }
 function goMedecin(){window.open('https://heydoc-medecin.vercel.app','_blank');}
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
 function goLabo(){nav('laboScreen');loadGeo('labo');}
 function goPharma(){nav('pharmacieScreen');loadGeo('pharmacie');}
+
+// ══════════════════════════════
+// SYNC TRAITEMENTS NOTION → localStorage
+// ══════════════════════════════
+// Appelé après login et auto-login.
+// Parse le champ "Traitements réguliers" Notion (format enrichi médecin)
+// et met à jour le localStorage de la tuile Traitements sans écraser
+// les traitements saisis manuellement par le patient.
+function syncTraitementsDepuisNotion(profil){
+  if(!profil||!profil.traitements)return;
+  var lignes=profil.traitements.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>3;});
+  if(!lignes.length)return;
+
+  // Clé localStorage pour ce profil
+  var key='traits_'+(profil.patientId||'0_'+(profil.prenom||''));
+  var existants=[];
+  try{var s=localStorage.getItem(key);if(s)existants=JSON.parse(s);}catch(e){}
+
+  var nouveaux=0;
+  lignes.forEach(function(ligne){
+    // Parse le format enrichi :
+    // "Metformine 850mg — 2x/jour [ALD] (Diabète type 2) — Dr. Kouassi — Début: 2026-03-13"
+    var estALD=ligne.indexOf('[ALD]')>=0;
+
+    // Extraire nom + dosage (avant le premier " — ")
+    var parts=ligne.split(' — ');
+    var nomDosage=(parts[0]||'').trim();
+    // Séparer nom et dosage : dernier mot qui commence par chiffre = dosage
+    var mots=nomDosage.split(' ');
+    var dosage='',nom=nomDosage;
+    if(mots.length>=2&&/^\d/.test(mots[mots.length-1])){
+      dosage=mots[mots.length-1];
+      nom=mots.slice(0,-1).join(' ');
+    }
+
+    // Extraire fréquence (parts[1] sans [ALD])
+    var freq=(parts[1]||'').replace('[ALD]','').trim();
+
+    // Extraire indication entre parenthèses
+    var indMatch=ligne.match(/\(([^)]+)\)/);
+    var indication=indMatch?indMatch[1]:'';
+
+    // Extraire prescripteur (partie "Dr. ...")
+    var prescripteur='';
+    parts.forEach(function(p){if(p.trim().indexOf('Dr.')===0)prescripteur=p.trim();});
+
+    // Extraire date début
+    var dateMatch=ligne.match(/Début:\s*(\d{4}-\d{2}-\d{2})/);
+    var dateDebut=dateMatch?dateMatch[1]:new Date().toISOString().slice(0,10);
+
+    if(!nom)return;
+
+    // Vérifier si ce médicament existe déjà (par nom, insensible casse)
+    var dejaPresent=existants.some(function(t){
+      return t.nom&&t.nom.toLowerCase()===nom.toLowerCase();
+    });
+
+    if(!dejaPresent){
+      existants.unshift({
+        id:'trait_notion_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        nom:nom,
+        dosage:dosage,
+        frequence:freq||'—',
+        heures:'',
+        date_debut:dateDebut,
+        duree_type:estALD?'indefini':'jours',
+        date_fin:'',
+        duree_jours:'',
+        indication:indication,
+        prescripteur:prescripteur,
+        ald:estALD,
+        statut:'actif',
+        source:'notion', // marque comme venant de Notion
+        created_at:new Date().toISOString(),
+        updated_at:new Date().toISOString()
+      });
+      nouveaux++;
+    } else {
+      // Mettre à jour le prescripteur et l'indication si vides
+      existants=existants.map(function(t){
+        if(t.nom&&t.nom.toLowerCase()===nom.toLowerCase()){
+          if(!t.prescripteur&&prescripteur)t.prescripteur=prescripteur;
+          if(!t.indication&&indication)t.indication=indication;
+          if(estALD)t.ald=true;
+          t.updated_at=new Date().toISOString();
+        }
+        return t;
+      });
+    }
+  });
+
+  try{localStorage.setItem(key,JSON.stringify(existants));}catch(e){}
+
+  if(nouveaux>0){
+    dbg('syncTraitementsNotion: '+nouveaux+' nouveau(x) traitement(s) importé(s)');
+    // Notifier le patient discrètement
+    setTimeout(function(){
+      toast('💊 '+nouveaux+' traitement'+(nouveaux>1?'s':'')+' ALD importé'+(nouveaux>1?'s':'')+' depuis votre dossier');
+      mettreAJourBadgeTuile();
+    },1500);
+  }
+}
 
 // ══════════════════════════════
 // GÉOLOCALISATION
