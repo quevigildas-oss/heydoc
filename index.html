@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V3.2
+     VERSION : V3.3
      DATE    : 2026-03-13
      STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
-     STATUS  : Traitements chroniques + Sync Notion login
+     STATUS  : Multi-profils famille + Transfert de profil
      CHANGELOG:
-       V3.2 — 2026-03-13 : Écran Traitements chroniques (offline-first + sync Notion)
-                           Sync ALD login/auto-login depuis Notion
-                           Badge compteur tuile Traitements
-                           Injection traitements actifs dans contexte IA
+       V3.3 — 2026-03-13 : Correction bug multi-profils (écrasement PROFILS[0])
+                           Fiche Notion séparée par membre famille
+                           Champs Notion : Compte parent, Lien familial, Code transfert
+                           Écran Transfert de profil (génération code 6 chiffres 48h)
+                           Écran Récupérer un profil (destinataire)
+       V3.2 — 2026-03-13 : Écran Traitements chroniques + Sync Notion login
        V3.1 — 2026-03-10 : Workflow consultation complet validé
 ============================================ -->
 <html lang="fr">
@@ -358,6 +360,9 @@ select.finput option{background:var(--bg3);}
         <div class="field" style="margin-top:12px"><label class="flabel">Code secret (4 chiffres)</label><input class="finput" id="lCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
         <div class="login-err" id="lErr"></div>
         <button class="btn-p" style="margin-top:20px;width:100%" onclick="seConnecter()">Se connecter</button>
+        <div style="text-align:center;margin-top:14px;">
+          <span onclick="nav('recupererProfilScreen')" style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline;">📥 Récupérer un profil avec un code de transfert</span>
+        </div>
       </div>
 
       <!-- Création compte -->
@@ -574,6 +579,11 @@ select.finput option{background:var(--bg3);}
         <div><div class="menu-title">Historique des consultations</div><div class="menu-sub">Archive · Rouvrir · Ordonnance</div></div>
         <div class="menu-arr">›</div>
       </div>
+      <div class="menu-card" onclick="ouvrirTransfert()" style="border-color:rgba(245,166,35,.2);">
+        <div class="menu-ico" style="background:rgba(245,166,35,.1);">🔗</div>
+        <div><div class="menu-title">Transférer ce profil</div><div class="menu-sub">Générer un code · Nouveau téléphone · Indépendance</div></div>
+        <div class="menu-arr">›</div>
+      </div>
     </div>
     <div class="menu-section">
       <div class="sec-lbl">Dossier médical</div>
@@ -745,6 +755,117 @@ select.finput option{background:var(--bg3);}
   </div>
 </div>
 
+<!-- ══ TRANSFERT PROFIL — GÉNÉRATION CODE ══ -->
+<div class="screen" id="transfertScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(245,166,35,.15);">🔗</div>
+    <div style="flex:1"><div class="hdr-title">Transférer ce profil</div><div class="hdr-sub" id="transfertSub"></div></div>
+  </div>
+  <div class="sbody">
+
+    <!-- Info -->
+    <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:10px;">
+      <span style="font-size:20px;flex-shrink:0;">ℹ️</span>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;">
+        Un code de transfert permet à une autre personne de récupérer ce profil sur son propre compte Dokita.<br><br>
+        <strong style="color:var(--text);">Cas d'usage :</strong> enfant qui devient indépendant, mère âgée dont l'enfant prend en charge le suivi médical.
+      </div>
+    </div>
+
+    <!-- Code affiché -->
+    <div id="transfertCodeBox" style="display:none;">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Code de transfert</div>
+        <div id="transfertCodeVal" style="font-family:'Syne',sans-serif;font-size:40px;font-weight:800;letter-spacing:8px;color:var(--accent);">——</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:10px;">⏱ Valable <span id="transfertExpire">48h</span></div>
+      </div>
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px;">
+        📋 <strong style="color:var(--text);">Instructions :</strong><br>
+        1. Communiquez ce code à la personne concernée<br>
+        2. Elle crée un compte Dokita (ou est déjà connectée)<br>
+        3. Elle clique "Récupérer un profil" et saisit ce code<br>
+        4. Le profil lui sera transféré avec tout l'historique
+      </div>
+      <button onclick="copierCodeTransfert()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:13px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">📋 Copier le code</button>
+      <button onclick="annulerTransfert()" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Annuler ce code</button>
+    </div>
+
+    <!-- Génération -->
+    <div id="transfertGenBox">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">Qui récupère ce profil ?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+        <div id="trBtn_enfant" onclick="setTransfertDestinataire('enfant',this)" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;padding:12px;text-align:center;cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:4px;">👦</div>
+          <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Mon enfant</div>
+          <div style="font-size:10px;color:var(--text3);">Indépendance</div>
+        </div>
+        <div id="trBtn_parent" onclick="setTransfertDestinataire('parent',this)" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;padding:12px;text-align:center;cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:4px;">👴</div>
+          <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Mon parent</div>
+          <div style="font-size:10px;color:var(--text3);">Suivi famille</div>
+        </div>
+        <div id="trBtn_conjoint" onclick="setTransfertDestinataire('conjoint',this)" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;padding:12px;text-align:center;cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:4px;">💑</div>
+          <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Conjoint(e)</div>
+          <div style="font-size:10px;color:var(--text3);">Compte propre</div>
+        </div>
+        <div id="trBtn_autre" onclick="setTransfertDestinataire('autre',this)" style="background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;padding:12px;text-align:center;cursor:pointer;">
+          <div style="font-size:22px;margin-bottom:4px;">👤</div>
+          <div style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Autre</div>
+          <div style="font-size:10px;color:var(--text3);">Nouveau compte</div>
+        </div>
+      </div>
+      <div id="transfertErr" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none;">Sélectionnez le destinataire</div>
+      <button onclick="genererCodeTransfert()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:14px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">🔗 Générer le code de transfert</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ RÉCUPÉRER UN PROFIL ══ -->
+<div class="screen" id="recupererProfilScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('profilsScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(74,158,255,.15);">📥</div>
+    <div style="flex:1"><div class="hdr-title">Récupérer un profil</div><div class="hdr-sub">Entrez le code de transfert</div></div>
+  </div>
+  <div class="sbody">
+
+    <div style="background:rgba(74,158,255,.06);border:1px solid rgba(74,158,255,.2);border-radius:14px;padding:16px;margin-bottom:20px;display:flex;gap:10px;">
+      <span style="font-size:20px;flex-shrink:0;">📥</span>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;">
+        Quelqu'un vous a communiqué un code à 6 chiffres pour récupérer un profil Dokita.<br>
+        Entrez ce code ci-dessous — le profil et tout son historique seront ajoutés à votre compte.
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">Code de transfert (6 chiffres)</label>
+      <input id="recupCode" class="finput" type="text" inputmode="numeric" maxlength="6" placeholder="ex: 483921" autocomplete="off" style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;letter-spacing:6px;text-align:center;"/>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">Votre lien avec cette personne</label>
+      <select id="recupLien" class="finput">
+        <option value="parent">C'est mon parent</option>
+        <option value="enfant">C'est mon enfant</option>
+        <option value="conjoint">C'est mon/ma conjoint(e)</option>
+        <option value="autre">Autre lien familial</option>
+      </select>
+    </div>
+
+    <div id="recupErr" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none;"></div>
+    <div id="recupSuccess" style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.25);border-radius:12px;padding:14px;margin-bottom:14px;display:none;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;">✅ Profil trouvé !</div>
+      <div id="recupProfilInfo" style="font-size:12px;color:var(--text2);"></div>
+    </div>
+
+    <button id="recupBtn" onclick="recupererProfil()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:14px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">🔍 Vérifier le code</button>
+
+  </div>
+</div>
+
 <!-- ══ PARAMÈTRES ══ -->
 <div class="screen" id="parametresScreen">
   <div class="hdr">
@@ -795,7 +916,7 @@ select.finput option{background:var(--bg3);}
 
     <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">À propos</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
-      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita V3.2</div>
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita V3.3</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.<br><span style="color:var(--text3);font-size:10px;">13 mars 2026</span></div>
     </div>
   </div>
@@ -1357,15 +1478,39 @@ function saveProfil(){
     email:document.getElementById('fEmail').value||'',
     ville:document.getElementById('fVille').value||'',
     lien:document.getElementById('fLien').value||'moi'};
-  var oldP=EDIT_I>=0?PROFILS[EDIT_I]:(PROFILS[0]||{});
-  p.patientId=oldP.patientId||genPatientId(pr,no,na);
-  p.notionPageId=oldP.notionPageId||'';
-  p.email=oldP.email||SESSION_EMAIL||document.getElementById('fEmail').value||'';
-  if(EDIT_I>=0){PROFILS[EDIT_I]=p;}else{if(PROFILS.length>0)PROFILS[0]=p;else PROFILS.push(p);}
-  SEL=0;
-  saveProfils();renderProfils();
-  mettreAJourProfilNotion(p);
-  nav('profilsScreen');toast('✅ Profil enregistré');
+  if(EDIT_I>=0){
+    // ── Modification d'un profil existant ──
+    var oldP=PROFILS[EDIT_I];
+    p.patientId=oldP.patientId||genPatientId(pr,no,na);
+    p.notionPageId=oldP.notionPageId||'';
+    p.email=oldP.email||SESSION_EMAIL||'';
+    p.compteParent=oldP.compteParent||'';
+    PROFILS[EDIT_I]=p;
+    saveProfils();renderProfils();
+    mettreAJourProfilNotion(p);
+    nav('profilsScreen');toast('✅ Profil modifié');
+  } else {
+    // ── Nouveau profil famille ──
+    var lien=document.getElementById('fLien').value||'moi';
+    p.patientId=genPatientId(pr,no,na);
+    p.notionPageId=''; // sera rempli après création Notion
+    p.email=lien==='moi'?SESSION_EMAIL:''; // email propre seulement pour "moi"
+    p.compteParent=SESSION_EMAIL; // compte qui gère ce profil
+    p.lien=lien;
+    PROFILS.push(p);
+    SEL=PROFILS.length-1;
+    saveProfils();renderProfils();
+    // Créer une nouvelle fiche Notion indépendante pour ce membre
+    creerFicheMembreFamille(p).then(function(pageId){
+      if(pageId){
+        p.notionPageId=pageId;
+        PROFILS[SEL].notionPageId=pageId;
+        saveProfils();
+        dbg('Fiche membre créée: '+pageId);
+      }
+    });
+    nav('profilsScreen');toast('✅ Profil ajouté — '+(lien==='moi'?'Vous-même':LIENS[lien]||lien));
+  }
 }
 
 // ══════════════════════════════
@@ -2171,8 +2316,254 @@ function ajouterTraitementDepuisOrdonnance(medoc,prescripteur){
 }
 
 // ══════════════════════════════
-// HISTORIQUE CONSULTATIONS
+// TRANSFERT DE PROFIL
 // ══════════════════════════════
+var TRANSFERT_DESTINATAIRE='';
+var TRANSFERT_CODE_COURANT=null; // {code, patientId, notionPageId, expire}
+
+function ouvrirTransfert(){
+  var p=PROFILS[SEL];
+  if(!p){toast('Sélectionnez un profil d\'abord');return;}
+  var sub=document.getElementById('transfertSub');
+  if(sub)sub.textContent=p.prenom+' '+p.nom;
+  TRANSFERT_DESTINATAIRE='';
+  TRANSFERT_CODE_COURANT=null;
+  // Reset UI
+  var genBox=document.getElementById('transfertGenBox');
+  var codeBox=document.getElementById('transfertCodeBox');
+  if(genBox)genBox.style.display='block';
+  if(codeBox)codeBox.style.display='none';
+  document.getElementById('transfertErr').style.display='none';
+  // Reset boutons destinataire
+  ['enfant','parent','conjoint','autre'].forEach(function(k){
+    var btn=document.getElementById('trBtn_'+k);
+    if(btn){btn.style.borderColor='var(--border)';btn.style.background='var(--bg3)';}
+  });
+  nav('transfertScreen');
+}
+
+function setTransfertDestinataire(val,el){
+  TRANSFERT_DESTINATAIRE=val;
+  ['enfant','parent','conjoint','autre'].forEach(function(k){
+    var btn=document.getElementById('trBtn_'+k);
+    if(btn){btn.style.borderColor='var(--border)';btn.style.background='var(--bg3)';}
+  });
+  el.style.borderColor='var(--accent)';
+  el.style.background='rgba(0,200,150,.08)';
+  document.getElementById('transfertErr').style.display='none';
+}
+
+async function genererCodeTransfert(){
+  if(!TRANSFERT_DESTINATAIRE){
+    document.getElementById('transfertErr').style.display='block';return;
+  }
+  var p=PROFILS[SEL];
+  if(!p||!p.notionPageId){
+    toast('⚠️ Profil non synchronisé — réessayez dans quelques secondes');return;
+  }
+  // Générer code 6 chiffres
+  var code=String(Math.floor(100000+Math.random()*900000));
+  var expire=new Date(Date.now()+48*3600*1000).toISOString();
+
+  toast('⏳ Génération du code...');
+  try{
+    // Stocker code + expiration dans la fiche Notion du profil à transférer
+    await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
+      properties:{
+        'Code transfert':{rich_text:[{text:{content:code}}]},
+        'Expiration transfert':{date:{start:expire.slice(0,10)}}
+      }
+    });
+    TRANSFERT_CODE_COURANT={code:code,patientId:p.patientId,notionPageId:p.notionPageId,expire:expire};
+    // Sauvegarder aussi en localStorage (accès hors ligne)
+    try{localStorage.setItem('dk_transfer_'+p.patientId,JSON.stringify(TRANSFERT_CODE_COURANT));}catch(e){}
+    // Afficher le code
+    document.getElementById('transfertCodeVal').textContent=code;
+    document.getElementById('transfertExpire').textContent='48 heures';
+    document.getElementById('transfertGenBox').style.display='none';
+    document.getElementById('transfertCodeBox').style.display='block';
+    toast('✅ Code généré');
+  }catch(e){
+    toast('⚠️ Erreur: '+e.message);
+  }
+}
+
+function copierCodeTransfert(){
+  if(!TRANSFERT_CODE_COURANT)return;
+  var p=PROFILS[SEL];
+  var txt='Code de transfert Dokita : '+TRANSFERT_CODE_COURANT.code+
+    '\nProfil : '+(p?p.prenom+' '+p.nom:'')+
+    '\nValable 48h — à saisir dans Dokita > Récupérer un profil';
+  if(navigator.share){
+    navigator.share({title:'Code transfert Dokita',text:txt}).catch(function(){});
+  } else if(navigator.clipboard){
+    navigator.clipboard.writeText(TRANSFERT_CODE_COURANT.code).then(function(){
+      toast('📋 Code copié !');
+    });
+  } else {
+    toast('Code : '+TRANSFERT_CODE_COURANT.code);
+  }
+}
+
+async function annulerTransfert(){
+  if(!confirm('Annuler ce code de transfert ?'))return;
+  var p=PROFILS[SEL];
+  if(p&&p.notionPageId){
+    try{
+      await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
+        properties:{
+          'Code transfert':{rich_text:[{text:{content:''}}]},
+          'Expiration transfert':{date:null}
+        }
+      });
+    }catch(e){}
+  }
+  TRANSFERT_CODE_COURANT=null;
+  try{if(p)localStorage.removeItem('dk_transfer_'+p.patientId);}catch(e){}
+  document.getElementById('transfertGenBox').style.display='block';
+  document.getElementById('transfertCodeBox').style.display='none';
+  toast('🗑 Code annulé');
+}
+
+// ── Récupération côté destinataire ──
+var RECUP_PROFIL_TROUVE=null;
+
+async function recupererProfil(){
+  var code=(document.getElementById('recupCode').value||'').trim();
+  var lien=document.getElementById('recupLien').value||'autre';
+  var errEl=document.getElementById('recupErr');
+  var successEl=document.getElementById('recupSuccess');
+  var btn=document.getElementById('recupBtn');
+  errEl.style.display='none';
+  successEl.style.display='none';
+
+  if(!/^\d{6}$/.test(code)){
+    errEl.textContent='Le code doit contenir exactement 6 chiffres';
+    errEl.style.display='block';return;
+  }
+  if(!SESSION_EMAIL){
+    errEl.textContent='Connectez-vous d\'abord à votre compte Dokita';
+    errEl.style.display='block';return;
+  }
+
+  btn.textContent='🔍 Recherche en cours...';
+  btn.disabled=true;
+
+  try{
+    // Chercher dans Notion la fiche avec ce code de transfert
+    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Code transfert',rich_text:{equals:code}},
+      page_size:1
+    });
+
+    if(!data.results||!data.results.length){
+      errEl.textContent='Code invalide ou expiré — vérifiez le code et réessayez';
+      errEl.style.display='block';
+      btn.textContent='🔍 Vérifier le code';btn.disabled=false;return;
+    }
+
+    var page=data.results[0];
+    var props=page.properties;
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+      if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+      if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+      if(t==='email')return p.email||'';
+      if(t==='phone_number')return p.phone_number||'';
+      if(t==='date')return p.date?p.date.start:'';
+      if(t==='number')return p.number!=null?String(p.number):'';
+      if(t==='select')return p.select?p.select.name:'';
+      return '';}
+
+    // Vérifier expiration
+    var expire=txt('Expiration transfert');
+    if(expire&&new Date(expire)<new Date()){
+      errEl.textContent='Ce code a expiré — demandez un nouveau code à l\'émetteur';
+      errEl.style.display='block';
+      btn.textContent='🔍 Vérifier le code';btn.disabled=false;return;
+    }
+
+    // Profil trouvé
+    RECUP_PROFIL_TROUVE={
+      notionPageId:page.id,
+      patientId:txt('ID Patient'),
+      prenom:txt('Prenom'),
+      nom:txt('Nom'),
+      naiss:txt('Date naissance'),
+      sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',
+      poids:txt('Poids'),
+      ville:txt('Ville'),
+      tel:txt('Téléphone'),
+      allergies:txt('Allergies'),
+      antecedents:txt('Antécédents'),
+      traitements:txt('Traitements réguliers'),
+      lien:lien,
+      compteParent:SESSION_EMAIL
+    };
+
+    var age=RECUP_PROFIL_TROUVE.naiss?calcAge(RECUP_PROFIL_TROUVE.naiss)+' ans':'';
+    document.getElementById('recupProfilInfo').innerHTML=
+      '<strong>'+escHtml(RECUP_PROFIL_TROUVE.prenom+' '+RECUP_PROFIL_TROUVE.nom)+'</strong>'+
+      (age?' · '+age:'')+
+      (RECUP_PROFIL_TROUVE.ville?' · '+escHtml(RECUP_PROFIL_TROUVE.ville):'')+
+      '<br><span style="color:var(--text3);">ID : '+escHtml(RECUP_PROFIL_TROUVE.patientId)+'</span>';
+    successEl.style.display='block';
+
+    // Changer le bouton en "Confirmer"
+    btn.textContent='✅ Confirmer et ajouter ce profil';
+    btn.onclick=confirmerRecuperationProfil;
+    btn.disabled=false;
+
+  }catch(e){
+    errEl.textContent='Erreur: '+e.message;
+    errEl.style.display='block';
+    btn.textContent='🔍 Vérifier le code';btn.disabled=false;
+  }
+}
+
+async function confirmerRecuperationProfil(){
+  if(!RECUP_PROFIL_TROUVE)return;
+  var p=RECUP_PROFIL_TROUVE;
+  var btn=document.getElementById('recupBtn');
+  btn.textContent='⏳ Transfert en cours...';btn.disabled=true;
+
+  try{
+    // 1. Mettre à jour la fiche Notion : nouveau compte parent + effacer code transfert
+    await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
+      properties:{
+        'Compte parent':{email:SESSION_EMAIL},
+        'Lien familial':{select:{name:LIENS[p.lien]||p.lien}},
+        'Code transfert':{rich_text:[{text:{content:''}}]},
+        'Expiration transfert':{date:null}
+      }
+    });
+
+    // 2. Ajouter le profil à la liste locale
+    p.email='';
+    PROFILS.push(p);
+    SEL=PROFILS.length-1;
+    saveProfils();
+
+    // 3. Sync traitements si présents
+    if(p.traitements)syncTraitementsDepuisNotion(p);
+
+    toast('✅ Profil de '+p.prenom+' ajouté à votre compte !');
+    setTimeout(function(){
+      RECUP_PROFIL_TROUVE=null;
+      // Reset écran
+      document.getElementById('recupCode').value='';
+      document.getElementById('recupSuccess').style.display='none';
+      btn.textContent='🔍 Vérifier le code';
+      btn.onclick=recupererProfil;
+      btn.disabled=false;
+      renderProfils();
+      nav('profilsScreen');
+    },1200);
+
+  }catch(e){
+    toast('⚠️ Erreur transfert: '+e.message);
+    btn.textContent='✅ Confirmer et ajouter ce profil';btn.disabled=false;
+  }
+}
 function getHistoKey(){var p=PROFILS[SEL];return 'histo_'+(p.patientId||SEL+'_'+(p.prenom||'')+'_'+(p.nom||''));}
 
 function sauvegarderSession(resume){
@@ -2383,6 +2774,49 @@ async function mettreAJourProfilNotion(p){
     await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{properties:props});
     dbg('Profil Notion mis à jour');
   }catch(e){dbg('Erreur MAJ profil: '+e.message);}
+}
+
+// ══════════════════════════════
+// CRÉATION FICHE MEMBRE FAMILLE
+// ══════════════════════════════
+async function creerFicheMembreFamille(p){
+  // Crée une fiche Notion indépendante pour un membre de la famille
+  // Rattachée au compte parent via le champ "Compte parent"
+  var nom=(p.prenom||'')+' '+(p.nom||'');
+  var today=new Date().toISOString().slice(0,10);
+  var props={
+    'Nom complet':{title:[{text:{content:nom.trim()}}]},
+    'Nom':{rich_text:[{text:{content:p.nom||''}}]},
+    'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
+    'ID Patient':{rich_text:[{text:{content:p.patientId||''}}]},
+    'Première consultation':{date:{start:today}}
+  };
+  // Champs optionnels
+  if(p.naiss){try{props['Date naissance']={date:{start:p.naiss}};}catch(e){}}
+  if(p.tel){try{props['Téléphone']={phone_number:p.tel};}catch(e){}}
+  if(p.ville){try{props['Ville']={rich_text:[{text:{content:p.ville}}]};}catch(e){}}
+  if(p.poids){try{props['Poids']={number:parseFloat(p.poids)||0};}catch(e){}}
+  if(p.sx){try{props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};}catch(e){}}
+  // Compte parent et lien familial
+  if(p.compteParent){try{props['Compte parent']={email:p.compteParent};}catch(e){}}
+  if(p.lien){try{props['Lien familial']={select:{name:LIENS[p.lien]||p.lien}};}catch(e){}}
+  try{
+    var res=await notionPatientRequest('/pages','POST',{
+      parent:{database_id:NOTION_PATIENTS_DB},
+      properties:props
+    });
+    if(res.id)return res.id;
+    // Retry champs de base si erreur
+    var propsMin={
+      'Nom complet':props['Nom complet'],
+      'Nom':props['Nom'],
+      'Prenom':props['Prenom'],
+      'ID Patient':props['ID Patient'],
+      'Première consultation':props['Première consultation']
+    };
+    var res2=await notionPatientRequest('/pages','POST',{parent:{database_id:NOTION_PATIENTS_DB},properties:propsMin});
+    return res2.id||null;
+  }catch(e){dbg('Erreur création membre: '+e.message);return null;}
 }
 
 // ══════════════════════════════
