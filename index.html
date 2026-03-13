@@ -993,30 +993,25 @@ async function creerCompte(){
   if(!/^[^@]+@[^@]+\.[^@]+$/.test(email)){err.textContent='Email invalide';err.classList.add('on');return;}
   if(!/^\d{4}$/.test(code)){err.textContent='Le code doit contenir 4 chiffres';err.classList.add('on');return;}
   if(code!==code2){err.textContent='Les codes ne correspondent pas';err.classList.add('on');return;}
-  err.textContent='Création du compte...';err.classList.add('on');
+  err.textContent='Vérification en cours...';err.classList.add('on');
   try{
     // Vérifier si email déjà utilisé
     var check=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
       filter:{property:'Email',email:{equals:email}},page_size:1
     });
     if(check.results&&check.results.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
-    // Créer la fiche dans Notion
-    var res=await notionPatientRequest('/pages','POST',{
-      parent:{database_id:NOTION_PATIENTS_DB},
-      properties:{
-        'Nom complet':{title:[{text:{content:' '}}]},
-        'Email':{email:email},
-        'Code':{rich_text:[{text:{content:code}}]}
-      }
-    });
-    if(!res.id){err.textContent='Erreur création compte';err.classList.add('on');return;}
+
+    // ── Ne pas créer de fiche Notion ici ──
+    // La fiche sera créée dans saveProfil() avec toutes les infos complètes
+    // On stocke juste le code en session temporaire
     SESSION_EMAIL=email;
     SESSION_PATIENT_ID='';
-    PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',notionPageId:res.id}];
+    SESSION_CODE_TEMP=code; // code temporaire → sera écrit dans Notion avec la fiche complète
+    PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',notionPageId:''}];
     SEL=0;
     err.className='login-err';
     nav('addProfilScreen');
-    toast('Compte créé ! Complétez votre profil 👤');
+    toast('Complétez votre profil 👤');
   }catch(e){err.textContent='Erreur: '+e.message;err.classList.add('on');}
 }
 
@@ -1108,7 +1103,7 @@ async function poll(sid,jid,ah,maxIter,interval){
 // STATE
 // ══════════════════════════════
 var CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
-var SESSION_EMAIL='',SESSION_PATIENT_ID='';
+var SESSION_EMAIL='',SESSION_PATIENT_ID='',SESSION_CODE_TEMP='';
 var PREV_SCREEN='profilsScreen';
 var PROFILS=[],SEL=-1,CURRENT=null,SX='',ESX='',EDIT_I=-1;
 var USER_LAT=null,USER_LNG=null;
@@ -1490,26 +1485,53 @@ function saveProfil(){
     mettreAJourProfilNotion(p);
     nav('profilsScreen');toast('✅ Profil modifié');
   } else {
-    // ── Nouveau profil famille ──
     var lien=document.getElementById('fLien').value||'moi';
     p.patientId=genPatientId(pr,no,na);
-    p.notionPageId=''; // sera rempli après création Notion
-    p.email=lien==='moi'?SESSION_EMAIL:''; // email propre seulement pour "moi"
-    p.compteParent=SESSION_EMAIL; // compte qui gère ce profil
     p.lien=lien;
-    PROFILS.push(p);
-    SEL=PROFILS.length-1;
-    saveProfils();renderProfils();
-    // Créer une nouvelle fiche Notion indépendante pour ce membre
-    creerFicheMembreFamille(p).then(function(pageId){
-      if(pageId){
-        p.notionPageId=pageId;
-        PROFILS[SEL].notionPageId=pageId;
-        saveProfils();
-        dbg('Fiche membre créée: '+pageId);
-      }
-    });
-    nav('profilsScreen');toast('✅ Profil ajouté — '+(lien==='moi'?'Vous-même':LIENS[lien]||lien));
+
+    if(lien==='moi'&&!PROFILS[0].notionPageId){
+      // ── Première création de profil "moi-même" après creerCompte() ──
+      // Créer la fiche Notion complète maintenant (avec email + code + toutes les infos)
+      p.email=SESSION_EMAIL;
+      p.notionPageId='';
+      p.compteParent='';
+      PROFILS[0]=p;
+      SEL=0;
+      saveProfils();renderProfils();
+      nav('profilsScreen');
+      toast('⏳ Enregistrement...');
+      // Créer fiche Notion complète avec email + code + profil
+      creerFicheProfilComplet(p,SESSION_CODE_TEMP).then(function(pageId){
+        if(pageId){
+          PROFILS[0].notionPageId=pageId;
+          SESSION_PATIENT_ID=p.patientId;
+          try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:p.patientId}));}catch(e){}
+          saveProfils();
+          toast('✅ Profil créé !');
+          dbg('Fiche profil créée: '+pageId);
+        } else {
+          toast('⚠️ Erreur sync Notion — réessayez plus tard');
+        }
+        SESSION_CODE_TEMP='';
+      });
+    } else {
+      // ── Nouveau membre famille ──
+      p.email='';
+      p.notionPageId='';
+      p.compteParent=SESSION_EMAIL;
+      PROFILS.push(p);
+      SEL=PROFILS.length-1;
+      saveProfils();renderProfils();
+      creerFicheMembreFamille(p).then(function(pageId){
+        if(pageId){
+          p.notionPageId=pageId;
+          PROFILS[SEL].notionPageId=pageId;
+          saveProfils();
+          dbg('Fiche membre créée: '+pageId);
+        }
+      });
+      nav('profilsScreen');toast('✅ Profil ajouté — '+(lien==='moi'?'Vous-même':LIENS[lien]||lien));
+    }
   }
 }
 
@@ -2820,8 +2842,47 @@ async function creerFicheMembreFamille(p){
 }
 
 // ══════════════════════════════
-// CRÉATION AUTO FICHE PATIENT NOTION
+// CRÉATION FICHE PROFIL PRINCIPAL (moi-même)
 // ══════════════════════════════
+// Appelé après saveProfil() pour le cas "moi-même" — crée une fiche
+// Notion complète avec toutes les infos + email + code d'accès
+async function creerFicheProfilComplet(p,code){
+  var nom=(p.prenom||'')+' '+(p.nom||'');
+  var today=new Date().toISOString().slice(0,10);
+  var props={
+    'Nom complet':{title:[{text:{content:nom.trim()}}]},
+    'Nom':{rich_text:[{text:{content:p.nom||''}}]},
+    'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
+    'ID Patient':{rich_text:[{text:{content:p.patientId||''}}]},
+    'Première consultation':{date:{start:today}}
+  };
+  if(p.email){try{props['Email']={email:p.email};}catch(e){}}
+  if(code){try{props['Code']={rich_text:[{text:{content:code}}]};}catch(e){}}
+  if(p.naiss){try{props['Date naissance']={date:{start:p.naiss}};}catch(e){}}
+  if(p.tel){try{props['Téléphone']={phone_number:p.tel};}catch(e){}}
+  if(p.ville){try{props['Ville']={rich_text:[{text:{content:p.ville}}]};}catch(e){}}
+  if(p.poids){try{props['Poids']={number:parseFloat(p.poids)||0};}catch(e){}}
+  if(p.sx){try{props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};}catch(e){}}
+  try{
+    var res=await notionPatientRequest('/pages','POST',{
+      parent:{database_id:NOTION_PATIENTS_DB},
+      properties:props
+    });
+    if(res.id)return res.id;
+    // Retry champs de base si erreur sur champs optionnels
+    var propsMin={
+      'Nom complet':props['Nom complet'],
+      'Nom':props['Nom'],
+      'Prenom':props['Prenom'],
+      'ID Patient':props['ID Patient'],
+      'Première consultation':props['Première consultation']
+    };
+    if(props['Email'])propsMin['Email']=props['Email'];
+    if(props['Code'])propsMin['Code']=props['Code'];
+    var res2=await notionPatientRequest('/pages','POST',{parent:{database_id:NOTION_PATIENTS_DB},properties:propsMin});
+    return res2.id||null;
+  }catch(e){dbg('Erreur création profil complet: '+e.message);return null;}
+}
 async function creerOuMettreAJourPatientNotion(patId,p,resume){
   try{
     // Chercher par ID Patient
