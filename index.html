@@ -971,7 +971,7 @@ async function seConnecter(){
     // Charger le profil depuis Notion
     SESSION_EMAIL=email;
     SESSION_PATIENT_ID=txt('ID Patient');
-    var profil={
+    var profilPrincipal={
       prenom:txt('Prenom'),nom:txt('Nom'),
       naiss:txt('Date naissance'),
       tel:txt('Téléphone'),email:email,
@@ -982,15 +982,54 @@ async function seConnecter(){
       antecedents:txt('Antécédents'),
       traitements:txt('Traitements réguliers'),
       patientId:SESSION_PATIENT_ID,
-      notionPageId:page.id
+      notionPageId:page.id,
+      lien:'moi',compteParent:''
     };
-    PROFILS=[profil];SEL=0;
+
+    // ── Charger membres famille en parallèle (non bloquant) ──
+    // On affiche d'abord le profil principal, les membres arrivent après
+    PROFILS=[profilPrincipal];SEL=0;
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
-    // ── Sync traitements ALD depuis Notion → localStorage tuile Traitements
-    syncTraitementsDepuisNotion(profil);
+    syncTraitementsDepuisNotion(profilPrincipal);
     nav('accueilScreen');
-    toast('Bienvenue '+profil.prenom+' 👋');
+    toast('Bienvenue '+profilPrincipal.prenom+' 👋');
+
+    // Charger les membres en arrière-plan sans bloquer l'UI
+    notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+      filter:{property:'Compte parent',email:{equals:email}},
+      page_size:10
+    }).then(function(dataMembres){
+      if(!dataMembres.results||!dataMembres.results.length)return;
+      var membres=dataMembres.results.map(function(mp){
+        var pp=mp.properties;
+        function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
+          if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+          if(t==='title')return(p.title[0]||{}).plain_text||'';
+          if(t==='email')return p.email||'';
+          if(t==='phone_number')return p.phone_number||'';
+          if(t==='date')return p.date?p.date.start:'';
+          if(t==='number')return p.number!=null?String(p.number):'';
+          if(t==='select')return p.select?p.select.name:'';
+          return '';}
+        var lienNotion=t2('Lien familial');
+        var lienKey='autre';
+        Object.keys(LIENS).forEach(function(k){if(LIENS[k]===lienNotion)lienKey=k;});
+        return {
+          prenom:t2('Prenom'),nom:t2('Nom'),naiss:t2('Date naissance'),
+          tel:t2('Téléphone'),email:'',ville:t2('Ville'),
+          poids:t2('Poids'),sx:t2('Sexe')==='Masculin'?'H':t2('Sexe')==='Féminin'?'F':'',
+          allergies:t2('Allergies'),antecedents:t2('Antécédents'),
+          traitements:t2('Traitements réguliers'),
+          patientId:t2('ID Patient'),notionPageId:mp.id,
+          lien:lienKey,compteParent:email
+        };
+      });
+      PROFILS=[profilPrincipal].concat(membres);
+      saveProfils();
+      renderProfils(); // rafraîchir si l'écran profils est visible
+      dbg('Membres famille chargés: '+membres.length);
+    }).catch(function(e){dbg('Membres ERR: '+e.message);});
   }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
 }
 
@@ -1168,19 +1207,94 @@ function goPatient(){if(!SESSION_EMAIL){nav('loginScreen');return;}renderProfils
 async function rechargerSessionNotion(){
   if(!SESSION_EMAIL)return false;
   try{
-    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Email',email:{equals:SESSION_EMAIL}},page_size:1
-    });
-    if(!data.results||data.results.length===0)return false;
-    var page=data.results[0];var props=page.properties;
-    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
+    // ── Lancement parallèle des 2 requêtes Notion ──
+    var results=await Promise.all([
+      // Requête 1 : profil principal (par email)
+      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+        filter:{property:'Email',email:{equals:SESSION_EMAIL}},
+        page_size:1
+      }),
+      // Requête 2 : membres famille (par Compte parent)
+      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
+        filter:{property:'Compte parent',email:{equals:SESSION_EMAIL}},
+        page_size:10
+      })
+    ]);
+
+    var dataPrincipal=results[0];
+    var dataMembres=results[1];
+
+    if(!dataPrincipal.results||!dataPrincipal.results.length)return false;
+
+    // ── Parser le profil principal ──
+    var page=dataPrincipal.results[0];
+    var props=page.properties;
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+      if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+      if(t==='title')return(p.title[0]||{}).plain_text||'';
+      if(t==='email')return p.email||'';
+      if(t==='phone_number')return p.phone_number||'';
+      if(t==='date')return p.date?p.date.start:'';
+      if(t==='number')return p.number!=null?String(p.number):'';
+      if(t==='select')return p.select?p.select.name:'';
+      return '';}
     SESSION_PATIENT_ID=txt('ID Patient');
-    PROFILS=[{prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),poids:txt('Poids'),sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',allergies:txt('Allergies'),antecedents:txt('Antécédents'),traitements:txt('Traitements réguliers'),patientId:SESSION_PATIENT_ID,notionPageId:page.id}];
+    var profilPrincipal={
+      prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),
+      tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),
+      poids:txt('Poids'),sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',
+      allergies:txt('Allergies'),antecedents:txt('Antécédents'),
+      traitements:txt('Traitements réguliers'),
+      patientId:SESSION_PATIENT_ID,notionPageId:page.id,
+      lien:'moi',compteParent:''
+    };
+
+    // ── Parser les membres famille depuis Notion ──
+    var membres=[];
+    if(dataMembres.results&&dataMembres.results.length){
+      membres=dataMembres.results.map(function(mp){
+        var pp=mp.properties;
+        function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
+          if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+          if(t==='title')return(p.title[0]||{}).plain_text||'';
+          if(t==='email')return p.email||'';
+          if(t==='phone_number')return p.phone_number||'';
+          if(t==='date')return p.date?p.date.start:'';
+          if(t==='number')return p.number!=null?String(p.number):'';
+          if(t==='select')return p.select?p.select.name:'';
+          return '';}
+        var lienNotion=t2('Lien familial');
+        // Retrouver la clé interne depuis le libellé Notion
+        var lienKey='autre';
+        Object.keys(LIENS).forEach(function(k){if(LIENS[k]===lienNotion)lienKey=k;});
+        return {
+          prenom:t2('Prenom'),nom:t2('Nom'),naiss:t2('Date naissance'),
+          tel:t2('Téléphone'),email:'',ville:t2('Ville'),
+          poids:t2('Poids'),sx:t2('Sexe')==='Masculin'?'H':t2('Sexe')==='Féminin'?'F':'',
+          allergies:t2('Allergies'),antecedents:t2('Antécédents'),
+          traitements:t2('Traitements réguliers'),
+          patientId:t2('ID Patient'),notionPageId:mp.id,
+          lien:lienKey,compteParent:SESSION_EMAIL
+        };
+      });
+    }
+
+    // ── Fusionner : principal + membres Notion ──
+    PROFILS=[profilPrincipal].concat(membres);
     SEL=0;
-    // ── Sync traitements ALD depuis Notion → localStorage tuile Traitements
+    saveProfils(); // mettre à jour localStorage = cache
+
+    // ── Sync traitements ALD ──
     syncTraitementsDepuisNotion(PROFILS[0]);
     return true;
-  }catch(e){return false;}
+  }catch(e){
+    dbg('rechargerSession ERR: '+e.message);
+    // Fallback : utiliser localStorage si Notion échoue
+    var profilsLocaux=[];
+    try{var _p=localStorage.getItem('hd_profils');if(_p)profilsLocaux=JSON.parse(_p);}catch(e2){}
+    if(profilsLocaux.length){PROFILS=profilsLocaux;SEL=0;return true;}
+    return false;
+  }
 }
 function goMedecin(){window.open('https://heydoc-medecin.vercel.app','_blank');}
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
