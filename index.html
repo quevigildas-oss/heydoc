@@ -906,6 +906,17 @@ select.finput option{background:var(--bg3);}
       </div>
     </div>
 
+    <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">Partager</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="partagerApp()">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">🚀 Partager Dokita</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Invitez vos proches à rejoindre la plateforme</div>
+        </div>
+        <div style="font-size:20px;color:var(--accent);">›</div>
+      </div>
+    </div>
+
     <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">Compte</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
       <div style="padding:16px;cursor:pointer;" onclick="logout()">
@@ -1013,6 +1024,23 @@ async function creerCompte(){
     nav('addProfilScreen');
     toast('Complétez votre profil 👤');
   }catch(e){err.textContent='Erreur: '+e.message;err.classList.add('on');}
+}
+
+function partagerApp(){
+  var txt='👋 Découvrez Dokita — la plateforme médicale IA pour l\'Afrique.\n\nConsultez un médecin, obtenez un diagnostic IA, gérez votre dossier médical et celui de toute votre famille.\n\n🌍 Disponible sur : https://heydoc-mu.vercel.app';
+  if(navigator.share){
+    navigator.share({
+      title:'Dokita — Plateforme médicale IA',
+      text:txt,
+      url:'https://heydoc-mu.vercel.app'
+    }).catch(function(){});
+  } else if(navigator.clipboard){
+    navigator.clipboard.writeText('https://heydoc-mu.vercel.app').then(function(){
+      toast('🔗 Lien copié !');
+    });
+  } else {
+    toast('🔗 heydoc-mu.vercel.app');
+  }
 }
 
 function logout(){if(confirm('Se déconnecter ?'))seDeconnecter();}
