@@ -279,6 +279,50 @@ select.finput option{background:var(--bg3);}
 .login-err{font-size:12px;color:#E74C3C;margin-top:8px;display:none;}
 .login-err.on{display:block;}
 .av0{background:#2E86C1;}.av1{background:#00875A;}.av2{background:#8E44AD;}.av3{background:#E67E22;}.av4{background:#E74C3C;}.av5{background:#16A085;}.av6{background:#2C3E50;}.av7{background:#D35400;}
+
+/* ══ TRAITEMENTS CHRONIQUES ══ */
+.trait-screen{flex:1;overflow-y:auto;padding:16px;}
+.trait-screen::-webkit-scrollbar{display:none;}
+.trait-header-info{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+.trait-header-icon{font-size:24px;width:44px;height:44px;background:rgba(0,168,120,.12);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.trait-header-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);}
+.trait-header-sub{font-size:11px;color:var(--text2);margin-top:2px;line-height:1.4;}
+.trait-filters{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;}
+.trait-filters::-webkit-scrollbar{display:none;}
+.trait-filter-btn{flex-shrink:0;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 13px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .2s;white-space:nowrap;}
+.trait-filter-btn.on{background:rgba(0,168,120,.12);border-color:rgba(0,168,120,.4);color:#00C896;}
+.trait-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:10px;position:relative;overflow:hidden;}
+.trait-card.actif{border-left:3px solid #00C896;}
+.trait-card.suspendu{border-left:3px solid var(--warn);opacity:.85;}
+.trait-card.termine{border-left:3px solid var(--text3);opacity:.65;}
+.trait-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;}
+.trait-card-nom{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);}
+.trait-card-dose{font-size:12px;color:var(--accent);font-weight:600;margin-top:2px;}
+.trait-badge-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.trait-badge{display:inline-flex;align-items:center;gap:3px;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:600;}
+.trait-badge.ald{background:rgba(74,158,255,.12);border:1px solid rgba(74,158,255,.25);color:#4A9EFF;}
+.trait-badge.actif{background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.2);color:#00C896;}
+.trait-badge.suspendu{background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.2);color:var(--warn);}
+.trait-badge.termine{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text3);}
+.trait-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;}
+.trait-card-field{background:var(--bg3);border-radius:8px;padding:7px 10px;}
+.trait-card-field-lbl{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;}
+.trait-card-field-val{font-size:12px;color:var(--text2);}
+.trait-card-indication{font-size:11px;color:var(--text2);line-height:1.5;background:var(--bg3);border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.trait-card-indication strong{color:var(--text);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:3px;}
+.trait-card-footer{display:flex;justify-content:space-between;align-items:center;}
+.trait-card-medecin{font-size:10px;color:var(--text3);}
+.trait-card-actions{display:flex;gap:6px;}
+.trait-card-btn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;}
+.trait-card-btn.danger{color:var(--danger);border-color:rgba(255,77,77,.2);}
+.trait-card-btn.warn{color:var(--warn);border-color:rgba(245,166,35,.2);}
+.trait-card-btn.ok{color:var(--accent);border-color:rgba(0,200,150,.2);}
+.trait-add-btn{background:var(--bg3);border:2px dashed rgba(0,168,120,.3);border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);width:100%;margin-bottom:10px;transition:all .2s;}
+.trait-add-btn:active{border-color:var(--accent);background:rgba(0,168,120,.05);}
+.trait-empty{text-align:center;padding:50px 20px;color:var(--text3);font-size:13px;line-height:1.7;}
+.trait-sync-bar{background:rgba(74,158,255,.08);border:1px solid rgba(74,158,255,.15);border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:11px;color:#4A9EFF;}
+.doss-tile-badge{display:inline-block;background:rgba(0,200,150,.15);border:1px solid rgba(0,200,150,.3);color:#00C896;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:700;margin-top:4px;}
+
 @media print{
   #app>div.screen{display:none!important;}
   #ordonnanceDetailScreen{display:block!important;position:static!important;height:auto!important;overflow:visible!important;}
@@ -538,10 +582,11 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-title">Analyses</div>
           <div class="doss-tile-sub">Bilans biologiques</div>
         </div>
-        <div class="doss-tile" onclick="ouvrirDossier('traitements','💊','Traitements réguliers','Médicaments chroniques')">
+        <div class="doss-tile" onclick="ouvrirTraitements()" id="traitTile">
           <div class="doss-tile-ico" style="background:rgba(0,168,120,.1);">💊</div>
           <div class="doss-tile-title">Traitements</div>
-          <div class="doss-tile-sub">Chroniques</div>
+          <div class="doss-tile-sub" id="traitTileSub">Chroniques</div>
+          <div id="traitTileBadge" style="display:none;" class="doss-tile-badge"></div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossier('allergies','⚠️','Allergies','Allergies connues')">
           <div class="doss-tile-ico" style="background:rgba(232,146,10,.1);">⚠️</div>
@@ -655,6 +700,42 @@ select.finput option{background:var(--bg3);}
   <div class="sbody">
     <input class="geo-search" id="pharmacieSearch" placeholder="Rechercher une pharmacie..." oninput="filterGeo('pharmacie',this.value)"/>
     <div id="pharmacieList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
+  </div>
+</div>
+
+<!-- ══ TRAITEMENTS CHRONIQUES ══ -->
+<div class="screen" id="traitementsScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(0,168,120,.15);">💊</div>
+    <div style="flex:1">
+      <div class="hdr-title">Traitements chroniques</div>
+      <div class="hdr-sub" id="traitHdrSub">Médicaments réguliers</div>
+    </div>
+    <div onclick="ouvrirAjoutTraitement()" style="background:var(--accent);border:none;border-radius:10px;padding:6px 12px;font-size:18px;cursor:pointer;color:#fff;line-height:1;">＋</div>
+  </div>
+  <div class="trait-screen" id="traitementsBody">
+    <div class="trait-sync-bar" id="traitSyncBar" style="display:none;">
+      <span>🔄</span><span id="traitSyncMsg">Synchronisation en attente...</span>
+    </div>
+    <!-- Info box -->
+    <div class="trait-header-info">
+      <div class="trait-header-icon">🛡️</div>
+      <div>
+        <div class="trait-header-title">Vérification automatique</div>
+        <div class="trait-header-sub">Ces traitements sont transmis à l'IA lors de chaque consultation pour détecter les contre-indications et interactions médicamenteuses.</div>
+      </div>
+    </div>
+    <!-- Filtres -->
+    <div class="trait-filters">
+      <div class="trait-filter-btn on" onclick="filtrerTraits('tous',this)" id="tfTous">Tous</div>
+      <div class="trait-filter-btn" onclick="filtrerTraits('actif',this)" id="tfActif">✅ Actifs</div>
+      <div class="trait-filter-btn" onclick="filtrerTraits('ald',this)" id="tfAld">🔵 ALD</div>
+      <div class="trait-filter-btn" onclick="filtrerTraits('suspendu',this)" id="tfSuspendu">⏸ Suspendus</div>
+      <div class="trait-filter-btn" onclick="filtrerTraits('termine',this)" id="tfTermine">⬜ Terminés</div>
+    </div>
+    <!-- Liste -->
+    <div id="traitList"></div>
   </div>
 </div>
 
@@ -1271,7 +1352,8 @@ async function sendMsg(){
     (p.poids?', '+p.poids+'kg':'')+
     (p.ville?', '+p.ville:'')+'] ';
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
-  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+txt:txt;
+  var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
+  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
   try{
     var b={message:{role:'user',content:fullTxt}};
     if(CID)b.conversation_id=CID;
@@ -1498,6 +1580,7 @@ function ouvrirEspaceProfil(i){
 
   CURRENT=Object.assign({},p,{_idx:i,_eph:false});
   nav('espaceProfilScreen');
+  mettreAJourBadgeTuile();
 }
 
 // ══════════════════════════════
@@ -1594,6 +1677,384 @@ function supprimerEntree(i){
   try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
   renderDossierDetail(DOSSIER_TYPE);
   toast('🗑 Entrée supprimée');
+}
+
+// ══════════════════════════════
+// TRAITEMENTS CHRONIQUES
+// ══════════════════════════════
+var TRAIT_FILTRE='tous';
+
+function getTraitKey(){
+  var p=PROFILS[SEL];
+  return 'traits_'+(p.patientId||SEL+'_'+(p.prenom||''));
+}
+
+function getTraitSyncQueue(){
+  try{var s=localStorage.getItem('trait_sync_queue');return s?JSON.parse(s):[];}catch(e){return [];}
+}
+
+function saveTraitSyncQueue(q){
+  try{localStorage.setItem('trait_sync_queue',JSON.stringify(q));}catch(e){}
+}
+
+function chargerTraitements(){
+  try{var s=localStorage.getItem(getTraitKey());return s?JSON.parse(s):[];}catch(e){return [];}
+}
+
+function sauvegarderTraitements(items){
+  try{localStorage.setItem(getTraitKey(),JSON.stringify(items));}catch(e){}
+}
+
+function ouvrirTraitements(){
+  var items=chargerTraitements();
+  TRAIT_FILTRE='tous';
+  // Reset filtres UI
+  ['tfTous','tfActif','tfAld','tfSuspendu','tfTermine'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.classList.remove('on');
+  });
+  var tf=document.getElementById('tfTous');if(tf)tf.classList.add('on');
+  // Header info
+  var actifs=items.filter(function(t){return t.statut==='actif';}).length;
+  var sub=document.getElementById('traitHdrSub');
+  if(sub)sub.textContent=actifs?actifs+' actif'+(actifs>1?'s':'')+' · '+items.length+' total':items.length+' traitement'+(items.length>1?'s':'');
+  // Sync bar
+  var q=getTraitSyncQueue();
+  var sb=document.getElementById('traitSyncBar');
+  var sm=document.getElementById('traitSyncMsg');
+  if(sb&&q.length>0){sb.style.display='flex';if(sm)sm.textContent=q.length+' mise'+(q.length>1?'s':'')+' à jour en attente de connexion';}
+  else if(sb){sb.style.display='none';}
+  renderTraitements(items);
+  nav('traitementsScreen');
+  // Tenter sync si online
+  if(navigator.onLine)processSyncQueueTraits();
+}
+
+function filtrerTraits(filtre,btn){
+  TRAIT_FILTRE=filtre;
+  document.querySelectorAll('.trait-filter-btn').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  renderTraitements(chargerTraitements());
+}
+
+function renderTraitements(items){
+  var el=document.getElementById('traitList');if(!el)return;
+  var filtered=items;
+  if(TRAIT_FILTRE==='ald')filtered=items.filter(function(t){return t.ald;});
+  else if(TRAIT_FILTRE!=='tous')filtered=items.filter(function(t){return t.statut===TRAIT_FILTRE;});
+
+  if(!filtered.length){
+    var msg=TRAIT_FILTRE==='tous'?'💊 Aucun traitement enregistré.<br>Appuyez sur + pour ajouter un médicament chronique.':
+      TRAIT_FILTRE==='actif'?'✅ Aucun traitement actif.':
+      TRAIT_FILTRE==='ald'?'🔵 Aucun traitement ALD.':
+      TRAIT_FILTRE==='suspendu'?'⏸ Aucun traitement suspendu.':'⬜ Aucun traitement terminé.';
+    el.innerHTML='<div class="trait-empty">'+msg+'</div>';
+    return;
+  }
+
+  el.innerHTML=filtered.map(function(t,i){
+    var idx=items.indexOf(t);
+    var statutBadge='<span class="trait-badge '+t.statut+'">'+
+      (t.statut==='actif'?'✅ Actif':t.statut==='suspendu'?'⏸ Suspendu':'⬜ Terminé')+'</span>';
+    var aldBadge=t.ald?'<span class="trait-badge ald">🔵 ALD</span>':'';
+
+    var actions='';
+    if(t.statut==='actif'){
+      actions='<button class="trait-card-btn warn" onclick="changerStatutTrait('+idx+',\'suspendu\')">⏸ Suspendre</button>'+
+              '<button class="trait-card-btn danger" onclick="supprimerTrait('+idx+')">🗑</button>';
+    } else if(t.statut==='suspendu'){
+      actions='<button class="trait-card-btn ok" onclick="changerStatutTrait('+idx+',\'actif\')">▶ Reprendre</button>'+
+              '<button class="trait-card-btn danger" onclick="supprimerTrait('+idx+')">🗑</button>';
+    } else {
+      actions='<button class="trait-card-btn danger" onclick="supprimerTrait('+idx+')">🗑</button>';
+    }
+
+    var fin=t.duree_type==='indefini'?'Indéfini (ALD)':
+            t.duree_type==='date'&&t.date_fin?'Jusqu\'au '+t.date_fin:
+            t.duree_type==='jours'&&t.duree_jours?t.duree_jours+' jours':'—';
+
+    return '<div class="trait-card '+t.statut+'">'+
+      '<div class="trait-card-top">'+
+        '<div>'+
+          '<div class="trait-card-nom">'+escHtml(t.nom)+'</div>'+
+          '<div class="trait-card-dose">'+escHtml(t.dosage)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="trait-badge-row">'+statutBadge+aldBadge+'</div>'+
+      (t.indication?'<div class="trait-card-indication"><strong>Indication</strong>'+escHtml(t.indication)+'</div>':'')+
+      '<div class="trait-card-grid">'+
+        '<div class="trait-card-field"><div class="trait-card-field-lbl">Fréquence</div><div class="trait-card-field-val">'+escHtml(t.frequence||'—')+'</div></div>'+
+        '<div class="trait-card-field"><div class="trait-card-field-lbl">Heure(s)</div><div class="trait-card-field-val">'+escHtml(t.heures||'—')+'</div></div>'+
+        '<div class="trait-card-field"><div class="trait-card-field-lbl">Début</div><div class="trait-card-field-val">'+escHtml(t.date_debut||'—')+'</div></div>'+
+        '<div class="trait-card-field"><div class="trait-card-field-lbl">Durée / Fin</div><div class="trait-card-field-val">'+escHtml(fin)+'</div></div>'+
+      '</div>'+
+      '<div class="trait-card-footer">'+
+        '<div class="trait-card-medecin">👨‍⚕️ '+escHtml(t.prescripteur||'Non renseigné')+'</div>'+
+        '<div class="trait-card-actions">'+actions+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function changerStatutTrait(idx,nouveauStatut){
+  var items=chargerTraitements();
+  if(!items[idx])return;
+  items[idx].statut=nouveauStatut;
+  items[idx].updated_at=new Date().toISOString();
+  sauvegarderTraitements(items);
+  ajouterSyncQueue(items[idx]);
+  renderTraitements(items);
+  mettreAJourBadgeTuile();
+  toast(nouveauStatut==='actif'?'▶ Traitement repris':'⏸ Traitement suspendu');
+}
+
+function supprimerTrait(idx){
+  if(!confirm('Supprimer ce traitement ?'))return;
+  var items=chargerTraitements();
+  items.splice(idx,1);
+  sauvegarderTraitements(items);
+  syncTraitementsNotion(items);
+  renderTraitements(items);
+  mettreAJourBadgeTuile();
+  toast('🗑 Traitement supprimé');
+}
+
+function mettreAJourBadgeTuile(){
+  var items=chargerTraitements();
+  var actifs=items.filter(function(t){return t.statut==='actif';}).length;
+  var badge=document.getElementById('traitTileBadge');
+  var sub=document.getElementById('traitTileSub');
+  if(badge){
+    if(actifs>0){badge.style.display='inline-block';badge.textContent=actifs+' actif'+(actifs>1?'s':'');}
+    else{badge.style.display='none';}
+  }
+  if(sub)sub.textContent=actifs?'En cours':items.length?'Historique':'Chroniques';
+}
+
+function ouvrirAjoutTraitement(traitementAuto){
+  // traitementAuto : objet pré-rempli depuis ordonnance médecin (ALD)
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;overflow-y:auto;';
+  var t=traitementAuto||{};
+  modal.innerHTML='<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;padding-bottom:calc(24px + var(--sb));max-height:92vh;overflow-y:auto;">'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">'+
+      (t.ald?'💊 Traitement ALD ajouté':'➕ Nouveau traitement chronique')+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:20px;">'+
+      (t.ald?'Issu de votre ordonnance — vérifiez et confirmez':'Médicament pris en continu ou sur longue durée')+
+    '</div>'+
+
+    // Nom + Dosage
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
+      '<div><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Médicament *</label>'+
+      '<input id="tNom" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;font-family:\'DM Sans\',sans-serif;" placeholder="Ex: Metformine" value="'+escHtml(t.nom||'')+'"/></div>'+
+      '<div><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Dosage *</label>'+
+      '<input id="tDosage" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;font-family:\'DM Sans\',sans-serif;" placeholder="Ex: 850mg" value="'+escHtml(t.dosage||'')+'"/></div>'+
+    '</div>'+
+
+    // Fréquence + Heures
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
+      '<div><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Fréquence</label>'+
+      '<select id="tFreq" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;">'+
+        '<option value="1x/jour"'+(t.frequence==='1x/jour'?' selected':'')+'>1x/jour</option>'+
+        '<option value="2x/jour"'+(t.frequence==='2x/jour'||!t.frequence?' selected':'')+'>2x/jour</option>'+
+        '<option value="3x/jour"'+(t.frequence==='3x/jour'?' selected':'')+'>3x/jour</option>'+
+        '<option value="Matin et soir"'+(t.frequence==='Matin et soir'?' selected':'')+'>Matin et soir</option>'+
+        '<option value="1 jour sur 2"'+(t.frequence==='1 jour sur 2'?' selected':'')+'>1 jour sur 2</option>'+
+        '<option value="1x/semaine"'+(t.frequence==='1x/semaine'?' selected':'')+'>1x/semaine</option>'+
+        '<option value="Autre">Autre</option>'+
+      '</select></div>'+
+      '<div><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Heure(s)</label>'+
+      '<input id="tHeures" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;font-family:\'DM Sans\',sans-serif;" placeholder="Ex: 08h00 / 20h00" value="'+escHtml(t.heures||'')+'"/></div>'+
+    '</div>'+
+
+    // Date début
+    '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Date de début</label>'+
+    '<input id="tDebut" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;" value="'+(t.date_debut||new Date().toISOString().slice(0,10))+'"/></div>'+
+
+    // Durée
+    '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Durée du traitement</label>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
+      '<div id="td_indef" onclick="setDureeType(\'indefini\')" style="flex:1;background:'+(t.duree_type==='indefini'||t.ald?'rgba(0,200,150,.1)':'var(--bg3)')+';border:1px solid '+(t.duree_type==='indefini'||t.ald?'rgba(0,200,150,.4)':'var(--border)')+';border-radius:10px;padding:9px;text-align:center;cursor:pointer;font-size:11px;font-weight:700;color:'+(t.duree_type==='indefini'||t.ald?'var(--accent)':'var(--text2)')+';">⟳ Indéfini</div>'+
+      '<div id="td_date" onclick="setDureeType(\'date\')" style="flex:1;background:'+(t.duree_type==='date'?'rgba(0,200,150,.1)':'var(--bg3)')+';border:1px solid '+(t.duree_type==='date'?'rgba(0,200,150,.4)':'var(--border)')+';border-radius:10px;padding:9px;text-align:center;cursor:pointer;font-size:11px;font-weight:700;color:'+(t.duree_type==='date'?'var(--accent)':'var(--text2)')+';">📅 Date fin</div>'+
+      '<div id="td_jours" onclick="setDureeType(\'jours\')" style="flex:1;background:'+(t.duree_type==='jours'?'rgba(0,200,150,.1)':'var(--bg3)')+';border:1px solid '+(t.duree_type==='jours'?'rgba(0,200,150,.4)':'var(--border)')+';border-radius:10px;padding:9px;text-align:center;cursor:pointer;font-size:11px;font-weight:700;color:'+(t.duree_type==='jours'?'var(--accent)':'var(--text2)')+';">🔢 Jours</div>'+
+    '</div>'+
+    '<input id="tDateFin" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;display:'+(t.duree_type==='date'?'block':'none')+'" value="'+(t.date_fin||'')+'"/>'+
+    '<input id="tJours" type="number" min="1" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;display:'+(t.duree_type==='jours'?'block':'none')+'" placeholder="Ex: 30" value="'+(t.duree_jours||'')+'"/>'+
+    '</div>'+
+
+    // Indication
+    '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Indication (pourquoi ce médicament)</label>'+
+    '<input id="tIndication" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;font-family:\'DM Sans\',sans-serif;" placeholder="Ex: Diabète type 2, HTA, Epilepsie..." value="'+escHtml(t.indication||'')+'"/></div>'+
+
+    // Prescripteur
+    '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:5px;">Prescripteur</label>'+
+    '<input id="tPrescripteur" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--text);outline:none;font-family:\'DM Sans\',sans-serif;" placeholder="Dr. Nom Prénom" value="'+escHtml(t.prescripteur||'')+'"/></div>'+
+
+    // ALD toggle
+    '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+      '<div>'+
+        '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">🔵 Affection Longue Durée (ALD)</div>'+
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px;">Traitement chronique prescrit par médecin</div>'+
+      '</div>'+
+      '<div id="tAldToggle" onclick="toggleALD()" class="theme-toggle'+(t.ald||traitementAuto?' on':'')+'" style="flex-shrink:0;"></div>'+
+    '</div>'+
+
+    '<div id="tErr" style="color:var(--danger);font-size:12px;margin-bottom:12px;display:none;">Médicament et dosage requis</div>'+
+    '<div style="display:flex;gap:10px;">'+
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+      '<button id="tSaveBtn" style="flex:1;background:var(--grad);border:none;border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">💾 Enregistrer</button>'+
+    '</div>'+
+  '</div>';
+  document.body.appendChild(modal);
+
+  // État local ALD dans le modal
+  modal._ald = !!(t.ald||traitementAuto);
+  modal._dureeType = t.duree_type||(modal._ald?'indefini':'jours');
+  setDureeType(modal._dureeType);
+
+  window.toggleALD=function(){
+    modal._ald=!modal._ald;
+    var tog=document.getElementById('tAldToggle');
+    if(tog)tog.classList.toggle('on',modal._ald);
+    if(modal._ald){setDureeType('indefini');modal._dureeType='indefini';}
+  };
+  window.setDureeType=function(type){
+    modal._dureeType=type;
+    ['indef','date','jours'].forEach(function(k){
+      var el=document.getElementById('td_'+k);
+      if(!el)return;
+      var on=(k===type)||(type==='indefini'&&k==='indef');
+      el.style.background=on?'rgba(0,200,150,.1)':'var(--bg3)';
+      el.style.borderColor=on?'rgba(0,200,150,.4)':'var(--border)';
+      el.style.color=on?'var(--accent)':'var(--text2)';
+    });
+    document.getElementById('tDateFin').style.display=type==='date'?'block':'none';
+    document.getElementById('tJours').style.display=type==='jours'?'block':'none';
+  };
+
+  document.getElementById('tSaveBtn').onclick=function(){
+    var nom=(document.getElementById('tNom').value||'').trim();
+    var dosage=(document.getElementById('tDosage').value||'').trim();
+    if(!nom||!dosage){document.getElementById('tErr').style.display='block';return;}
+    var nouveau={
+      id:'trait_'+Date.now(),
+      nom:nom,
+      dosage:dosage,
+      frequence:document.getElementById('tFreq').value||'2x/jour',
+      heures:(document.getElementById('tHeures').value||'').trim(),
+      date_debut:document.getElementById('tDebut').value||new Date().toISOString().slice(0,10),
+      duree_type:modal._dureeType||'indefini',
+      date_fin:(document.getElementById('tDateFin').value||'').trim(),
+      duree_jours:(document.getElementById('tJours').value||'').trim(),
+      indication:(document.getElementById('tIndication').value||'').trim(),
+      prescripteur:(document.getElementById('tPrescripteur').value||'').trim(),
+      ald:modal._ald,
+      statut:'actif',
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
+    };
+    var items=chargerTraitements();
+    items.unshift(nouveau);
+    sauvegarderTraitements(items);
+    ajouterSyncQueue(nouveau);
+    modal.remove();
+    if(navigator.onLine){syncTraitementsNotion(items);}
+    renderTraitements(items);
+    mettreAJourBadgeTuile();
+    toast('✅ Traitement enregistré'+(modal._ald?' — ALD':''));
+  };
+}
+
+// ── Sync Notion ──
+function ajouterSyncQueue(trait){
+  var q=getTraitSyncQueue();
+  // Dépublication des doublons par id
+  q=q.filter(function(x){return x.id!==trait.id;});
+  q.push({trait:trait,patientId:PROFILS[SEL]&&PROFILS[SEL].patientId,notionPageId:PROFILS[SEL]&&PROFILS[SEL].notionPageId,ts:Date.now()});
+  saveTraitSyncQueue(q);
+}
+
+async function syncTraitementsNotion(items){
+  // Met à jour le champ "Traitements réguliers" dans Notion avec la liste des actifs
+  if(SEL<0||!PROFILS[SEL]||!PROFILS[SEL].notionPageId)return;
+  var actifs=items.filter(function(t){return t.statut==='actif';});
+  var txt=actifs.map(function(t){
+    return t.nom+' '+t.dosage+' — '+t.frequence+(t.ald?' [ALD]':'')+(t.indication?' ('+t.indication+')':'')+(t.prescripteur?' — '+t.prescripteur:'');
+  }).join('\n');
+  try{
+    await notionPatientRequest('/pages/'+PROFILS[SEL].notionPageId,'PATCH',{
+      properties:{'Traitements réguliers':{rich_text:[{type:'text',text:{content:txt.slice(0,2000)}}]}}
+    });
+    dbg('Notion traitements sync OK');
+    // Vider queue pour ce patient
+    var q=getTraitSyncQueue().filter(function(x){return x.notionPageId!==PROFILS[SEL].notionPageId;});
+    saveTraitSyncQueue(q);
+    // Masquer sync bar
+    var sb=document.getElementById('traitSyncBar');if(sb)sb.style.display='none';
+    // MAJ profil local
+    PROFILS[SEL].traitements=txt;
+    saveProfils();
+  }catch(e){
+    dbg('Notion traitements sync ERR: '+e.message);
+  }
+}
+
+async function processSyncQueueTraits(){
+  var q=getTraitSyncQueue();
+  if(!q.length)return;
+  // Regroupe par patient
+  var byPatient={};
+  q.forEach(function(item){if(item.notionPageId)byPatient[item.notionPageId]=item;});
+  for(var pid in byPatient){
+    var item=byPatient[pid];
+    // Charger tous les traitements de ce patient (via localStorage key)
+    var key='traits_'+(item.patientId||'');
+    var items=[];
+    try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
+    if(items.length){
+      var actifs=items.filter(function(t){return t.statut==='actif';});
+      var txt=actifs.map(function(t){
+        return t.nom+' '+t.dosage+' — '+t.frequence+(t.ald?' [ALD]':'')+(t.indication?' ('+t.indication+')':'')+(t.prescripteur?' — '+t.prescripteur:'');
+      }).join('\n');
+      try{
+        await notionPatientRequest('/pages/'+pid,'PATCH',{
+          properties:{'Traitements réguliers':{rich_text:[{type:'text',text:{content:txt.slice(0,2000)}}]}}
+        });
+        dbg('Queue sync OK pid='+pid);
+      }catch(e){dbg('Queue sync ERR: '+e.message);}
+    }
+  }
+  saveTraitSyncQueue([]);
+  var sb=document.getElementById('traitSyncBar');if(sb)sb.style.display='none';
+}
+
+// Écouter retour connexion
+window.addEventListener('online',function(){
+  if(document.getElementById('traitementsScreen').classList.contains('on')){
+    processSyncQueueTraits();
+  }
+});
+
+// Injection traitements actifs dans contexte IA
+function getTraitsContextIA(){
+  if(SEL<0||!PROFILS[SEL])return '';
+  var items=chargerTraitements();
+  var actifs=items.filter(function(t){return t.statut==='actif';});
+  if(!actifs.length)return '';
+  return '[TRAITEMENTS EN COURS: '+actifs.map(function(t){
+    return t.nom+' '+t.dosage+' '+t.frequence+(t.ald?' (ALD)':'')+(t.indication?' pour '+t.indication:'');
+  }).join(' | ')+']';
+}
+
+// Ajouter un traitement depuis une ordonnance médecin (ALD toggle activé)
+function ajouterTraitementDepuisOrdonnance(medoc,prescripteur){
+  // medoc : string "Metformine 850mg — 2x/jour"
+  var parts=medoc.split('—');
+  var nomDose=(parts[0]||'').trim().split(' ');
+  var nom=nomDose.slice(0,-1).join(' ')||medoc;
+  var dosage=nomDose.slice(-1)[0]||'';
+  var freq=(parts[1]||'').trim();
+  ouvrirAjoutTraitement({nom:nom,dosage:dosage,frequence:freq,prescripteur:prescripteur,ald:true,duree_type:'indefini',statut:'actif'});
 }
 
 // ══════════════════════════════
