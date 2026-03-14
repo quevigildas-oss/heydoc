@@ -1941,10 +1941,23 @@ async function envoyerDossier(email,nomMed){
         var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
         resume=JSON.parse(clean);
         dbg('RESUME keys='+Object.keys(resume).join(','));
+        // ── Contrôle qualité du résumé ──
+        var champsOMS=['recommandations','medicaments_oms','contre_indications'];
+        var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
+        if(omsMissingCount===3){
+          dbgError('Relevance AI — Tous les champs OMS sont vides (recommandations, médicaments OMS, contre-indications). Claude validera SANS base de référence OMS.');
+        } else if(omsMissingCount>0){
+          dbgWarn('Relevance AI — '+omsMissingCount+' champ(s) OMS incomplet(s). Claude peut improviser partiellement.');
+        } else {
+          dbg('Relevance AI — Champs OMS complets ✅ Claude dispose d\'une base de référence.');
+        }
+        if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
+          dbgWarn('Relevance AI — Diagnostic IA absent ou très court. Claude validera sans contexte diagnostic.');
+        }
       }
     }
   }catch(e){
-    dbg('Résumé fallback: '+e.message);
+    dbgError('Relevance AI — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES. Claude improvisera pour la validation.');
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
       ville:String(p.ville||'Non renseignee'),voyage:'Aucun',
@@ -3003,16 +3016,22 @@ function reprendreSession(i){
 
 function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-function dbg(msg){
+function dbg(msg){_dbgLog(msg,'#00ff88');}
+function dbgWarn(msg){_dbgLog('⚠️ '+msg,'#f59e0b');}
+function dbgError(msg){_dbgLog('🔴 ALERTE — '+msg,'#ef4444');}
+function _dbgLog(msg,color){
   var panel=document.getElementById('debugPanel');
   var log=document.getElementById('debugLog');
-  if(!panel||!log)return;
-  panel.style.display='flex';
-  panel.style.flexDirection='column';
+  if(!panel||!log){console.log(msg);return;}
+  panel.style.display='block';
+  if(color==='#ef4444')panel.style.borderTop='2px solid #ef4444';
   var line=document.createElement('div');
+  line.style.color=color||'#00ff88';
+  line.style.marginBottom='2px';
   line.textContent=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' '+msg;
   log.appendChild(line);
   log.scrollTop=log.scrollHeight;
+  console.log('%c'+msg,'color:'+color);
 }
 
 
