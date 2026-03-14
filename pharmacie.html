@@ -19,17 +19,18 @@ body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:10
 .info-lbl{font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;}
 .info-val{font-size:13px;font-weight:700;}
 .info-sub{font-size:11px;color:#6B7280;margin-top:2px;}
-.med-row{border-bottom:1px solid #e5e7eb;padding:12px 0;}
+.med-row{border-bottom:1px solid #e5e7eb;padding:14px 0;}
 .med-row:last-child{border-bottom:none;}
 .med-name{font-size:14px;font-weight:700;color:#1A2B3C;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
 .med-num{width:24px;height:24px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;}
-.med-fields{display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center;}
-.check-label{display:flex;align-items:center;gap:6px;font-size:12px;color:#374151;cursor:pointer;white-space:nowrap;}
-.check-label input[type=checkbox]{width:18px;height:18px;accent-color:#0A7E6A;cursor:pointer;}
+.check-total{display:flex;align-items:center;gap:8px;background:#f0fdf4;border:1.5px solid #0A7E6A;border-radius:8px;padding:8px 12px;cursor:pointer;margin-bottom:10px;font-size:13px;font-weight:700;color:#0A7E6A;}
+.check-total input[type=checkbox]{width:18px;height:18px;accent-color:#0A7E6A;cursor:pointer;}
+.med-fields-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;align-items:end;}
 .field-group{display:flex;flex-direction:column;gap:3px;}
 .field-lbl{font-size:9px;font-weight:700;color:#6B7280;text-transform:uppercase;}
 .field-input{border:1px solid #D1D5DB;border-radius:6px;padding:7px 10px;font-size:13px;width:100%;outline:none;}
 .field-input:focus{border-color:#0A7E6A;}
+.field-input.total-auto{background:#f0fdf4;border-color:#86efac;color:#0A7E6A;font-weight:700;}
 .field-input:disabled{background:#f9fafb;color:#9CA3AF;}
 .btn-submit{width:100%;padding:16px;background:#0A7E6A;border:none;border-radius:12px;font-family:Arial,sans-serif;font-size:15px;font-weight:700;color:#fff;cursor:pointer;margin-top:8px;}
 .btn-submit:active{background:#085f50;}
@@ -135,36 +136,53 @@ async function init(){
   }
 }
 
+// Quantités recommandées par défaut (1 boîte, 0 comprimé)
+// → sera remplacé par calcul Claude ultérieurement
+function getQteRecommandee(med){
+  return {boites:1, comprimes:0};
+}
+
 function renderForm(d){
   var medsHtml=d.meds.map(function(m,i){
-    return '<div class="med-row">'+
-      '<div class="med-name"><div class="med-num">'+(i+1)+'</div>'+m+'</div>'+
-      '<div class="med-fields">'+
-        '<label class="check-label"><input type="checkbox" id="dispo_'+i+'" onchange="toggleDispo('+i+')"> Disponible</label>'+
+    return '<div class="med-row" id="med_row_'+i+'">'+
+      '<div class="med-name"><div class="med-num">'+(i+1)+'</div>'+escHtml(m)+'</div>'+
+      // Check "Totalité disponible"
+      '<label class="check-total">'+
+        '<input type="checkbox" id="total_'+i+'" onchange="toggleTotal('+i+')">'+
+        '✅ Totalité disponible — remplir automatiquement'+
+      '</label>'+
+      // Grille 4 colonnes : Boîtes | Comprimés | Prix/boîte | Total
+      '<div class="med-fields-grid">'+
         '<div class="field-group">'+
-          '<div class="field-lbl">Quantité</div>'+
-          '<input class="field-input" type="number" id="qty_'+i+'" min="0" placeholder="0" disabled>'+
+          '<div class="field-lbl">📦 Boîtes</div>'+
+          '<input class="field-input" type="number" id="boites_'+i+'" min="0" placeholder="0" oninput="calcTotal('+i+')">'+
         '</div>'+
         '<div class="field-group">'+
-          '<div class="field-lbl">Prix (FCFA)</div>'+
-          '<input class="field-input" type="number" id="prix_'+i+'" min="0" placeholder="0" disabled>'+
+          '<div class="field-lbl">💊 Comprimés (partiel)</div>'+
+          '<input class="field-input" type="number" id="comprimes_'+i+'" min="0" placeholder="0">'+
+        '</div>'+
+        '<div class="field-group">'+
+          '<div class="field-lbl">💰 Prix / boîte (FCFA)</div>'+
+          '<input class="field-input" type="number" id="prix_'+i+'" min="0" placeholder="0" oninput="calcTotal('+i+')">'+
+        '</div>'+
+        '<div class="field-group">'+
+          '<div class="field-lbl">🟰 Total (FCFA)</div>'+
+          '<input class="field-input total-auto" type="text" id="total_fcfa_'+i+'" placeholder="—" readonly>'+
         '</div>'+
       '</div>'+
     '</div>';
   }).join('');
 
   document.getElementById('mainContent').innerHTML=
-    // En-tête ordonnance
     '<div class="card">'+
       '<div class="card-hdr">📋 ORDONNANCE — Appel d\'offre #'+d.aoId+'</div>'+
       '<div class="card-body">'+
         '<div class="info-grid">'+
-          '<div class="info-box"><div class="info-lbl">CONSULTATION</div><div class="info-val">'+d.consultId+'</div></div>'+
-          '<div class="info-box"><div class="info-lbl">PATIENT</div><div class="info-val">'+d.patientId+'</div></div>'+
+          '<div class="info-box"><div class="info-lbl">CONSULTATION</div><div class="info-val">'+escHtml(d.consultId)+'</div></div>'+
+          '<div class="info-box"><div class="info-lbl">PATIENT</div><div class="info-val">'+escHtml(d.patientId)+'</div></div>'+
         '</div>'+
       '</div>'+
     '</div>'+
-    // Infos pharmacie
     '<div class="card">'+
       '<div class="card-hdr">🏪 VOS INFORMATIONS</div>'+
       '<div class="card-body">'+
@@ -172,7 +190,6 @@ function renderForm(d){
         '<div class="pharm-field"><label>Téléphone</label><input id="pharmTel" type="tel" placeholder="+225 07 00 00 00 00" value="'+escHtml(d.pharmTel)+'"></div>'+
       '</div>'+
     '</div>'+
-    // Médicaments
     '<div class="card">'+
       '<div class="card-hdr">💊 MÉDICAMENTS PRESCRITS</div>'+
       '<div class="card-body">'+medsHtml+'</div>'+
@@ -183,13 +200,30 @@ function renderForm(d){
 
 function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-function toggleDispo(i){
-  var checked=document.getElementById('dispo_'+i).checked;
-  document.getElementById('qty_'+i).disabled=!checked;
-  document.getElementById('prix_'+i).disabled=!checked;
-  if(!checked){
-    document.getElementById('qty_'+i).value='';
-    document.getElementById('prix_'+i).value='';
+function toggleTotal(i){
+  var checked=document.getElementById('total_'+i).checked;
+  if(checked){
+    // Remplir avec quantités recommandées
+    var qte=getQteRecommandee(aoData.meds[i]);
+    document.getElementById('boites_'+i).value=qte.boites;
+    document.getElementById('comprimes_'+i).value=qte.comprimes||0;
+    calcTotal(i);
+  } else {
+    document.getElementById('boites_'+i).value='';
+    document.getElementById('comprimes_'+i).value='';
+    document.getElementById('total_fcfa_'+i).value='';
+  }
+}
+
+function calcTotal(i){
+  var boites=parseInt(document.getElementById('boites_'+i).value||'0')||0;
+  var prix=parseInt(document.getElementById('prix_'+i).value||'0')||0;
+  var total=boites*prix;
+  var el=document.getElementById('total_fcfa_'+i);
+  if(total>0){
+    el.value=total.toLocaleString('fr-FR')+' FCFA';
+  } else {
+    el.value='';
   }
 }
 
@@ -199,14 +233,24 @@ async function soumettre(){
   var tel=document.getElementById('pharmTel').value.trim();
   if(!nom||!tel){toast('⚠️ Remplissez le nom et téléphone');return;}
 
+  // Vérifier qu'au moins un médicament a une réponse
+  var auMoinsUn=aoData.meds.some(function(m,i){
+    return parseInt(document.getElementById('boites_'+i).value||'0')>0;
+  });
+  if(!auMoinsUn){toast('⚠️ Renseignez la disponibilité d\'au moins un médicament');return;}
+
   // Collecter les réponses
   var offre=aoData.meds.map(function(m,i){
-    var dispo=document.getElementById('dispo_'+i).checked;
+    var boites=parseInt(document.getElementById('boites_'+i).value||'0')||0;
+    var comprimes=parseInt(document.getElementById('comprimes_'+i).value||'0')||0;
+    var prix=parseInt(document.getElementById('prix_'+i).value||'0')||0;
     return {
       medicament:m,
-      disponible:dispo,
-      quantite:dispo?parseInt(document.getElementById('qty_'+i).value||'0'):0,
-      prix:dispo?parseInt(document.getElementById('prix_'+i).value||'0'):0
+      disponible:boites>0,
+      boites:boites,
+      comprimes:comprimes,
+      prixUnitaire:prix,
+      total:boites*prix
     };
   });
 
@@ -214,13 +258,12 @@ async function soumettre(){
   btn.disabled=true;btn.textContent='⏳ Envoi en cours...';
 
   try{
-    // Mettre à jour la page Notion
     var now=new Date().toISOString();
     await notionReq('/pages/'+aoData.notionPageId,'PATCH',{
       properties:{
         'Pharmacie Nom':{rich_text:[{text:{content:nom}}]},
         'Pharmacie Tel':{rich_text:[{text:{content:tel}}]},
-        'Offre JSON':{rich_text:[{text:{content:JSON.stringify(offre)}}]},
+        'Offre JSON':{rich_text:[{text:{content:JSON.stringify(offre).slice(0,2000)}}]},
         'Statut':{select:{name:'repondu'}},
         'Date reponse':{date:{start:now}}
       }
