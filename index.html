@@ -479,7 +479,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ AJOUT PROFIL ══ -->
 <div class="screen" id="addProfilScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">✏️</div><div style="flex:1"><div class="hdr-title" id="addTitle">Nouveau profil</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">✏️</div><div style="flex:1"><div class="hdr-title" id="addTitle">Nouveau profil</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="form-body">
     <div class="two-col">
       <div class="field"><label class="flabel">Prénom *</label><input class="finput" id="fPrenom" placeholder="Prénom" autocomplete="off"/></div>
@@ -510,7 +510,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ ÉPHÉMÈRE ══ -->
 <div class="screen" id="ephemereScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">⚡</div><div style="flex:1"><div class="hdr-title">Consultation éphémère</div><div class="hdr-sub">Sans enregistrement</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">⚡</div><div style="flex:1"><div class="hdr-title">Consultation éphémère</div><div class="hdr-sub">Sans enregistrement</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="form-body">
     <div class="form-intro" style="padding-top:0">
       <div class="form-desc">Infos de base pour que l'IA vous aide. Ces données ne sont pas sauvegardées.</div>
@@ -530,7 +530,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ CHAT ══ -->
 <div class="screen" id="chatScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav(PREV_SCREEN||'espaceProfilScreen');PREV_SCREEN='profilsScreen';">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav(PREV_SCREEN||'espaceProfilScreen');PREV_SCREEN='profilsScreen';">←</div><div class="hdr-ico">🤖</div><div style="flex:1"><div class="hdr-title">Dokita IA</div><div class="hdr-sub" id="chatSub">Assistant médical</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="chat-profil" id="chatPBar" style="display:none;">
     <div class="cp-av" id="chatPAv"></div>
     <div><div class="cp-nom" id="chatPNom"></div><div class="cp-info" id="chatPInfo"></div></div>
@@ -565,7 +565,6 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('profilsScreen')">←</div>
     <div class="hdr-ico" id="epIco"></div>
     <div style="flex:1"><div class="hdr-title" id="epNom"></div><div class="hdr-sub" id="epInfo"></div></div>
-    <div onclick="ouvrirTransfert()" title="Transférer ce profil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;">👥</div>
     <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;">🏠</div>
   </div>
   <div class="profil-home">
@@ -634,6 +633,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
     <div class="hdr-ico" id="ddIco"></div>
     <div style="flex:1"><div class="hdr-title" id="ddTitle"></div><div class="hdr-sub" id="ddSub"></div></div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="detail-body">
     <div class="add-item-btn" onclick="ajouterEntree()" id="ddAddBtn">＋ Ajouter une entrée</div>
@@ -648,6 +648,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Historique</div><div class="hdr-sub">Consultations précédentes</div></div>
     <div onclick="actualiserStatutConsultations()" style="background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:10px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;">↻ Actualiser</div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="histo-list" id="histoList"></div>
 </div>
@@ -659,6 +660,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
     <div class="hdr-ico">💊</div>
     <div style="flex:1"><div class="hdr-title">Ordonnances</div><div class="hdr-sub">Prescriptions de votre médecin</div></div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="sbody" id="ordonnancesList">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
@@ -671,6 +673,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('historiqueScreen');renderHistorique().catch(function(){})">←</div>
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Consultation</div><div class="hdr-sub" id="consultDetailDate"></div></div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="sbody" id="consultDetailBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
@@ -683,6 +686,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('historiqueScreen');renderHistorique().catch(function(){})">←</div>
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Ordonnance</div><div class="hdr-sub" id="ordDetailSub">Prescription médicale</div></div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="sbody" id="ordDetailBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
@@ -691,7 +695,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ CLINIQUE / HÔPITAL ══ -->
 <div class="screen" id="cliniqueScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">🏥</div><div style="flex:1"><div class="hdr-title">Cliniques & Hôpitaux</div><div class="hdr-sub" id="cliniqueSubtitle">Recherche en cours...</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">🏥</div><div style="flex:1"><div class="hdr-title">Cliniques & Hôpitaux</div><div class="hdr-sub" id="cliniqueSubtitle">Recherche en cours...</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="sbody">
     <input class="geo-search" id="cliniqueSearch" placeholder="Rechercher un établissement..." oninput="filterGeo('clinique',this.value)"/>
     <div id="cliniqueList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
@@ -700,7 +704,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ LABORATOIRE ══ -->
 <div class="screen" id="laboScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">🔬</div><div style="flex:1"><div class="hdr-title">Laboratoires</div><div class="hdr-sub" id="laboSubtitle">Recherche en cours...</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">🔬</div><div style="flex:1"><div class="hdr-title">Laboratoires</div><div class="hdr-sub" id="laboSubtitle">Recherche en cours...</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="sbody">
     <input class="geo-search" id="laboSearch" placeholder="Rechercher un laboratoire..." oninput="filterGeo('labo',this.value)"/>
     <div id="laboList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
@@ -716,7 +720,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ PHARMACIE ══ -->
 <div class="screen" id="pharmacieScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">💊</div><div style="flex:1"><div class="hdr-title">Pharmacies</div><div class="hdr-sub" id="pharmacieSubtitle">Recherche en cours...</div></div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">💊</div><div style="flex:1"><div class="hdr-title">Pharmacies</div><div class="hdr-sub" id="pharmacieSubtitle">Recherche en cours...</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="sbody">
     <input class="geo-search" id="pharmacieSearch" placeholder="Rechercher une pharmacie..." oninput="filterGeo('pharmacie',this.value)"/>
     <div id="pharmacieList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
@@ -762,11 +766,17 @@ select.finput option{background:var(--bg3);}
 <!-- ══ TRANSFERT PROFIL — GÉNÉRATION CODE ══ -->
 <div class="screen" id="transfertScreen">
   <div class="hdr">
-    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-back" id="transfertBack" onclick="nav('parametresScreen')">←</div>
     <div class="hdr-ico" style="background:rgba(245,166,35,.15);">🔗</div>
-    <div style="flex:1"><div class="hdr-title">Transférer ce profil</div><div class="hdr-sub" id="transfertSub"></div></div>
+    <div style="flex:1"><div class="hdr-title">Transférer un profil</div><div class="hdr-sub" id="transfertSub"></div></div>
   </div>
   <div class="sbody">
+
+    <!-- Étape 1 : sélection du profil à transférer -->
+    <div id="transfertProfilSelect" style="display:none;margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">Quel profil voulez-vous transférer ?</div>
+      <div id="transfertProfilList"></div>
+    </div>
 
     <!-- Info -->
     <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:14px;padding:16px;margin-bottom:16px;display:flex;gap:10px;">
@@ -907,6 +917,17 @@ select.finput option{background:var(--bg3);}
       <div style="padding:16px;cursor:pointer;" onclick="clearAllData()">
         <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--danger);">🗑 Effacer toutes les données</div>
         <div style="font-size:11px;color:var(--text2);margin-top:2px;">Profils, historique, dossiers médicaux</div>
+      </div>
+    </div>
+
+    <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">Profils famille</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="ouvrirTransfertDepuisParams()">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">👥 Transférer un profil</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Générer un code · Indépendance · Nouveau téléphone</div>
+        </div>
+        <div style="font-size:20px;color:var(--text3);">›</div>
       </div>
     </div>
 
@@ -2512,20 +2533,69 @@ function ajouterTraitementDepuisOrdonnance(medoc,prescripteur){
 var TRANSFERT_DESTINATAIRE='';
 var TRANSFERT_CODE_COURANT=null; // {code, patientId, notionPageId, expire}
 
-function ouvrirTransfert(){
-  var p=PROFILS[SEL];
-  if(!p){toast('Sélectionnez un profil d\'abord');return;}
-  var sub=document.getElementById('transfertSub');
-  if(sub)sub.textContent=p.prenom+' '+p.nom;
+function ouvrirTransfertDepuisParams(){
+  // Étape 1 : afficher la liste des profils pour choisir lequel transférer
+  var selectBox=document.getElementById('transfertProfilSelect');
+  var listEl=document.getElementById('transfertProfilList');
+  var genBox=document.getElementById('transfertGenBox');
+  var codeBox=document.getElementById('transfertCodeBox');
+
+  // Reset état
   TRANSFERT_DESTINATAIRE='';
   TRANSFERT_CODE_COURANT=null;
-  // Reset UI
+  if(genBox)genBox.style.display='none';
+  if(codeBox)codeBox.style.display='none';
+  if(selectBox)selectBox.style.display='block';
+  document.getElementById('transfertSub').textContent='Sélectionnez un profil';
+
+  // Construire la liste des profils
+  var colors=['#2E86C1','#00875A','#8E44AD','#E67E22','#E74C3C','#16A085','#2C3E50','#D35400'];
+  if(listEl){
+    listEl.innerHTML=PROFILS.map(function(p,i){
+      var a=calcAge(p.naiss);
+      return '<div onclick="selectionnerProfilTransfert('+i+')" style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
+        '<div style="width:40px;height:40px;border-radius:12px;background:'+colors[i%8]+';display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:#fff;flex-shrink:0;">'+p.prenom.charAt(0).toUpperCase()+'</div>'+
+        '<div style="flex:1">'+
+          '<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+escHtml(p.prenom+' '+p.nom)+'</div>'+
+          '<div style="font-size:11px;color:var(--text2);">'+(a!==null?a+' ans':'')+(p.lien&&p.lien!=='moi'?' · '+(LIENS[p.lien]||p.lien):'')+'</div>'+
+        '</div>'+
+        '<div style="font-size:18px;color:var(--text3);">›</div>'+
+      '</div>';
+    }).join('');
+  }
+  nav('transfertScreen');
+}
+
+function selectionnerProfilTransfert(idx){
+  // Profil sélectionné → afficher le formulaire de transfert
+  SEL=idx;
+  var p=PROFILS[idx];
+  document.getElementById('transfertSub').textContent=p.prenom+' '+p.nom;
+  document.getElementById('transfertProfilSelect').style.display='none';
+  TRANSFERT_DESTINATAIRE='';
+  TRANSFERT_CODE_COURANT=null;
+  ['enfant','parent','conjoint','autre'].forEach(function(k){
+    var btn=document.getElementById('trBtn_'+k);
+    if(btn){btn.style.borderColor='var(--border)';btn.style.background='var(--bg3)';}
+  });
+  document.getElementById('transfertErr').style.display='none';
+  document.getElementById('transfertGenBox').style.display='block';
+  document.getElementById('transfertCodeBox').style.display='none';
+}
+
+function ouvrirTransfert(){
+  // Appelé depuis l'icône 👥 dans espaceProfilScreen — profil déjà sélectionné (SEL)
+  var p=PROFILS[SEL];
+  if(!p){toast('Sélectionnez un profil d\'abord');return;}
+  document.getElementById('transfertSub').textContent=p.prenom+' '+p.nom;
+  document.getElementById('transfertProfilSelect').style.display='none';
+  TRANSFERT_DESTINATAIRE='';
+  TRANSFERT_CODE_COURANT=null;
   var genBox=document.getElementById('transfertGenBox');
   var codeBox=document.getElementById('transfertCodeBox');
   if(genBox)genBox.style.display='block';
   if(codeBox)codeBox.style.display='none';
   document.getElementById('transfertErr').style.display='none';
-  // Reset boutons destinataire
   ['enfant','parent','conjoint','autre'].forEach(function(k){
     var btn=document.getElementById('trBtn_'+k);
     if(btn){btn.style.borderColor='var(--border)';btn.style.background='var(--bg3)';}
