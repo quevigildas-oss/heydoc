@@ -464,7 +464,12 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ PROFILS ══ -->
 <div class="screen" id="profilsScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">👤</div><div style="flex:1"><div class="hdr-title">Mes profils</div><div class="hdr-sub">Sélectionnez pour consulter</div></div></div>
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('accueilScreen')">←</div>
+    <div class="hdr-ico">👤</div>
+    <div style="flex:1"><div class="hdr-title">Mes profils</div><div class="hdr-sub">Sélectionnez pour consulter</div></div>
+    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;" title="Accueil">🏠</div>
+  </div>
   <div class="profil-list" id="profilList"></div>
   <div class="consult-footer">
     <button class="btn-eph" onclick="nav('ephemereScreen')">⚡ Éphémère</button>
@@ -560,6 +565,8 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-back" onclick="nav('profilsScreen')">←</div>
     <div class="hdr-ico" id="epIco"></div>
     <div style="flex:1"><div class="hdr-title" id="epNom"></div><div class="hdr-sub" id="epInfo"></div></div>
+    <div onclick="ouvrirTransfert()" title="Transférer ce profil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;">👥</div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;">🏠</div>
   </div>
   <div class="profil-home">
     <div class="profil-banner">
@@ -579,11 +586,6 @@ select.finput option{background:var(--bg3);}
       <div class="menu-card" onclick="nav('historiqueScreen');renderHistorique().catch(function(e){dbg(e.message);})">
         <div class="menu-ico" style="background:rgba(74,158,255,.12);">📋</div>
         <div><div class="menu-title">Historique des consultations</div><div class="menu-sub">Archive · Rouvrir · Ordonnance</div></div>
-        <div class="menu-arr">›</div>
-      </div>
-      <div class="menu-card" onclick="ouvrirTransfert()" style="border-color:rgba(245,166,35,.2);">
-        <div class="menu-ico" style="background:rgba(245,166,35,.1);">🔗</div>
-        <div><div class="menu-title">Transférer ce profil</div><div class="menu-sub">Générer un code · Nouveau téléphone · Indépendance</div></div>
         <div class="menu-arr">›</div>
       </div>
     </div>
