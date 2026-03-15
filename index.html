@@ -1344,7 +1344,7 @@ async function rechargerSessionNotion(){
           traitements:t2('Traitements réguliers'),
           patientId:t2('ID Patient'),notionPageId:mp.id,
           lien:lienKey,compteParent:SESSION_EMAIL,
-          transfere:codeT==='TRANSFERE'
+          transfere:false // membre famille → toujours accessible chez le destinataire
         };
       });
     }
