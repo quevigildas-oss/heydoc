@@ -3686,7 +3686,24 @@ async function ouvrirOffres(){
         return '';}
       var offreJson=txt('Offre JSON');
       var offreItems=[];
-      try{if(offreJson)offreItems=JSON.parse(offreJson);}catch(e){}
+      try{
+        if(offreJson){
+          var parsed=JSON.parse(offreJson);
+          // Normaliser les deux formats :
+          // Nouveau : {medicament, disponible, boites, prixUnitaire, total}
+          // Ancien  : {medicament, disponible, quantite, prix}
+          offreItems=parsed.map(function(item){
+            var total=item.total||(item.boites&&item.prixUnitaire?item.boites*item.prixUnitaire:0)||(item.quantite&&item.prix?item.quantite*item.prix:0)||0;
+            return {
+              medicament:item.medicament||'',
+              disponible:item.disponible||false,
+              boites:item.boites||item.quantite||0,
+              prixUnitaire:item.prixUnitaire||item.prix||0,
+              total:total
+            };
+          });
+        }
+      }catch(e){}
       var pharmNom=txt('Pharmacie Nom');
       // Trouver coordonnées GPS de cette pharmacie
       var pharmaInfo=PHARMACIES.find(function(ph){return ph.nom===pharmNom;})||null;
@@ -3708,6 +3725,16 @@ async function ouvrirOffres(){
     var offresRepondues=offres.filter(function(o){
       return o.statut==='repondu'||o.statut==='selectionne';
     });
+
+    // Dédupliquer par pharmacie — garder la plus récente si même pharmacie répond plusieurs fois
+    var pharmVus={};
+    offresRepondues=offresRepondues.filter(function(o){
+      if(pharmVus[o.pharmNom])return false;
+      pharmVus[o.pharmNom]=true;
+      return true;
+    });
+
+    dbg('Offres repondues apres dedup: '+offresRepondues.length+' — '+offresRepondues.map(function(o){return o.pharmNom+'('+o.items.length+'items)';}).join(', '));
 
     if(!offresRepondues.length){
       // Offres envoyées mais pas encore de réponses
@@ -3734,6 +3761,7 @@ async function ouvrirOffres(){
       o.coutTrajet=coutTrajet;
       o.prixTotal=prixMeds+coutTrajet;
       o.dist=Math.round(dist/2*10)/10; // distance one-way
+      dbg('Score '+o.pharmNom+': complete='+o.complete+' dispo='+disponibles+'/'+totalMeds+' prix='+prixMeds+' FCFA');
     });
 
     // ── Algo Offre Globale ──
@@ -3745,6 +3773,7 @@ async function ouvrirOffres(){
     // ── Algo 2 stops ──
     // Trouver la meilleure combinaison de 2 pharmacies qui couvre tous les médicaments
     var meilleur2stops=trouver2Stops(offresRepondues,patLat,patLon);
+    dbg('2stops: '+(meilleur2stops?meilleur2stops.a.pharmNom+' + '+meilleur2stops.b.pharmNom+' total='+meilleur2stops.total:'null'));
 
     renderOffres(meilleureComplete,meilleur2stops,offresRepondues);
     // Stocker pour accès depuis le bouton
@@ -3839,7 +3868,7 @@ function renderOffres(complete,stops2,toutes){
   }
 
   // ── Meilleure offre 2 stops ──
-  if(stops2&&(!complete||stops2.total<complete.prixTotal)){
+  if(stops2){
     // Listes médicaments par stop
     var medsAHtml=stops2.medsA.map(function(x){
       return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.med)+(x.item.total?' — <strong>'+x.item.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
