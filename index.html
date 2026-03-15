@@ -3815,7 +3815,7 @@ function trouver2Stops(offres,patLat,patLon){
       var distA=a.gps?distKm(patLat,patLon,a.gps.lat,a.gps.lon)*2:a.rayon*2;
       var distB=b.gps?distKm(patLat,patLon,b.gps.lat,b.gps.lon)*2:b.rayon*2;
       var total=prixA+prixB+Math.round((distA+distB)*PRIX_KM);
-      if(total<meilleurPrix){
+      if(total<meilleurPrix&&medsA.length>0&&medsB.length>0){
         meilleurPrix=total;
         meilleureCombo={
           a:a,b:b,
