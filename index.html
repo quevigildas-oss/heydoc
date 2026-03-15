@@ -1230,7 +1230,15 @@ try{var _sess=localStorage.getItem('dk_session');if(_sess){var _s=JSON.parse(_se
 window.addEventListener('DOMContentLoaded',function(){
   if(SESSION_EMAIL){
     rechargerSessionNotion().then(function(ok){
-      if(ok){document.getElementById('loginScreen').classList.remove('on');document.getElementById('accueilScreen').classList.add('on');}
+      if(ok){
+        document.getElementById('loginScreen').classList.remove('on');
+        // Si profil transféré → aller directement sur profilsScreen pour voir le message
+        if(PROFILS[0]&&PROFILS[0].transfere){
+          nav('profilsScreen');
+        } else {
+          document.getElementById('accueilScreen').classList.add('on');
+        }
+      }
       else{SESSION_EMAIL='';try{localStorage.removeItem('dk_session');}catch(e){}nav('loginScreen');}
     });
   }
@@ -1296,6 +1304,8 @@ async function rechargerSessionNotion(){
       if(t==='select')return p.select?p.select.name:'';
       return '';}
     SESSION_PATIENT_ID=txt('ID Patient');
+    var codeTransfert=txt('Code transfert');
+    var estTransfere=codeTransfert==='TRANSFERE';
     var profilPrincipal={
       prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),
       tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),
@@ -1303,7 +1313,8 @@ async function rechargerSessionNotion(){
       allergies:txt('Allergies'),antecedents:txt('Antécédents'),
       traitements:txt('Traitements réguliers'),
       patientId:SESSION_PATIENT_ID,notionPageId:page.id,
-      lien:'moi',compteParent:''
+      lien:'moi',compteParent:'',
+      transfere:estTransfere
     };
 
     // ── Parser les membres famille depuis Notion ──
@@ -1324,6 +1335,7 @@ async function rechargerSessionNotion(){
         // Retrouver la clé interne depuis le libellé Notion
         var lienKey='autre';
         Object.keys(LIENS).forEach(function(k){if(LIENS[k]===lienNotion)lienKey=k;});
+        var codeT=t2('Code transfert');
         return {
           prenom:t2('Prenom'),nom:t2('Nom'),naiss:t2('Date naissance'),
           tel:t2('Téléphone'),email:'',ville:t2('Ville'),
@@ -1331,7 +1343,8 @@ async function rechargerSessionNotion(){
           allergies:t2('Allergies'),antecedents:t2('Antécédents'),
           traitements:t2('Traitements réguliers'),
           patientId:t2('ID Patient'),notionPageId:mp.id,
-          lien:lienKey,compteParent:SESSION_EMAIL
+          lien:lienKey,compteParent:SESSION_EMAIL,
+          transfere:codeT==='TRANSFERE'
         };
       });
     }
@@ -1341,8 +1354,8 @@ async function rechargerSessionNotion(){
     SEL=0;
     saveProfils(); // mettre à jour localStorage = cache
 
-    // ── Sync traitements ALD ──
-    syncTraitementsDepuisNotion(PROFILS[0]);
+    // ── Sync traitements ALD — profil principal seulement si non transféré ──
+    if(!PROFILS[0].transfere) syncTraitementsDepuisNotion(PROFILS[0]);
     return true;
   }catch(e){
     dbg('rechargerSession ERR: '+e.message);
@@ -1413,12 +1426,17 @@ function syncTraitementsDepuisNotion(profil){
     if(!nom){dbgWarn('syncTraitements — nom vide pour ligne: '+ligne);return;}
 
     // Vérifier si ce médicament existe déjà (par nom, insensible casse)
+    // Inclut aussi les doublons depuis Notion (source='notion')
     var dejaPresent=existants.some(function(t){
       return t.nom&&t.nom.toLowerCase()===nom.toLowerCase();
     });
+    // Double vérification : si déjà importé depuis Notion avec même nom+dosage → skip
+    var dejaNotiom=existants.some(function(t){
+      return t.source==='notion'&&t.nom&&t.nom.toLowerCase()===nom.toLowerCase()&&t.dosage===dosage;
+    });
     dbg('syncTraitements — ligne="'+ligne.slice(0,60)+'" nom="'+nom+'" ald='+estALD+' déjà='+dejaPresent);
 
-    if(!dejaPresent){
+    if(!dejaPresent&&!dejaNotiom){
       existants.unshift({
         id:'trait_notion_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
         nom:nom,
