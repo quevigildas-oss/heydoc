@@ -990,7 +990,7 @@ async function seConnecter(){
     }
     var page=data.results[0];
     var props=page.properties;
-    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
+    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
     var storedCode=txt('Code');
     if(storedCode!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
     // Charger le profil depuis Notion
@@ -1042,7 +1042,7 @@ async function seConnecter(){
       var membres=dataMembres.results.map(function(mp){
         var pp=mp.properties;
         function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
-          if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+          if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
           if(t==='title')return(p.title[0]||{}).plain_text||'';
           if(t==='email')return p.email||'';
           if(t==='phone_number')return p.phone_number||'';
@@ -1278,7 +1278,7 @@ async function rechargerSessionNotion(){
     var page=dataPrincipal.results[0];
     var props=page.properties;
     function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-      if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+      if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
       if(t==='title')return(p.title[0]||{}).plain_text||'';
       if(t==='email')return p.email||'';
       if(t==='phone_number')return p.phone_number||'';
@@ -1303,7 +1303,7 @@ async function rechargerSessionNotion(){
       membres=dataMembres.results.map(function(mp){
         var pp=mp.properties;
         function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
-          if(t==='rich_text')return(p.rich_text[0]||{}).plain_text||'';
+          if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
           if(t==='title')return(p.title[0]||{}).plain_text||'';
           if(t==='email')return p.email||'';
           if(t==='phone_number')return p.phone_number||'';
@@ -1441,14 +1441,14 @@ function syncTraitementsDepuisNotion(profil){
 
   try{localStorage.setItem(key,JSON.stringify(existants));}catch(e){}
 
-  if(nouveaux>0){
-    dbg('syncTraitementsNotion: '+nouveaux+' nouveau(x) traitement(s) importé(s)');
-    // Notifier le patient discrètement
-    setTimeout(function(){
+  // Toujours mettre à jour le badge avec la clé correcte
+  setTimeout(function(){
+    if(nouveaux>0){
       toast('💊 '+nouveaux+' traitement'+(nouveaux>1?'s':'')+' ALD importé'+(nouveaux>1?'s':'')+' depuis votre dossier');
-      mettreAJourBadgeTuile();
-    },1500);
-  }
+    }
+    mettreAJourBadgeTuile(key); // passe la clé explicitement
+  },500);
+  if(nouveaux>0) dbg('syncTraitementsNotion: '+nouveaux+' nouveau(x) traitement(s) importé(s)');
 }
 
 // ══════════════════════════════
@@ -2301,14 +2301,24 @@ function supprimerTrait(idx){
   toast('🗑 Traitement supprimé');
 }
 
-function mettreAJourBadgeTuile(){
-  var items=chargerTraitements();
+function mettreAJourBadgeTuile(keyOverride){
+  var key=keyOverride||null;
+  var items=[];
+  try{
+    var k=key||(typeof getTraitKey==='function'?getTraitKey():null);
+    if(k){var s=localStorage.getItem(k);if(s)items=JSON.parse(s);}
+  }catch(e){}
   var actifs=items.filter(function(t){return t.statut==='actif';}).length;
+  var aldsActifs=items.filter(function(t){return t.statut==='actif'&&t.ald;}).length;
   var badge=document.getElementById('traitTileBadge');
   var sub=document.getElementById('traitTileSub');
   if(badge){
-    if(actifs>0){badge.style.display='inline-block';badge.textContent=actifs+' actif'+(actifs>1?'s':'');}
-    else{badge.style.display='none';}
+    if(actifs>0){
+      badge.style.display='inline-block';
+      badge.textContent=actifs+' actif'+(actifs>1?'s':'')+(aldsActifs?' · '+aldsActifs+' ALD':'');
+    } else {
+      badge.style.display='none';
+    }
   }
   if(sub)sub.textContent=actifs?'En cours':items.length?'Historique':'Chroniques';
 }
