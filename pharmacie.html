@@ -240,12 +240,13 @@ function renderSelectionne(){
   STATE='retrait_attente';
   var d=aoData;
   document.getElementById('hdrSub').textContent='Retrait client en attente';
+  // Utiliser d.meds (tous les médicaments attribués à cette pharmacie)
   var medsHtml='';
-  if(d.medsAttribues&&d.medsAttribues.length){
+  if(d.meds&&d.meds.length){
     medsHtml='<div class="card">'+
       '<div class="card-hdr">💊 MÉDICAMENTS À PRÉPARER POUR CE CLIENT</div>'+
       '<div class="card-body">'+
-        d.medsAttribues.map(function(m,i){
+        d.meds.map(function(m,i){
           return '<div style="padding:8px 0;border-bottom:1px solid #e5e7eb;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;">'+
             '<div class="med-num">'+(i+1)+'</div>'+escHtml(m.trim())+
           '</div>';
@@ -262,11 +263,10 @@ function renderSelectionne(){
     medsHtml+
     '<div class="retrait-box">'+
       '<div class="retrait-title">🔐 Saisir le code du patient</div>'+
-      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute.</div>'+
-      '<input class="retrait-input" id="codeRetraitInput" type="text" inputmode="numeric" maxlength="6" placeholder="——————">'+
+      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute. La validation est automatique.</div>'+
+      '<input class="retrait-input" id="codeRetraitInput" type="text" inputmode="numeric" maxlength="6" placeholder="——————" oninput="autoValiderRetrait(this)">'+
       '<div id="retraitErr" style="color:#dc2626;font-size:12px;text-align:center;margin-top:8px;display:none;"></div>'+
     '</div>'+
-    '<button class="btn-submit" onclick="validerRetrait()">✅ Valider le retrait</button>'+
     '<div style="height:30px;"></div>';
 }
 
@@ -337,18 +337,26 @@ async function soumettre(){
   }
 }
 
+function autoValiderRetrait(input){
+  var code=(input.value||'').trim();
+  if(code.length===6) validerRetrait();
+}
+
 async function validerRetrait(){
   var code=(document.getElementById('codeRetraitInput').value||'').trim();
   var errEl=document.getElementById('retraitErr');
-  errEl.style.display='none';
+  if(errEl)errEl.style.display='none';
   if(!/^\d{6}$/.test(code)){
-    errEl.textContent='Code invalide — 6 chiffres requis';errEl.style.display='block';return;
+    if(errEl){errEl.textContent='Code invalide — 6 chiffres requis';errEl.style.display='block';}
+    return;
   }
   if(aoData.codeRetrait&&code!==aoData.codeRetrait){
-    errEl.textContent='Code incorrect — vérifiez avec le patient';errEl.style.display='block';return;
+    if(errEl){errEl.textContent='❌ Code incorrect — vérifiez avec le patient';errEl.style.display='block';}
+    // Vider le champ pour ressaisir
+    var inp=document.getElementById('codeRetraitInput');
+    if(inp){inp.value='';inp.focus();}
+    return;
   }
-  var btn=document.querySelector('.btn-submit');
-  btn.disabled=true;btn.textContent='⏳ Validation...';
   try{
     await notionReq('/pages/'+aoData.notionPageId,'PATCH',{
       properties:{
@@ -356,10 +364,11 @@ async function validerRetrait(){
         'Date validation':{date:{start:new Date().toISOString()}}
       }
     });
-    renderValide();
+    // Toast pop-up puis écran validé
+    toast('✅ Retrait validé !');
+    setTimeout(function(){renderValide();},1500);
   }catch(e){
-    btn.disabled=false;btn.textContent='✅ Valider le retrait';
-    toast('❌ Erreur : '+e.message);
+    if(errEl){errEl.textContent='Erreur : '+e.message;errEl.style.display='block';}
   }
 }
 
