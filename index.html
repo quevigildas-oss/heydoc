@@ -2193,18 +2193,49 @@ function sauvegarderTraitements(items){
 }
 
 function ouvrirTraitements(){
+  var p=PROFILS[SEL];
+  dbg('ouvrirTraitements — profil='+( p?p.prenom:'NULL')+' patientId='+(p?p.patientId:'?'));
+
+  // Sync depuis Notion avant d'afficher
+  if(p&&p.traitements){
+    dbg('ouvrirTraitements — traitements Notion disponibles, sync...');
+    syncTraitementsDepuisNotion(p);
+  } else if(p&&p.notionPageId){
+    // Recharger le profil depuis Notion pour avoir les traitements à jour
+    dbg('ouvrirTraitements — rechargement Notion du profil...');
+    notionPatientRequest('/pages/'+p.notionPageId,'GET').then(function(page){
+      if(!page||!page.properties)return;
+      var props=page.properties;
+      function txt(k){var pr=props[k];if(!pr)return '';var t=pr.type;
+        if(t==='rich_text')return (pr.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
+        if(t==='title')return (pr.title||[]).map(function(b){return b.plain_text||'';}).join('');
+        return '';}
+      var traitements=txt('Traitements réguliers');
+      dbg('ouvrirTraitements — Notion rechargé, traitements="'+traitements.slice(0,80)+'"');
+      if(traitements){
+        PROFILS[SEL].traitements=traitements;
+        syncTraitementsDepuisNotion(PROFILS[SEL]);
+        // Re-render après sync
+        setTimeout(function(){
+          var updated=chargerTraitements();
+          renderTraitements(updated);
+          mettreAJourBadgeTuile();
+        },200);
+      }
+    }).catch(function(e){dbgError('ouvrirTraitements — erreur Notion: '+e.message);});
+  } else {
+    dbgWarn('ouvrirTraitements — pas de traitements ni de notionPageId');
+  }
+
   var items=chargerTraitements();
   TRAIT_FILTRE='tous';
-  // Reset filtres UI
   ['tfTous','tfActif','tfAld','tfSuspendu','tfTermine'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.classList.remove('on');
   });
   var tf=document.getElementById('tfTous');if(tf)tf.classList.add('on');
-  // Header info
   var actifs=items.filter(function(t){return t.statut==='actif';}).length;
   var sub=document.getElementById('traitHdrSub');
   if(sub)sub.textContent=actifs?actifs+' actif'+(actifs>1?'s':'')+' · '+items.length+' total':items.length+' traitement'+(items.length>1?'s':'');
-  // Sync bar
   var q=getTraitSyncQueue();
   var sb=document.getElementById('traitSyncBar');
   var sm=document.getElementById('traitSyncMsg');
@@ -2212,7 +2243,6 @@ function ouvrirTraitements(){
   else if(sb){sb.style.display='none';}
   renderTraitements(items);
   nav('traitementsScreen');
-  // Tenter sync si online
   if(navigator.onLine)processSyncQueueTraits();
 }
 
