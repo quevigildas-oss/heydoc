@@ -2060,7 +2060,6 @@ function ouvrirEspaceProfil(i){
   document.getElementById('epIco').style.color='#fff';
   document.getElementById('epNom').textContent=nom;
   document.getElementById('epInfo').textContent=info;
-
   document.getElementById('epBannerAv').textContent=p.prenom.charAt(0).toUpperCase();
   document.getElementById('epBannerNom').textContent=nom;
   document.getElementById('epBannerInfo').textContent=info+' · Espace de santé Dokita';
@@ -2068,6 +2067,42 @@ function ouvrirEspaceProfil(i){
   CURRENT=Object.assign({},p,{_idx:i,_eph:false});
   nav('espaceProfilScreen');
   mettreAJourBadgeTuile();
+
+  // Rechargement silencieux depuis Notion pour avoir les données fraîches
+  // (allergies, antécédents, traitements peuvent avoir été mis à jour par le médecin)
+  if(p.notionPageId){
+    notionPatientRequest('/pages/'+p.notionPageId,'GET').then(function(page){
+      if(!page||!page.properties)return;
+      var props=page.properties;
+      function txt(k){
+        if(!props[k])return '';
+        var t=props[k].type;
+        if(t==='rich_text')return (props[k].rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
+        if(t==='title')return (props[k].title||[]).map(function(b){return b.plain_text||'';}).join('');
+        if(t==='email')return props[k].email||'';
+        if(t==='phone_number')return props[k].phone_number||'';
+        if(t==='number')return props[k].number!=null?String(props[k].number):'';
+        if(t==='date')return props[k].date?props[k].date.start:'';
+        if(t==='select')return props[k].select?props[k].select.name:'';
+        return '';
+      }
+      var updated={
+        allergies:txt('Allergies'),
+        antecedents:txt('Antécédents'),
+        traitements:txt('Traitements réguliers'),
+        poids:txt('Poids'),
+        ville:txt('Ville')
+      };
+      // Mettre à jour PROFILS[i] avec les données fraîches
+      Object.assign(PROFILS[i],updated);
+      CURRENT=Object.assign({},PROFILS[i],{_idx:i,_eph:false});
+      // Sync traitements si mis à jour
+      if(updated.traitements) syncTraitementsDepuisNotion(PROFILS[i]);
+      dbg('espaceProfilScreen — profil rechargé depuis Notion ✅');
+    }).catch(function(e){
+      dbgWarn('espaceProfilScreen — rechargement Notion échoué: '+e.message);
+    });
+  }
 }
 
 // ══════════════════════════════
@@ -3558,9 +3593,10 @@ async function voirOrdonnanceHisto(i){
       (deja?
         '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée</div>'
       :
-        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'+
-        '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'
+        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'
       )+
+      '<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>'+
+      '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
     '</div>';
 
   document.getElementById('ordDetailBody').innerHTML=
