@@ -123,6 +123,12 @@ async function init(){
     // Format : "CODE|med1,med2" ou juste "CODE"
     var codeRetraitParts=codeRetraitRaw.split('|');
     var codeRetrait=codeRetraitParts[0].trim().replace(/\s/g,'').replace(/[^\d]/g,'');
+    // DEBUG — afficher sur la page
+    console.log('codeRetraitRaw brut: "'+codeRetraitRaw+'" len='+codeRetraitRaw.length);
+    console.log('codeRetrait nettoyé: "'+codeRetrait+'" len='+codeRetrait.length);
+    // Afficher les codes char par char
+    var chars=[];for(var ci=0;ci<codeRetraitRaw.length;ci++)chars.push(codeRetraitRaw.charCodeAt(ci));
+    console.log('charCodes: '+chars.join(','));
     var medsAttribues=codeRetraitParts[1]?codeRetraitParts[1].split(','):null;
     var allMeds=JSON.parse(txt('Medicaments')||'[]');
     // Si médicaments attribués → filtrer l'ordonnance
@@ -143,6 +149,11 @@ async function init(){
       codeRetrait:codeRetrait,
       offre:txt('Offre JSON')?JSON.parse(txt('Offre JSON')):null
     };
+    // Afficher debug en bas de page
+    var dbgDiv=document.createElement('div');
+    dbgDiv.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1a1a1a;color:#00ff88;font-family:monospace;font-size:11px;padding:8px 12px;z-index:9999;';
+    dbgDiv.innerHTML='CODE STOCKÉ: "'+codeRetrait+'" ('+codeRetrait.length+' chars) | RAW: "'+codeRetraitRaw+'"';
+    document.body.appendChild(dbgDiv);
 
     // Routage selon statut
     if(statut==='valide'){
@@ -351,6 +362,8 @@ async function validerRetrait(){
     return;
   }
   if(aoData.codeRetrait&&code!==aoData.codeRetrait){
+    var dbgDiv=document.querySelector('div[style*="position:fixed;bottom:0"]');
+    if(dbgDiv)dbgDiv.innerHTML='❌ SAISI: "'+code+'" ('+code.length+') vs STOCKÉ: "'+aoData.codeRetrait+'" ('+aoData.codeRetrait.length+')';
     console.log('Code saisi: "'+code+'" ('+code.length+') vs stocké: "'+aoData.codeRetrait+'" ('+aoData.codeRetrait.length+')');
     if(errEl){errEl.textContent='❌ Code incorrect — vérifiez avec le patient';errEl.style.display='block';}
     // Vider le champ pour ressaisir
