@@ -2726,7 +2726,7 @@ async function validerRecupModal(){
 
   try{
     var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Code transfert',rich_text:{equals:code}},
+      filter:{property:'Code transfert',rich_text:{contains:code}},
       page_size:1
     });
 
@@ -2748,8 +2748,12 @@ async function validerRecupModal(){
       if(t==='select')return p.select?p.select.name:'';
       return '';}
 
-    var expire=txt('Expiration transfert');
-    if(expire&&new Date(expire)<new Date()){
+    // Vérifier expiration depuis le champ Code transfert (format "CODE|ISO_EXPIRE")
+    var codeStored=txt('Code transfert');
+    var parts=codeStored.split('|');
+    var codeNotion=parts[0];
+    var expireISO=parts[1]||'';
+    if(expireISO&&new Date(expireISO)<new Date()){
       errEl.textContent='Ce code a expiré — demandez un nouveau code';
       errEl.style.display='block';
       btn.textContent='🔍 Vérifier le code';btn.disabled=false;return;
@@ -2900,12 +2904,12 @@ async function genererCodeTransfert(){
   try{
     await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
       properties:{
-        'Code transfert':{rich_text:[{text:{content:code}}]},
+        'Code transfert':{rich_text:[{text:{content:code+'|'+expire}}]},
         'Expiration transfert':{date:{start:expire.slice(0,10)}}
       }
     });
     TRANSFERT_CODE_COURANT={code:code,patientId:p.patientId,notionPageId:p.notionPageId,expire:expire};
-    try{localStorage.setItem('dk_transfer_'+p.patientId,JSON.stringify(TRANSFERT_CODE_COURANT));}catch(e){}
+    try{localStorage.removeItem('dk_transfer_'+p.patientId);localStorage.setItem('dk_transfer_'+p.patientId,JSON.stringify(TRANSFERT_CODE_COURANT));}catch(e){}
     document.getElementById('transfertCodeVal').textContent=code;
     document.getElementById('transfertExpire').textContent='2 minutes';
     document.getElementById('transfertGenBox').style.display='none';
@@ -3004,7 +3008,7 @@ async function recupererProfil(){
   try{
     // Chercher dans Notion la fiche avec ce code de transfert
     var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Code transfert',rich_text:{equals:code}},
+      filter:{property:'Code transfert',rich_text:{contains:code}},
       page_size:1
     });
 
@@ -3026,9 +3030,11 @@ async function recupererProfil(){
       if(t==='select')return p.select?p.select.name:'';
       return '';}
 
-    // Vérifier expiration
-    var expire=txt('Expiration transfert');
-    if(expire&&new Date(expire)<new Date()){
+    // Vérifier expiration depuis Code transfert (format "CODE|ISO_EXPIRE")
+    var codeStored2=txt('Code transfert');
+    var parts2=codeStored2.split('|');
+    var expireISO2=parts2[1]||'';
+    if(expireISO2&&new Date(expireISO2)<new Date()){
       errEl.textContent='Ce code a expiré — demandez un nouveau code à l\'émetteur';
       errEl.style.display='block';
       btn.textContent='🔍 Vérifier le code';btn.disabled=false;return;
