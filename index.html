@@ -610,15 +610,16 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-sub" id="traitTileSub">Chroniques</div>
           <div id="traitTileBadge" style="display:none;" class="doss-tile-badge"></div>
         </div>
-        <div class="doss-tile" onclick="ouvrirDossier('allergies','⚠️','Allergies','Allergies connues')">
-          <div class="doss-tile-ico" style="background:rgba(232,146,10,.1);">⚠️</div>
-          <div class="doss-tile-title">Allergies</div>
-          <div class="doss-tile-sub">Connues</div>
+        <div class="doss-tile" onclick="ouvrirOffres()" id="offresTile">
+          <div class="doss-tile-ico" style="background:rgba(245,158,11,.12);">🏪</div>
+          <div class="doss-tile-title">Offres Dokita</div>
+          <div class="doss-tile-sub" id="offresTileSub">Pharmacies</div>
+          <div id="offresTileBadge" style="display:none;" class="doss-tile-badge" style="background:rgba(245,158,11,.2);color:#d97706;border-color:rgba(245,158,11,.4);"></div>
         </div>
-        <div class="doss-tile" onclick="ouvrirDossier('vaccins','💉','Vaccins','Carnet de vaccination')">
-          <div class="doss-tile-ico" style="background:rgba(45,125,210,.1);">💉</div>
-          <div class="doss-tile-title">Vaccins</div>
-          <div class="doss-tile-sub">Carnet</div>
+        <div class="doss-tile" onclick="ouvrirDossierVaccinsAllergies()">
+          <div class="doss-tile-ico" style="background:rgba(45,125,210,.1);">💉⚠️</div>
+          <div class="doss-tile-title">Vaccins & Allergies</div>
+          <div class="doss-tile-sub">Carnet & Connues</div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossier('chirurgie','🏥','Opérations chirurgicales','Antécédents chirurgicaux')">
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.07);">🏥</div>
@@ -630,7 +631,20 @@ select.finput option{background:var(--bg3);}
   </div>
 </div>
 
-<!-- ══ DETAIL DOSSIER ══ -->
+<!-- ══ OFFRES DOKITA ══ -->
+<div class="screen" id="offresScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(245,158,11,.2);">🏪</div>
+    <div style="flex:1"><div class="hdr-title">Offres Dokita</div><div class="hdr-sub" id="offresSub">Meilleures offres pharmacies</div></div>
+    <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
+  </div>
+  <div class="sbody" id="offresBody">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+
 <div class="screen" id="dossierDetailScreen">
   <div class="hdr">
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
@@ -3627,6 +3641,266 @@ function distKm(lat1,lon1,lat2,lon2){
 }
 
 function genAoId(){return 'AO-'+Date.now().toString(36).toUpperCase();}
+
+// ══════════════════════════════
+// OFFRES DOKITA
+// ══════════════════════════════
+var PRIX_KM=100; // FCFA/km TEST — à ajuster en prod
+
+function ouvrirDossierVaccinsAllergies(){
+  // Écran combiné vaccins + allergies
+  ouvrirDossier('vaccins_allergies','💉','Vaccins & Allergies','Carnet et allergies connues');
+}
+
+async function ouvrirOffres(){
+  nav('offresScreen');
+  var el=document.getElementById('offresBody');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);"><span style="font-size:24px;">⏳</span><br><br>Chargement des offres...</div>';
+
+  // Récupérer la dernière ordonnance du profil courant
+  var p=PROFILS[SEL];
+  if(!p){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Sélectionnez un profil</div>';return;}
+
+  try{
+    // Chercher les appels d'offre liés à ce patient
+    var data=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
+      filter:{property:'Patient ID',rich_text:{contains:p.patientId||''}},
+      sorts:[{property:'Date envoi',direction:'descending'}],
+      page_size:20
+    });
+
+    if(!data.results||!data.results.length){
+      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.<br><br><span style="font-size:12px;">Les offres apparaissent après avoir utilisé<br>"💰 Moins cher" sur une ordonnance.</span></div>';
+      return;
+    }
+
+    // Parser toutes les offres
+    var offres=data.results.map(function(page){
+      var props=page.properties;
+      function txt(k){var pr=props[k];if(!pr)return '';
+        if(pr.type==='rich_text')return(pr.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+        if(pr.type==='title')return(pr.title||[]).map(function(x){return x.plain_text;}).join('');
+        if(pr.type==='select')return pr.select?pr.select.name:'';
+        if(pr.type==='number')return pr.number!=null?pr.number:0;
+        if(pr.type==='date')return pr.date?pr.date.start:'';
+        return '';}
+      var offreJson=txt('Offre JSON');
+      var offreItems=[];
+      try{if(offreJson)offreItems=JSON.parse(offreJson);}catch(e){}
+      var pharmNom=txt('Pharmacie Nom');
+      // Trouver coordonnées GPS de cette pharmacie
+      var pharmaInfo=PHARMACIES.find(function(ph){return ph.nom===pharmNom;})||null;
+      return {
+        notionPageId:page.id,
+        aoId:txt('ID'),
+        pharmNom:pharmNom,
+        pharmTel:txt('Pharmacie Tel'),
+        statut:txt('Statut'),
+        items:offreItems,
+        rayon:txt('Rayon')||5,
+        dateEnvoi:txt('Date envoi'),
+        codeRetrait:txt('Code retrait')||'',
+        gps:pharmaInfo?{lat:pharmaInfo.lat,lon:pharmaInfo.lon}:null
+      };
+    });
+
+    // Garder seulement les offres repondues/selectionnees
+    var offresRepondues=offres.filter(function(o){
+      return o.statut==='repondu'||o.statut==='selectionne';
+    });
+
+    if(!offresRepondues.length){
+      // Offres envoyées mais pas encore de réponses
+      var nbEnvoyes=offres.filter(function(o){return o.statut==='en_attente';}).length;
+      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ '+(nbEnvoyes>0?nbEnvoyes+' pharmacie'+(nbEnvoyes>1?'s':'')+ ' contactée'+(nbEnvoyes>1?'s':'')+' — en attente de réponse':'Aucune réponse reçue')+'</div>';
+      return;
+    }
+
+    // Géolocalisation patient (TEST ou réelle)
+    var patLat=5.3467,patLon=-4.0167; // TEST Plateau
+    if(USER_LAT&&USER_LNG){patLat=USER_LAT;patLon=USER_LNG;}
+
+    // Calculer score pour chaque offre
+    offresRepondues.forEach(function(o){
+      var totalMeds=o.items.length;
+      var disponibles=o.items.filter(function(i){return i.disponible;}).length;
+      var prixMeds=o.items.reduce(function(s,i){return s+(i.total||0);},0);
+      var dist=o.gps?distKm(patLat,patLon,o.gps.lat,o.gps.lon)*2:o.rayon*2; // aller-retour
+      var coutTrajet=Math.round(dist*PRIX_KM);
+      o.complete=(disponibles===totalMeds);
+      o.nbDispo=disponibles;
+      o.nbTotal=totalMeds;
+      o.prixMeds=prixMeds;
+      o.coutTrajet=coutTrajet;
+      o.prixTotal=prixMeds+coutTrajet;
+      o.dist=Math.round(dist/2*10)/10; // distance one-way
+    });
+
+    // ── Algo Offre Globale ──
+    // 1. Complètes triées par prix total
+    var completes=offresRepondues.filter(function(o){return o.complete;})
+      .sort(function(a,b){return a.prixTotal-b.prixTotal;});
+    var meilleureComplete=completes[0]||null;
+
+    // ── Algo 2 stops ──
+    // Trouver la meilleure combinaison de 2 pharmacies qui couvre tous les médicaments
+    var meilleur2stops=trouver2Stops(offresRepondues,patLat,patLon);
+
+    renderOffres(meilleureComplete,meilleur2stops,offresRepondues);
+
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--danger);">❌ Erreur : '+e.message+'</div>';
+  }
+}
+
+function trouver2Stops(offres,patLat,patLon){
+  if(offres.length<2)return null;
+  // Tous les médicaments de l'ordonnance
+  var allMeds=offres[0].items.map(function(i){return i.medicament;});
+  var meilleureCombo=null;
+  var meilleurPrix=Infinity;
+
+  for(var i=0;i<offres.length;i++){
+    for(var j=i+1;j<offres.length;j++){
+      var a=offres[i],b=offres[j];
+      // Vérifier que a+b couvre tous les médicaments
+      var couvert=allMeds.every(function(med){
+        return a.items.some(function(x){return x.medicament===med&&x.disponible;})||
+               b.items.some(function(x){return x.medicament===med&&x.disponible;});
+      });
+      if(!couvert)continue;
+      // Attribuer chaque médicament à la pharmacie la moins chère
+      var prixA=0,prixB=0;
+      allMeds.forEach(function(med){
+        var ia=a.items.find(function(x){return x.medicament===med&&x.disponible;});
+        var ib=b.items.find(function(x){return x.medicament===med&&x.disponible;});
+        if(ia&&ib){if(ia.total<=ib.total)prixA+=ia.total;else prixB+=ib.total;}
+        else if(ia)prixA+=ia.total;
+        else if(ib)prixB+=ib.total;
+      });
+      var distA=a.gps?distKm(patLat,patLon,a.gps.lat,a.gps.lon)*2:a.rayon*2;
+      var distB=b.gps?distKm(patLat,patLon,b.gps.lat,b.gps.lon)*2:b.rayon*2;
+      var total=prixA+prixB+Math.round((distA+distB)*PRIX_KM);
+      if(total<meilleurPrix){
+        meilleurPrix=total;
+        meilleureCombo={a:a,b:b,prixA:prixA,prixB:prixB,total:total,
+          coutTrajetA:Math.round(distA*PRIX_KM),coutTrajetB:Math.round(distB*PRIX_KM)};
+      }
+    }
+  }
+  return meilleureCombo;
+}
+
+function renderOffres(complete,stops2,toutes){
+  var el=document.getElementById('offresBody');
+  var html='';
+
+  // ── Offre complète ──
+  if(complete){
+    html+=
+      '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:14px;">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
+          '<span style="background:var(--accent);color:var(--bg);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:800;">🥇 MEILLEURE OFFRE COMPLÈTE</span>'+
+        '</div>'+
+        '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">'+escHtml(complete.pharmNom)+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">'+complete.nbDispo+'/'+complete.nbTotal+' médicaments · '+complete.dist+'km</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Médicaments</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--text);">'+complete.prixMeds.toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Trajet</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--warn);">'+complete.coutTrajet.toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;border:1.5px solid var(--accent);">'+
+            '<div style="font-size:10px;color:var(--accent);margin-bottom:4px;">TOTAL</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--accent);">'+complete.prixTotal.toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
+        '</div>'+
+        '<button onclick="choisirOffre(\''+complete.notionPageId+'\',\''+escHtml(complete.pharmNom)+'\')" style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--bg);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
+      '</div>';
+  } else {
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;text-align:center;color:var(--text2);">Aucune pharmacie ne dispose de l\'ordonnance complète</div>';
+  }
+
+  // ── Meilleure offre 2 stops ──
+  if(stops2&&(!complete||stops2.total<complete.prixTotal)){
+    html+=
+      '<div style="background:rgba(14,165,233,.06);border:1.5px solid var(--accent2);border-radius:16px;padding:16px;margin-bottom:14px;">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
+          '<span style="background:var(--accent2);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:800;">🥈 MEILLEURE OFFRE 2 STOPS</span>'+
+        '</div>'+
+        '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">'+
+          // Stop 1
+          '<div style="background:var(--card);border-radius:10px;padding:12px;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">STOP 1</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+escHtml(stops2.a.pharmNom)+'</div>'+
+            '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text2);">'+
+              '<span>'+stops2.a.dist+'km · trajet '+stops2.a.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
+              '<strong style="color:var(--text);">'+stops2.prixA.toLocaleString('fr-FR')+' FCFA</strong>'+
+            '</div>'+
+          '</div>'+
+          // Stop 2
+          '<div style="background:var(--card);border-radius:10px;padding:12px;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">STOP 2</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+escHtml(stops2.b.pharmNom)+'</div>'+
+            '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text2);">'+
+              '<span>'+stops2.b.dist+'km · trajet '+stops2.b.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
+              '<strong style="color:var(--text);">'+stops2.prixB.toLocaleString('fr-FR')+' FCFA</strong>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="background:var(--card);border:1.5px solid var(--accent2);border-radius:10px;padding:10px;text-align:center;margin-bottom:12px;">'+
+          '<div style="font-size:11px;color:var(--text3);">Total estimé (médicaments + 2 trajets)</div>'+
+          '<div style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:var(--accent2);">'+stops2.total.toLocaleString('fr-FR')+' FCFA</div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+          '<button onclick="choisirOffre(\''+stops2.a.notionPageId+'\',\''+escHtml(stops2.a.pharmNom)+'\')" style="padding:11px;background:var(--accent2);border:none;border-radius:10px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">✅ Stop 1</button>'+
+          '<button onclick="choisirOffre(\''+stops2.b.notionPageId+'\',\''+escHtml(stops2.b.pharmNom)+'\')" style="padding:11px;background:var(--accent2);border:none;border-radius:10px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">✅ Stop 2</button>'+
+        '</div>'+
+      '</div>';
+  }
+
+  html+='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">'+
+    '💡 Trajet calculé à '+PRIX_KM+' FCFA/km (aller-retour)'+
+  '</div><div style="height:30px;"></div>';
+
+  el.innerHTML=html;
+}
+
+async function choisirOffre(notionPageId,pharmNom){
+  // Générer code retrait 6 chiffres
+  var code=String(Math.floor(100000+Math.random()*900000));
+  toast('⏳ Confirmation en cours...');
+  try{
+    await notionConsultRequest('/pages/'+notionPageId,'PATCH',{
+      properties:{
+        'Statut':{select:{name:'selectionne'}},
+        'Code retrait':{rich_text:[{text:{content:code}}]}
+      }
+    });
+    // Afficher le code retrait au patient
+    var el=document.getElementById('offresBody');
+    el.innerHTML=
+      '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:24px;text-align:center;margin-bottom:16px;">'+
+        '<div style="font-size:32px;margin-bottom:12px;">✅</div>'+
+        '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">Pharmacie choisie</div>'+
+        '<div style="font-size:13px;color:var(--text2);margin-bottom:20px;">'+escHtml(pharmNom)+'</div>'+
+        '<div style="background:var(--card);border:2px solid var(--accent);border-radius:14px;padding:20px;margin-bottom:16px;">'+
+          '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;">🔐 Votre code de retrait</div>'+
+          '<div style="font-family:Syne,sans-serif;font-size:48px;font-weight:800;letter-spacing:12px;color:var(--accent);">'+code+'</div>'+
+          '<div style="font-size:12px;color:var(--text2);margin-top:10px;">Communiquez ce code au pharmacien<br>pour récupérer votre commande</div>'+
+        '</div>'+
+        '<button onclick="if(navigator.share){navigator.share({title:\'Code retrait Dokita\',text:\'Mon code de retrait Dokita : '+code+' — Pharmacie : '+escHtml(pharmNom)+'\'});}else{navigator.clipboard&&navigator.clipboard.writeText(\''+code+'\');}" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:13px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">📤 Partager le code</button>'+
+      '</div>';
+  }catch(e){
+    toast('❌ Erreur : '+e.message);
+  }
+}
 
 async function lancerAppelOffre(i){
   var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return;
