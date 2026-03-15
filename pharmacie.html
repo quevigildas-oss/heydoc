@@ -119,10 +119,10 @@ async function init(){
       return '';}
 
     var statut=txt('Statut');
-    var codeRetraitRaw=txt('Code retrait');
+    var codeRetraitRaw=txt('Code retrait').trim();
     // Format : "CODE|med1,med2" ou juste "CODE"
     var codeRetraitParts=codeRetraitRaw.split('|');
-    var codeRetrait=codeRetraitParts[0];
+    var codeRetrait=codeRetraitParts[0].trim().replace(/\s/g,'').replace(/[^\d]/g,'');
     var medsAttribues=codeRetraitParts[1]?codeRetraitParts[1].split(','):null;
     var allMeds=JSON.parse(txt('Medicaments')||'[]');
     // Si médicaments attribués → filtrer l'ordonnance
@@ -338,12 +338,12 @@ async function soumettre(){
 }
 
 function autoValiderRetrait(input){
-  var code=(input.value||'').trim();
+  var code=(input.value||'').trim().replace(/\s/g,'').replace(/[^\d]/g,'');
   if(code.length===6) validerRetrait();
 }
 
 async function validerRetrait(){
-  var code=(document.getElementById('codeRetraitInput').value||'').trim();
+  var code=(document.getElementById('codeRetraitInput').value||'').trim().replace(/\s/g,'').replace(/[^\d]/g,'');
   var errEl=document.getElementById('retraitErr');
   if(errEl)errEl.style.display='none';
   if(!/^\d{6}$/.test(code)){
@@ -351,6 +351,7 @@ async function validerRetrait(){
     return;
   }
   if(aoData.codeRetrait&&code!==aoData.codeRetrait){
+    console.log('Code saisi: "'+code+'" ('+code.length+') vs stocké: "'+aoData.codeRetrait+'" ('+aoData.codeRetrait.length+')');
     if(errEl){errEl.textContent='❌ Code incorrect — vérifiez avec le patient';errEl.style.display='block';}
     // Vider le champ pour ressaisir
     var inp=document.getElementById('codeRetraitInput');
