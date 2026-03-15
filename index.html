@@ -804,7 +804,9 @@ select.finput option{background:var(--bg3);}
         3. Elle clique "Récupérer un profil" et saisit ce code<br>
         4. Le profil lui sera transféré avec tout l'historique
       </div>
-      <button onclick="copierCodeTransfert()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:13px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">📤 Envoyer le message</button>
+      <div id="transfertAlreadyMsg" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:10px 13px;font-size:12px;color:var(--warn);margin-bottom:12px;">
+        ⚠️ Ce profil est déjà en cours de transfert — attendez l'expiration ou annulez le code actif.
+      </div>
       <button onclick="annulerTransfert()" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Annuler ce code</button>
     </div>
 
@@ -2900,18 +2902,17 @@ async function genererCodeTransfert(){
   var existant=null;
   try{var s=localStorage.getItem('dk_transfer_'+p.patientId);if(s)existant=JSON.parse(s);}catch(e){}
   if(existant&&existant.expire&&new Date(existant.expire)>new Date()){
-    var errEl=document.getElementById('transfertErr');
-    if(errEl){
-      errEl.textContent='⚠️ Ce profil est déjà en cours de transfert — attendez l\'expiration ou annulez le code actif.';
-      errEl.style.display='block';
-    }
-    // Afficher le code existant
     document.getElementById('transfertCodeVal').textContent=existant.code;
     document.getElementById('transfertGenBox').style.display='none';
     document.getElementById('transfertCodeBox').style.display='block';
+    var alreadyMsg=document.getElementById('transfertAlreadyMsg');
+    if(alreadyMsg)alreadyMsg.style.display='block';
     TRANSFERT_CODE_COURANT=existant;
     return;
   }
+  // Cacher la bannière si on génère normalement
+  var alreadyMsg=document.getElementById('transfertAlreadyMsg');
+  if(alreadyMsg)alreadyMsg.style.display='none';
   // TEST MODE : 2 minutes — passer à 48h en production
   var DUREE_MS=2*60*1000; // 2 min
   var code=String(Math.floor(100000+Math.random()*900000));
