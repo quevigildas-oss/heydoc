@@ -1357,14 +1357,17 @@ function goPharma(){nav('pharmacieScreen');loadGeo('pharmacie');}
 // et met à jour le localStorage de la tuile Traitements sans écraser
 // les traitements saisis manuellement par le patient.
 function syncTraitementsDepuisNotion(profil){
-  if(!profil||!profil.traitements)return;
+  dbg('syncTraitements — profil='+( profil?profil.prenom:'NULL')+' traitements="'+(profil&&profil.traitements?profil.traitements.slice(0,80):'VIDE')+'"');
+  if(!profil||!profil.traitements){dbgWarn('syncTraitements — traitements vide ou profil null');return;}
   var lignes=profil.traitements.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>3;});
-  if(!lignes.length)return;
+  dbg('syncTraitements — '+lignes.length+' ligne(s) à parser');
+  if(!lignes.length){dbgWarn('syncTraitements — aucune ligne valide');return;}
 
   // Clé localStorage pour ce profil
   var key='traits_'+(profil.patientId||'0_'+(profil.prenom||''));
+  dbg('syncTraitements — clé localStorage: "'+key+'"');
   var existants=[];
-  try{var s=localStorage.getItem(key);if(s)existants=JSON.parse(s);}catch(e){}
+  try{var s=localStorage.getItem(key);if(s)existants=JSON.parse(s);dbg('syncTraitements — '+existants.length+' traitement(s) existant(s) en local');}catch(e){}
 
   var nouveaux=0;
   lignes.forEach(function(ligne){
@@ -1398,12 +1401,13 @@ function syncTraitementsDepuisNotion(profil){
     var dateMatch=ligne.match(/Début:\s*(\d{4}-\d{2}-\d{2})/);
     var dateDebut=dateMatch?dateMatch[1]:new Date().toISOString().slice(0,10);
 
-    if(!nom)return;
+    if(!nom){dbgWarn('syncTraitements — nom vide pour ligne: '+ligne);return;}
 
     // Vérifier si ce médicament existe déjà (par nom, insensible casse)
     var dejaPresent=existants.some(function(t){
       return t.nom&&t.nom.toLowerCase()===nom.toLowerCase();
     });
+    dbg('syncTraitements — ligne="'+ligne.slice(0,60)+'" nom="'+nom+'" ald='+estALD+' déjà='+dejaPresent);
 
     if(!dejaPresent){
       existants.unshift({
@@ -1439,7 +1443,7 @@ function syncTraitementsDepuisNotion(profil){
     }
   });
 
-  try{localStorage.setItem(key,JSON.stringify(existants));}catch(e){}
+  try{localStorage.setItem(key,JSON.stringify(existants));dbg('syncTraitements — sauvegardé '+existants.length+' traitement(s) sous clé "'+key+'"');}catch(e){dbgError('syncTraitements — erreur localStorage: '+e.message);}
 
   // Toujours mettre à jour le badge avec la clé correcte
   setTimeout(function(){
