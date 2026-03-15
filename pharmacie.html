@@ -378,6 +378,26 @@ async function validerRetrait(){
         'Date validation':{date:{start:new Date().toISOString()}}
       }
     });
+    // Annuler les autres offres du même Consultation ID
+    try{
+      var autresOffres=await notionReq('/databases/'+NOTION_AO_DB+'/query','POST',{
+        filter:{
+          and:[
+            {property:'Consultation ID',rich_text:{contains:aoData.consultId}},
+            {property:'Statut',select:{does_not_equal:'valide'}}
+          ]
+        },
+        page_size:10
+      });
+      if(autresOffres.results&&autresOffres.results.length){
+        await Promise.all(autresOffres.results.map(function(page){
+          return notionReq('/pages/'+page.id,'PATCH',{
+            properties:{'Statut':{select:{name:'annule'}}}
+          }).catch(function(){});
+        }));
+        console.log('Annulé '+autresOffres.results.length+' offre(s) restante(s)');
+      }
+    }catch(e){console.log('Annulation autres offres: '+e.message);}
     // Toast pop-up puis écran validé
     toast('✅ Retrait validé !');
     setTimeout(function(){renderValide();},1500);
