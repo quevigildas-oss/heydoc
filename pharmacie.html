@@ -260,15 +260,9 @@ function renderSelectionne(){
       '<div class="success-sub">Le patient vient récupérer sa commande.<br>Préparez les médicaments ci-dessous.</div>'+
     '</div>'+
     medsHtml+
-    (d.codeRetrait?
-      '<div class="code-box">'+
-        '<div class="code-lbl">Code de retrait patient</div>'+
-        '<div class="code-val">'+d.codeRetrait+'</div>'+
-        '<div class="code-sub">Le patient vous communique ce code.<br>Vérifiez-le ci-dessous avant de remettre la commande.</div>'+
-      '</div>'
-    :'')+
     '<div class="retrait-box">'+
       '<div class="retrait-title">🔐 Saisir le code du patient</div>'+
+      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute.</div>'+
       '<input class="retrait-input" id="codeRetraitInput" type="text" inputmode="numeric" maxlength="6" placeholder="——————">'+
       '<div id="retraitErr" style="color:#dc2626;font-size:12px;text-align:center;margin-top:8px;display:none;"></div>'+
     '</div>'+
