@@ -795,7 +795,7 @@ select.finput option{background:var(--bg3);}
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;text-align:center;margin-bottom:16px;">
         <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Code de transfert</div>
         <div id="transfertCodeVal" style="font-family:'Syne',sans-serif;font-size:40px;font-weight:800;letter-spacing:8px;color:var(--accent);">——</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:10px;">⏱ Valable <span id="transfertExpire">48h</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:10px;">⏱ <span id="transfertExpire">—</span></div>
       </div>
       <div style="background:var(--bg3);border-radius:12px;padding:14px;font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:16px;">
         📋 <strong style="color:var(--text);">Instructions :</strong><br>
@@ -2894,6 +2894,23 @@ async function genererCodeTransfert(){
   var p=PROFILS[SEL];
   if(!p||!p.notionPageId){
     toast('⚠️ Profil non synchronisé — réessayez dans quelques secondes');return;
+  }
+
+  // Vérifier si un code actif existe déjà pour ce profil
+  var existant=null;
+  try{var s=localStorage.getItem('dk_transfer_'+p.patientId);if(s)existant=JSON.parse(s);}catch(e){}
+  if(existant&&existant.expire&&new Date(existant.expire)>new Date()){
+    var errEl=document.getElementById('transfertErr');
+    if(errEl){
+      errEl.textContent='⚠️ Ce profil est déjà en cours de transfert — attendez l\'expiration ou annulez le code actif.';
+      errEl.style.display='block';
+    }
+    // Afficher le code existant
+    document.getElementById('transfertCodeVal').textContent=existant.code;
+    document.getElementById('transfertGenBox').style.display='none';
+    document.getElementById('transfertCodeBox').style.display='block';
+    TRANSFERT_CODE_COURANT=existant;
+    return;
   }
   // TEST MODE : 2 minutes — passer à 48h en production
   var DUREE_MS=2*60*1000; // 2 min
