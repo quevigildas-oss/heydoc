@@ -4264,10 +4264,36 @@ async function voirOrdonnanceHisto(i){
   // Vérifier usage unique — stocker dans localStorage
   var usageKey='ord_used_'+s.notionId;
   var deja=localStorage.getItem(usageKey);
-  
+
+  // Vérifier si un appel d'offre existe déjà pour cette consultation
+  var aoStatut='';
+  try{
+    var aoCheck=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
+      filter:{property:'Consultation ID',rich_text:{contains:s.id||''}},
+      page_size:1,
+      sorts:[{property:'Date reponse',direction:'descending'}]
+    });
+    if(aoCheck.results&&aoCheck.results.length){
+      var aoProps=aoCheck.results[0].properties;
+      aoStatut=aoProps['Statut']&&aoProps['Statut'].select?aoProps['Statut'].select.name:'';
+    }
+  }catch(e){dbg('aoCheck err: '+e.message);}
+
   var ord=s.ordonnance;
   var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
   document.getElementById('ordDetailSub').textContent=dateAff;
+
+  // Bouton Moins cher selon statut AO
+  var btnMoinsCher='';
+  if(aoStatut==='valide'){
+    btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Retrait effectué</div>';
+  } else if(aoStatut==='selectionne'){
+    btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
+  } else if(aoStatut==='repondu'||aoStatut==='en_attente'){
+    btnMoinsCher='<button onclick="ouvrirOffres()" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">🏪 Voir offres</button>';
+  } else {
+    btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
+  }
   
   // Construire le template ordonnance HTML
   // template construit via buildOrdHtml(i)
@@ -4280,7 +4306,7 @@ async function voirOrdonnanceHisto(i){
       :
         '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'
       )+
-      '<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>'+
+      btnMoinsCher+
       '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
     '</div>';
 
