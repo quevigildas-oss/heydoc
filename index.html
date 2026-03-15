@@ -804,7 +804,7 @@ select.finput option{background:var(--bg3);}
         3. Elle clique "Récupérer un profil" et saisit ce code<br>
         4. Le profil lui sera transféré avec tout l'historique
       </div>
-      <button onclick="copierCodeTransfert()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:13px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">📋 Copier le code</button>
+      <button onclick="copierCodeTransfert()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:13px;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">📤 Envoyer le message</button>
       <button onclick="annulerTransfert()" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--danger);cursor:pointer;">🗑 Annuler ce code</button>
     </div>
 
@@ -2891,13 +2891,13 @@ async function genererCodeTransfert(){
   if(!p||!p.notionPageId){
     toast('⚠️ Profil non synchronisé — réessayez dans quelques secondes');return;
   }
-  // Générer code 6 chiffres
+  // TEST MODE : 2 minutes — passer à 48h en production
+  var DUREE_MS=2*60*1000; // 2 min
   var code=String(Math.floor(100000+Math.random()*900000));
-  var expire=new Date(Date.now()+48*3600*1000).toISOString();
+  var expire=new Date(Date.now()+DUREE_MS).toISOString();
 
   toast('⏳ Génération du code...');
   try{
-    // Stocker code + expiration dans la fiche Notion du profil à transférer
     await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
       properties:{
         'Code transfert':{rich_text:[{text:{content:code}}]},
@@ -2905,14 +2905,28 @@ async function genererCodeTransfert(){
       }
     });
     TRANSFERT_CODE_COURANT={code:code,patientId:p.patientId,notionPageId:p.notionPageId,expire:expire};
-    // Sauvegarder aussi en localStorage (accès hors ligne)
     try{localStorage.setItem('dk_transfer_'+p.patientId,JSON.stringify(TRANSFERT_CODE_COURANT));}catch(e){}
-    // Afficher le code
     document.getElementById('transfertCodeVal').textContent=code;
-    document.getElementById('transfertExpire').textContent='48 heures';
+    document.getElementById('transfertExpire').textContent='2 minutes';
     document.getElementById('transfertGenBox').style.display='none';
     document.getElementById('transfertCodeBox').style.display='block';
-    toast('✅ Code généré');
+    toast('✅ Code généré — valable 2 min');
+
+    // Compte à rebours affiché
+    var expireEl=document.getElementById('transfertExpire');
+    var deadline=Date.now()+DUREE_MS;
+    var timer=setInterval(function(){
+      var reste=Math.max(0,deadline-Date.now());
+      var min=Math.floor(reste/60000);
+      var sec=Math.floor((reste%60000)/1000);
+      if(expireEl)expireEl.textContent=min+'m '+String(sec).padStart(2,'0')+'s';
+      if(reste<=0){
+        clearInterval(timer);
+        if(expireEl)expireEl.textContent='Expiré';
+        TRANSFERT_CODE_COURANT=null;
+        toast('⚠️ Code expiré');
+      }
+    },1000);
   }catch(e){
     toast('⚠️ Erreur: '+e.message);
   }
@@ -2921,14 +2935,22 @@ async function genererCodeTransfert(){
 function copierCodeTransfert(){
   if(!TRANSFERT_CODE_COURANT)return;
   var p=PROFILS[SEL];
-  var txt='Code de transfert Dokita : '+TRANSFERT_CODE_COURANT.code+
-    '\nProfil : '+(p?p.prenom+' '+p.nom:'')+
-    '\nValable 48h — à saisir dans Dokita > Récupérer un profil';
+  var nom=p?p.prenom+' '+p.nom:'ce profil';
+  var msg=
+    '👋 Je t\'envoie accès à mon profil médical sur Dokita.\n\n'+
+    '1️⃣ Télécharge l\'app Dokita ici :\n'+
+    'https://heydoc-mu.vercel.app\n\n'+
+    '2️⃣ Crée ton compte, puis va dans :\n'+
+    'Paramètres → Transférer / Récupérer un profil → Récupérer\n\n'+
+    '3️⃣ Saisis ce code : '+TRANSFERT_CODE_COURANT.code+'\n\n'+
+    '⚠️ Code valable 2 minutes seulement.\n'+
+    'Profil : '+nom;
+
   if(navigator.share){
-    navigator.share({title:'Code transfert Dokita',text:txt}).catch(function(){});
+    navigator.share({title:'Code transfert Dokita',text:msg}).catch(function(){});
   } else if(navigator.clipboard){
-    navigator.clipboard.writeText(TRANSFERT_CODE_COURANT.code).then(function(){
-      toast('📋 Code copié !');
+    navigator.clipboard.writeText(msg).then(function(){
+      toast('📋 Message copié — collez-le dans WhatsApp ou SMS');
     });
   } else {
     toast('Code : '+TRANSFERT_CODE_COURANT.code);
