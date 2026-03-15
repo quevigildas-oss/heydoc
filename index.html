@@ -1,18 +1,21 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V3.3
-     DATE    : 2026-03-13
+     VERSION : V4.0
+     DATE    : 2026-03-15
      STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
-     STATUS  : Multi-profils famille + Transfert de profil
+     STATUS  : Workflow complet validé — Phase test
      CHANGELOG:
+       V4.0 — 2026-03-15 : Bouton 🏠 accueil sur tous les écrans
+                           Transfert profil → Paramètres (sélection profil étape 1)
+                           Fix ALD app patient (sync Notion à l'ouverture traitements)
+                           Fix rich_text multi-blocs (4 fonctions txt())
+                           Rechargement Notion sur écrans critiques (espaceProfilScreen)
+                           Badge traitements : "1 actif · 1 ALD"
+                           Fix Patient ID appel d'offre (profil enfant)
+                           Monitoring debug panel : dbg/dbgWarn/dbgError
+                           J'achète moins cher : entre Télécharger et Partager
        V3.3 — 2026-03-13 : Correction bug multi-profils (écrasement PROFILS[0])
-                           Fiche Notion séparée par membre famille
-                           Champs Notion : Compte parent, Lien familial, Code transfert
-                           Écran Transfert de profil (génération code 6 chiffres 48h)
-                           Écran Récupérer un profil (destinataire)
-                           Fix filtre BDD Médecins : select → rich_text
-                           Chargement membres famille depuis Notion au login (Promise.all)
        V3.2 — 2026-03-13 : Écran Traitements chroniques + Sync Notion login
        V3.1 — 2026-03-10 : Workflow consultation complet validé
 ============================================ -->
@@ -3377,7 +3380,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         properties:{
           'ID':{title:[{text:{content:aoId}}]},
           'Consultation ID':{rich_text:[{text:{content:s.notionId||''}}]},
-          'Patient ID':{rich_text:[{text:{content:SESSION_PATIENT_ID||''}}]},
+          'Patient ID':{rich_text:[{text:{content:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||''}}]},
           'Pharmacie Nom':{rich_text:[{text:{content:ph.nom}}]},
           'Pharmacie Tel':{rich_text:[{text:{content:ph.tel}}]},
           'Medicaments':{rich_text:[{text:{content:JSON.stringify(meds)}}]},
