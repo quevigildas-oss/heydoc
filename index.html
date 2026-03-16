@@ -409,39 +409,51 @@ select.finput option{background:var(--bg3);}
       </div>
       <div class="sc-arr">›</div>
     </div>
+
+    <div class="sec-lbl" style="margin-top:16px;margin-bottom:8px;">Près de vous</div>
+
     <div class="space-card sc-medecin" onclick="goMedecin()">
       <div class="sc-ico">🩺</div>
       <div style="flex:1">
-        <div class="sc-title">Médecin</div>
-        <div class="sc-desc">Dossiers patients, validation prescriptions IA</div>
-        <div class="sc-tags"><span class="sc-tag">Référent</span><span class="sc-tag">Note</span><span class="sc-tag">Tarif</span></div>
+        <div class="sc-title">Médecins</div>
+        <div class="sc-desc" id="medecinsDesc">Généralistes et spécialistes à proximité</div>
+        <div class="sc-tags"><span class="sc-tag">Disponibilité</span><span class="sc-tag">Tarif</span><span class="sc-tag">Note</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
     <div class="space-card sc-clinique" onclick="goClinique()">
       <div class="sc-ico">🏥</div>
       <div style="flex:1">
-        <div class="sc-title">Clinique / Hôpital</div>
-        <div class="sc-desc">Trouver un établissement, services disponibles</div>
-        <div class="sc-tags"><span class="sc-tag">Géolocalisation</span><span class="sc-tag">Services</span><span class="sc-tag">Urgences</span></div>
+        <div class="sc-title">Cliniques & Hôpitaux</div>
+        <div class="sc-desc" id="cliniquesDesc">Établissements de santé autour de vous</div>
+        <div class="sc-tags"><span class="sc-tag">Urgences</span><span class="sc-tag">Services</span><span class="sc-tag">Horaires</span></div>
+      </div>
+      <div class="sc-arr">›</div>
+    </div>
+    <div class="space-card" onclick="goCentreSante()" style="cursor:pointer;">
+      <div class="sc-ico">🏨</div>
+      <div style="flex:1">
+        <div class="sc-title">Centres de santé</div>
+        <div class="sc-desc" id="centresDesc">Centres communautaires et dispensaires</div>
+        <div class="sc-tags"><span class="sc-tag">CSU</span><span class="sc-tag">Soins primaires</span><span class="sc-tag">Gratuit</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
     <div class="space-card sc-labo" onclick="goLabo()">
       <div class="sc-ico">🔬</div>
       <div style="flex:1">
-        <div class="sc-title">Laboratoire</div>
-        <div class="sc-desc">Analyses biologiques, résultats et interprétation</div>
-        <div class="sc-tags"><span class="sc-tag">Géolocalisation</span><span class="sc-tag">Résultats</span><span class="sc-tag">IA</span></div>
+        <div class="sc-title">Laboratoires</div>
+        <div class="sc-desc" id="labosDesc">Analyses biologiques et imagerie médicale</div>
+        <div class="sc-tags"><span class="sc-tag">Résultats</span><span class="sc-tag">IA</span><span class="sc-tag">Délai</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
     <div class="space-card sc-pharma" onclick="goPharma()">
       <div class="sc-ico">💊</div>
       <div style="flex:1">
-        <div class="sc-title">Pharmacie</div>
-        <div class="sc-desc">Prescriptions, médicaments, livraison</div>
-        <div class="sc-tags"><span class="sc-tag">Géolocalisation</span><span class="sc-tag">Prescriptions</span><span class="sc-tag">Stock</span></div>
+        <div class="sc-title">Pharmacies</div>
+        <div class="sc-desc" id="pharmasDesc">Médicaments, ordonnances et stock</div>
+        <div class="sc-tags"><span class="sc-tag">Stock</span><span class="sc-tag">Garde</span><span class="sc-tag">Livraison</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
@@ -909,19 +921,12 @@ select.finput option{background:var(--bg3);}
   <div class="sbody">
     <div class="sec-lbl" style="margin-bottom:12px;">Apparence</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;">
-      <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
-        <div>
-          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">🌙 Mode sombre</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Fond foncé — confort nocturne</div>
-        </div>
-        <div class="theme-toggle" id="toggleSombre" onclick="setTheme('dark')"></div>
-      </div>
       <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);">☀️ Mode clair</div>
-          <div style="font-size:11px;color:var(--text2);margin-top:2px;">Fond clair — utilisation en journée</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="themeIco" style="font-size:20px;">☀️</span>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);" id="themeLabel">Mode clair</div>
         </div>
-        <div class="theme-toggle" id="toggleClair" onclick="setTheme('light')"></div>
+        <div class="theme-toggle" id="toggleTheme" onclick="toggleTheme()"></div>
       </div>
     </div>
 
@@ -971,8 +976,8 @@ select.finput option{background:var(--bg3);}
 
     <div class="sec-lbl" style="margin-top:20px;margin-bottom:12px;">À propos</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;">
-      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita V3.3</div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.<br><span style="color:var(--text3);font-size:10px;">13 mars 2026</span></div>
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">Dokita V4.1</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6;">Plateforme médicale IA pour l'Afrique.<br>Spécialisée maladies tropicales & OMS.<br>Outil d'aide à la décision — ne remplace pas un médecin.<br><span style="color:var(--text3);font-size:10px;">16 mars 2026</span></div>
     </div>
   </div>
 </div>
@@ -1384,6 +1389,23 @@ function goMedecin(){window.open('https://heydoc-medecin.vercel.app','_blank');}
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
 function goLabo(){nav('laboScreen');loadGeo('labo');}
 function goPharma(){nav('pharmacieScreen');loadGeo('pharmacie');}
+function goCentreSante(){nav('cliniqueScreen');loadGeo('centre_sante');}
+
+// ── Google Places — préparé, activé quand clé API disponible ──
+// var GOOGLE_PLACES_KEY=''; // TODO : ajouter clé Google Places API
+// Recherche par type : 'doctor' | 'hospital' | 'health' | 'drugstore' | 'pharmacy'
+// function rechercherPlaces(lat,lon,type,rayon){
+//   var url='https://maps.googleapis.com/maps/api/place/nearbysearch/json'+
+//     '?location='+lat+','+lon+'&radius='+(rayon||2000)+'&type='+type+
+//     '&key='+GOOGLE_PLACES_KEY+'&language=fr';
+//   return fetch('/api/places?url='+encodeURIComponent(url)).then(function(r){return r.json();});
+// }
+// Types à utiliser par tuile :
+//   Médecins       → type='doctor'
+//   Cliniques      → type='hospital'
+//   Centres santé  → type='health'
+//   Laboratoires   → type='laboratory' (ou 'health' filtré)
+//   Pharmacies     → type='pharmacy'
 
 // ══════════════════════════════
 // SYNC TRAITEMENTS NOTION → localStorage
@@ -4528,7 +4550,7 @@ var THEMES={
   }
 };
 function initTheme(){
-  var t=localStorage.getItem('dokita_theme')||'dark';
+  var t=localStorage.getItem('dokita_theme')||'light';
   applyThemeVars(t);
 }
 function setTheme(t){
@@ -4536,17 +4558,22 @@ function setTheme(t){
   applyThemeVars(t);
   syncToggles(t);
 }
+function toggleTheme(){
+  var cur=localStorage.getItem('dokita_theme')||'light';
+  setTheme(cur==='light'?'dark':'light');
+}
 function applyThemeVars(t){
-  var vars=THEMES[t]||THEMES.dark;
+  var vars=THEMES[t]||THEMES.light;
   var root=document.documentElement;
   for(var k in vars)root.style.setProperty(k,vars[k]);
 }
 function syncToggles(t){
-  var ts=document.getElementById('toggleSombre');
-  var tc=document.getElementById('toggleClair');
-  if(!ts||!tc)return;
-  if(t==='light'){tc.classList.add('on');ts.classList.remove('on');}
-  else{ts.classList.add('on');tc.classList.remove('on');}
+  var tog=document.getElementById('toggleTheme');
+  var ico=document.getElementById('themeIco');
+  var lbl=document.getElementById('themeLabel');
+  if(tog){if(t==='dark'){tog.classList.add('on');}else{tog.classList.remove('on');}}
+  if(ico)ico.textContent=t==='dark'?'🌙':'☀️';
+  if(lbl)lbl.textContent=t==='dark'?'Mode sombre':'Mode clair';
 }
 function applyTheme(){}
 function openParametres(){
@@ -4554,7 +4581,7 @@ function openParametres(){
   var el=document.getElementById('paramProfilCount');
   if(el)el.textContent=n+' profil'+(n>1?'s':'')+(n?' : '+PROFILS.map(function(p){return p.prenom;}).join(', '):'');
   nav('parametresScreen');
-  syncToggles(localStorage.getItem('dokita_theme')||'dark');
+  syncToggles(localStorage.getItem('dokita_theme')||'light');
   var el2=document.getElementById('paramEmail');if(el2)el2.textContent=SESSION_EMAIL||'';
 }
 function clearAllData(){
