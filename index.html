@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.0
+     VERSION : V4.1
      DATE    : 2026-03-15
      STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
      STATUS  : Workflow complet validé — Phase test
@@ -3843,7 +3843,10 @@ function renderOffres(complete,stops2,toutes){
           '<span style="background:var(--accent);color:var(--bg);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:800;">🥇 MEILLEURE OFFRE COMPLÈTE</span>'+
         '</div>'+
         '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">'+escHtml(complete.pharmNom)+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">'+complete.nbDispo+'/'+complete.nbTotal+' médicaments · '+complete.dist+'km</div>'+
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">'+complete.nbDispo+'/'+complete.nbTotal+' médicaments · '+complete.dist+'km</div>'+
+        '<div style="margin-bottom:12px;">'+complete.items.filter(function(x){return x.disponible;}).map(function(x){
+          return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.medicament)+(x.total?' — <strong style="color:var(--text);">'+x.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
+        }).join('')+'</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'+
           '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
             '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Médicaments</div>'+
