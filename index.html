@@ -4269,13 +4269,14 @@ async function voirOrdonnanceHisto(i){
   var aoStatut='';
   try{
     var aoCheck=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
-      filter:{property:'Consultation ID',rich_text:{contains:s.id||''}},
+      filter:{property:'Consultation ID',rich_text:{equals:s.notionId||''}},
       page_size:1,
       sorts:[{property:'Date reponse',direction:'descending'}]
     });
     if(aoCheck.results&&aoCheck.results.length){
       var aoProps=aoCheck.results[0].properties;
       aoStatut=aoProps['Statut']&&aoProps['Statut'].select?aoProps['Statut'].select.name:'';
+      dbg('aoStatut pour '+s.notionId+': '+aoStatut);
     }
   }catch(e){dbg('aoCheck err: '+e.message);}
 
