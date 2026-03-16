@@ -435,7 +435,7 @@ select.finput option{background:var(--bg3);}
       <div style="flex:1">
         <div class="sc-title">Centres de santé</div>
         <div class="sc-desc" id="centresDesc">Centres communautaires et dispensaires</div>
-        <div class="sc-tags"><span class="sc-tag">CSU</span><span class="sc-tag">Soins primaires</span><span class="sc-tag">Gratuit</span></div>
+        <div class="sc-tags"><span class="sc-tag">Soins primaires</span><span class="sc-tag">Tarif social</span><span class="sc-tag">ESPC</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
@@ -724,7 +724,7 @@ select.finput option{background:var(--bg3);}
 
 <!-- ══ CLINIQUE / HÔPITAL ══ -->
 <div class="screen" id="cliniqueScreen">
-  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico">🏥</div><div style="flex:1"><div class="hdr-title">Cliniques & Hôpitaux</div><div class="hdr-sub" id="cliniqueSubtitle">Recherche en cours...</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
+  <div class="hdr"><div class="hdr-back" onclick="nav('accueilScreen')">←</div><div class="hdr-ico" id="cliniqueScreenIco">🏥</div><div style="flex:1"><div class="hdr-title" id="cliniqueScreenTitre">Cliniques & Hôpitaux</div><div class="hdr-sub" id="cliniqueSubtitle">Recherche en cours...</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="sbody">
     <input class="geo-search" id="cliniqueSearch" placeholder="Rechercher un établissement..." oninput="filterGeo('clinique',this.value)"/>
     <div id="cliniqueList"><div class="no-geo">📍 Activation de la géolocalisation...</div></div>
@@ -1385,27 +1385,49 @@ async function rechargerSessionNotion(){
     return false;
   }
 }
-function goMedecin(){window.open('https://heydoc-medecin.vercel.app','_blank');}
+async function goMedecin(){
+  // 1. Liste médecins réseau Dokita depuis BDD Notion
+  nav('cliniqueScreen');
+  loadGeo('medecin');
+  // Charger médecins Notion en parallèle
+  try{
+    var data=await notionPatientRequest('/databases/'+NOTION_MEDECINS_DB+'/query','POST',{
+      filter:{property:'Statut',select:{equals:'Actif'}},
+      page_size:20
+    });
+    if(data.results&&data.results.length){
+      var mockMedecinsData=data.results.map(function(page){
+        var props=page.properties;
+        function txt(k){var p=props[k];if(!p)return '';
+          if(p.type==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+          if(p.type==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+          if(p.type==='email')return p.email||'';
+          if(p.type==='phone_number')return p.phone_number||'';
+          if(p.type==='select')return p.select?p.select.name:'';
+          if(p.type==='number')return p.number!=null?String(p.number):'';
+          return '';}
+        return {
+          nom:'Dr. '+(txt('Prénom')?txt('Prénom')+' ':'')+txt('Nom'),
+          addr:txt('Adresse cabinet')||txt('Quartier / Zone')||'Abidjan',
+          dist:txt('Zone de couverture')||'',
+          open:true,
+          tel:txt('Numéro de téléphone'),
+          services:[txt('Spécialité')||'Médecin général',txt('Délai moyen RDV')?'RDV: '+txt('Délai moyen RDV'):'',txt('Tarif consultation')?txt('Tarif consultation')+' FCFA':''].filter(Boolean),
+          note:txt('Note moyenne'),
+          consultation_distance:txt('Consultation à distance')==='Oui'
+        };
+      });
+      GEO_DATA['medecin']=mockMedecinsData;
+      renderGeo('medecin',mockMedecinsData);
+    }
+  }catch(e){dbg('goMedecin Notion: '+e.message);}
+  // TODO quand Google Places dispo :
+  // rechercherPlaces(USER_LAT,USER_LNG,'doctor',3000).then(...)
+}
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
 function goLabo(){nav('laboScreen');loadGeo('labo');}
 function goPharma(){nav('pharmacieScreen');loadGeo('pharmacie');}
 function goCentreSante(){nav('cliniqueScreen');loadGeo('centre_sante');}
-
-// ── Google Places — préparé, activé quand clé API disponible ──
-// var GOOGLE_PLACES_KEY=''; // TODO : ajouter clé Google Places API
-// Recherche par type : 'doctor' | 'hospital' | 'health' | 'drugstore' | 'pharmacy'
-// function rechercherPlaces(lat,lon,type,rayon){
-//   var url='https://maps.googleapis.com/maps/api/place/nearbysearch/json'+
-//     '?location='+lat+','+lon+'&radius='+(rayon||2000)+'&type='+type+
-//     '&key='+GOOGLE_PLACES_KEY+'&language=fr';
-//   return fetch('/api/places?url='+encodeURIComponent(url)).then(function(r){return r.json();});
-// }
-// Types à utiliser par tuile :
-//   Médecins       → type='doctor'
-//   Cliniques      → type='hospital'
-//   Centres santé  → type='health'
-//   Laboratoires   → type='laboratory' (ou 'health' filtré)
-//   Pharmacies     → type='pharmacy'
 
 // ══════════════════════════════
 // SYNC TRAITEMENTS NOTION → localStorage
@@ -1522,14 +1544,22 @@ function syncTraitementsDepuisNotion(profil){
 // GÉOLOCALISATION
 // ══════════════════════════════
 var GEO_TYPES={
-  clinique:{query:'hôpital clinique',label:'cliniques et hôpitaux',subtitle:'cliniqueSubtitle',list:'cliniqueList'},
-  labo:{query:'laboratoire analyse biologique',label:'laboratoires',subtitle:'laboSubtitle',list:'laboList'},
-  pharmacie:{query:'pharmacie',label:'pharmacies',subtitle:'pharmacieSubtitle',list:'pharmacieList'}
+  clinique:{query:'hôpital clinique',label:'cliniques et hôpitaux',subtitle:'cliniqueSubtitle',list:'cliniqueList',ico:'🏥',titre:'Cliniques & Hôpitaux'},
+  centre_sante:{query:'centre de santé dispensaire',label:'centres de santé',subtitle:'cliniqueSubtitle',list:'cliniqueList',ico:'🏨',titre:'Centres de santé'},
+  labo:{query:'laboratoire analyse biologique',label:'laboratoires',subtitle:'laboSubtitle',list:'laboList',ico:'🔬',titre:'Laboratoires'},
+  pharmacie:{query:'pharmacie',label:'pharmacies',subtitle:'pharmacieSubtitle',list:'pharmacieList',ico:'💊',titre:'Pharmacies'},
+  medecin:{query:'médecin généraliste',label:'médecins',subtitle:'cliniqueSubtitle',list:'cliniqueList',ico:'🩺',titre:'Médecins'}
 };
 
 function loadGeo(type){
   var cfg=GEO_TYPES[type];
-  if(USER_LAT){renderGeo(type,GEO_DATA[type]);return;}
+  if(!cfg)return;
+  // Adapter le titre et l'icône de l'écran clinique si réutilisé
+  var titrEl=document.getElementById('cliniqueScreenTitre');
+  var icoEl=document.getElementById('cliniqueScreenIco');
+  if(titrEl)titrEl.textContent=cfg.titre||'';
+  if(icoEl)icoEl.textContent=cfg.ico||'🏥';
+  if(USER_LAT){renderGeo(type,GEO_DATA[type]||[]);return;}
   if(!navigator.geolocation){
     document.getElementById(cfg.list).innerHTML='<div class="no-geo">⚠️ Géolocalisation non disponible sur cet appareil</div>';
     document.getElementById(cfg.subtitle).textContent='Géolocalisation indisponible';
@@ -1577,6 +1607,12 @@ function getMockData(type,lat,lng){
   ];
   if(type==='labo')return labo;
   if(type==='pharmacie')return pharma;
+  if(type==='centre_sante')return [
+    {nom:'CSU Plateau',addr:'Rue du Commerce, Plateau',dist:'0.6 km',open:true,tel:'+225 27 20 31 44 00',services:['Soins primaires','Vaccination','CPN']},
+    {nom:'ESPC Cocody',addr:'Avenue de la Corniche, Cocody',dist:'2.2 km',open:true,tel:'+225 27 22 44 51 00',services:['Médecine générale','Planification familiale']},
+    {nom:'Centre de Santé Adjamé',addr:'Rue 12, Adjamé',dist:'3.8 km',open:false,tel:'+225 27 20 37 12 00',services:['Urgences légères','Pansements']}
+  ];
+  if(type==='medecin')return mockMedecins||base;
   return base;
 }
 
