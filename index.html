@@ -3907,9 +3907,22 @@ function renderOffres(complete,stops2,toutes){
             '</div>'+
           '</div>'+
         '</div>'+
-        '<div style="background:var(--card);border:1.5px solid var(--accent2);border-radius:10px;padding:10px;text-align:center;margin-bottom:12px;">'+
-          '<div style="font-size:11px;color:var(--text3);">Total estimé (médicaments + 2 trajets)</div>'+
-          '<div style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:var(--accent2);">'+stops2.total.toLocaleString('fr-FR')+' FCFA</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Médicaments</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--text);">'+(stops2.prixA+stops2.prixB).toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Trajets</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--warn);">'+(stops2.coutTrajetA+stops2.coutTrajetB).toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
+          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;border:1.5px solid var(--accent2);">'+
+            '<div style="font-size:10px;color:var(--accent2);margin-bottom:4px;">TOTAL</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--accent2);">'+stops2.total.toLocaleString('fr-FR')+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
+          '</div>'+
         '</div>'+
         '<button id="btn2stops" style="width:100%;padding:13px;background:var(--accent2);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">✅ Choisir ces 2 pharmacies</button>'+
       '</div>';
