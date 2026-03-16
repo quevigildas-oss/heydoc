@@ -206,6 +206,8 @@ select.finput option{background:var(--bg3);}
 /* ══ GÉOLOC ══ */
 .geo-section{padding:16px;}
 .geo-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;}
+.geo-card.dokita{border:1px solid var(--border);border-left:3px solid var(--accent);}
+.badge-dokita{display:inline-block;background:rgba(0,200,150,.15);border:1px solid rgba(0,200,150,.4);border-radius:5px;padding:1px 7px;font-size:9px;font-weight:700;color:#00A878;}
 .geo-nom{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;}
 .geo-addr{font-size:11px;color:var(--text2);margin-bottom:8px;}
 .geo-badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
@@ -1416,8 +1418,16 @@ async function goMedecin(){
           tel:txt('Numéro de téléphone'),
           services:[txt('Spécialité')||'Médecin général',txt('Délai moyen RDV')?'RDV: '+txt('Délai moyen RDV'):'',txt('Tarif consultation')?txt('Tarif consultation')+' FCFA':''].filter(Boolean),
           note:txt('Note moyenne'),
-          consultation_distance:txt('Consultation à distance')==='Oui'
+          consultation_distance:txt('Consultation à distance')==='Oui',
+          ordre:txt('Numéro d\'ordre médical'),
+          dokita:true // tous les médecins de la BDD Notion sont partenaires Dokita
         };
+      });
+      // Dédupliquer par numéro d'ordre
+      var vus={};
+      mockMedecinsData=mockMedecinsData.filter(function(m){
+        if(!m.ordre||vus[m.ordre])return false;
+        vus[m.ordre]=true;return true;
       });
       GEO_DATA['medecin']=mockMedecinsData;
       renderGeo('medecin',mockMedecinsData);
@@ -1627,13 +1637,17 @@ function renderGeo(type,data){
   }
   var html='';
   data.forEach(function(d){
-    html+='<div class="geo-card">'+
-      '<div class="geo-nom">'+d.nom+'</div>'+
+    var isDokita=!!d.dokita; // flag partenaire Dokita
+    html+='<div class="geo-card'+(isDokita?' dokita':'')+'">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">'+
+        '<div class="geo-nom" style="margin-bottom:0;">'+d.nom+'</div>'+
+        (isDokita?'<span class="badge-dokita">✦ Dokita</span>':'')+
+      '</div>'+
       '<div class="geo-addr">📍 '+d.addr+'</div>'+
       '<div class="geo-badges">'+
         '<span class="geo-badge'+(d.open?' open':'')+'">'+( d.open?'✓ Ouvert':'✗ Fermé')+'</span>'+
         (d.dist?'<span class="geo-badge">📏 '+d.dist+'</span>':'')+
-        d.services.slice(0,2).map(function(s){return '<span class="geo-badge">'+s+'</span>';}).join('')+
+        d.services.slice(0,3).map(function(s){return '<span class="geo-badge">'+s+'</span>';}).join('')+
       '</div>'+
       (d.tel?'<button class="geo-btn" onclick="window.location.href=\'tel:'+d.tel+'\'">📞 Appeler</button>':'')+
       '<button class="geo-btn" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);" onclick="openMaps(\''+d.nom+'\')">🗺 Itinéraire</button>'+
