@@ -84,15 +84,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM San
 
 /* Colors per space */
 .sc-patient .sc-ico{background:rgba(0,200,150,.12);}
-.sc-patient{border-left:3px solid var(--accent);}
+.sc-patient{border:1px solid var(--border);border-left:3px solid var(--accent);}
 .sc-medecin .sc-ico{background:rgba(74,158,255,.12);}
-.sc-medecin{border-left:3px solid var(--accent2);}
+.sc-medecin{border:1px solid var(--border);border-left:3px solid var(--accent2);}
 .sc-clinique .sc-ico{background:rgba(245,166,35,.12);}
-.sc-clinique{border-left:3px solid var(--warn);}
+.sc-clinique{border:1px solid var(--border);border-left:3px solid var(--warn);}
 .sc-labo .sc-ico{background:rgba(180,100,255,.12);}
-.sc-labo{border-left:3px solid #B464FF;}
+.sc-labo{border:1px solid var(--border);border-left:3px solid #B464FF;}
 .sc-pharma .sc-ico{background:rgba(255,77,77,.12);}
-.sc-pharma{border-left:3px solid var(--danger);}
+.sc-pharma{border:1px solid var(--border);border-left:3px solid var(--danger);}
+.sc-centre .sc-ico{background:rgba(16,185,129,.12);}
+.sc-centre{border:1px solid var(--border);border-left:3px solid #10B981;}
 
 .disc{background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:12px;padding:12px;display:flex;gap:8px;margin-top:4px;}
 .disc p{font-size:11px;color:var(--text2);line-height:1.5;}
@@ -417,7 +419,7 @@ select.finput option{background:var(--bg3);}
       <div style="flex:1">
         <div class="sc-title">Médecins</div>
         <div class="sc-desc" id="medecinsDesc">Généralistes et spécialistes à proximité</div>
-        <div class="sc-tags"><span class="sc-tag">Disponibilité</span><span class="sc-tag">Tarif</span><span class="sc-tag">Note</span></div>
+        <div class="sc-tags"><span class="sc-tag" style="background:rgba(0,200,150,.15);color:var(--accent);border:1px solid rgba(0,200,150,.4);">✦ Partenaires Dokita</span><span class="sc-tag">Disponibilité</span><span class="sc-tag">Tarif</span><span class="sc-tag">Note</span></div>
       </div>
       <div class="sc-arr">›</div>
     </div>
@@ -430,7 +432,7 @@ select.finput option{background:var(--bg3);}
       </div>
       <div class="sc-arr">›</div>
     </div>
-    <div class="space-card" onclick="goCentreSante()" style="cursor:pointer;">
+    <div class="space-card sc-centre" onclick="goCentreSante()">
       <div class="sc-ico">🏨</div>
       <div style="flex:1">
         <div class="sc-title">Centres de santé</div>
