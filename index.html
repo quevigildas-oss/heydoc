@@ -1999,7 +1999,7 @@ async function sendMsg(){
     };
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
-    dbg("RAG status="+r.status+" chunks="+( d.chunks_used||0)+" err="+(d.error||''));
+    dbg("RAG status="+r.status+" chunks="+(d.chunks_used||0)+" err="+(d.error||'')+" debug="+JSON.stringify(d.debug||'')+" answerLen="+(d.answer||'').length);
     hideTyping();
     if(d.answer){
       var repClean=d.answer.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();
