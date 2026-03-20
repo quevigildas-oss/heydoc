@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.1
-     DATE    : 2026-03-15
-     STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
-     STATUS  : Workflow complet validé — Phase test
+     VERSION : V4.2
+     DATE    : 2026-03-20
+     STACK   : RAG Supabase pgvector + OpenAI + Claude + Make + Notion
+     STATUS  : Migration RAG Supabase — Relevance AI supprimé
      CHANGELOG:
        V4.0 — 2026-03-15 : Bouton 🏠 accueil sur tous les écrans
                            Transfert profil → Paramètres (sélection profil étape 1)
@@ -1190,8 +1190,7 @@ function genConsultId(patientId){
 // CONFIG
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
-var RA_PROXY='https://heydoc-medecin.vercel.app/api/rag';
-var RA_POLL_PROXY=''; // plus utilisé';
+var RA_PROXY='https://heydoc-medecin.vercel.app/api/rag'; // RAG Supabase pgvector
 var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
 async function poll(sid,jid,ah,maxIter,interval){
@@ -1993,17 +1992,22 @@ async function sendMsg(){
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
   try{
-    var b={message:{role:'user',content:fullTxt}};
-    if(CID)b.conversation_id=CID;
+    // API RAG directe — pas de polling
+    var b={
+      messages: msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user', content:m.text};}),
+      patient: {prenom:p.prenom, nom:p.nom, age:a, poids:p.poids, ville:p.ville}
+    };
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
-    dbg("RA status="+r.status+" keys="+Object.keys(d).join(",")+" detail="+(d.detail||d.message||d.error||""));
-    if(d.conversation_id)CID=d.conversation_id;
-    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
-    dbg("sid="+sid+" jid="+jid);
-    dbg('avant poll sid='+sid+' jid='+jid+' bool='+(!!sid&&!!jid));
-    if(sid&&jid){var rep=await poll(sid,jid);hideTyping();if(rep){var repClean=rep.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();addMsg('ai',repClean);checkDiag(rep);}else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}}
-    else{hideTyping();addMsg('ai','Une erreur est survenue.');}
+    dbg("RAG status="+r.status+" chunks="+( d.chunks_used||0)+" err="+(d.error||''));
+    hideTyping();
+    if(d.answer){
+      var repClean=d.answer.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();
+      addMsg('ai',repClean);
+      checkDiag(d.answer);
+    } else {
+      addMsg('ai', d.error?'Erreur: '+d.error:'Je n\'ai pas pu traiter votre message.');
+    }
   }catch(e){hideTyping();dbg('CATCH: '+e.message+' | '+e.stack);addMsg('ai','Erreur: '+e.message);}
 }
 
@@ -2095,37 +2099,37 @@ async function envoyerDossier(email,nomMed){
   // ── ÉTAPE 1 : résumé JSON via Relevance AI (RESUME_CONSULTATION) ──
   var resume={};
   try{
-    var b={message:{role:'user',content:'RESUME_CONSULTATION'}};
-    if(CID)b.conversation_id=CID;
+    var msgsAvecResume = msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user', content:m.text};});
+    msgsAvecResume.push({role:'user', content:'RESUME_CONSULTATION'});
+    var b={
+      messages: msgsAvecResume,
+      patient: {prenom:p.prenom, nom:p.nom, age:a, poids:p.poids, ville:p.ville}
+    };
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
-    var sid=d.job_info&&d.job_info.studio_id;
-    var jid=d.job_info&&d.job_info.job_id;
-    if(sid&&jid){
-      var rep=await poll(sid,jid,null,150,2000);
-      if(rep){
-        var clean=rep.replace(/```json|```/g,'').trim();
-        var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
-        var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
-        resume=JSON.parse(clean);
-        dbg('RESUME keys='+Object.keys(resume).join(','));
-        // ── Contrôle qualité du résumé ──
-        var champsOMS=['recommandations','medicaments_oms','contre_indications'];
-        var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
-        if(omsMissingCount===3){
-          dbgError('Relevance AI — Tous les champs OMS sont vides (recommandations, médicaments OMS, contre-indications). Claude validera SANS base de référence OMS.');
-        } else if(omsMissingCount>0){
-          dbgWarn('Relevance AI — '+omsMissingCount+' champ(s) OMS incomplet(s). Claude peut improviser partiellement.');
-        } else {
-          dbg('Relevance AI — Champs OMS complets ✅ Claude dispose d\'une base de référence.');
-        }
-        if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
-          dbgWarn('Relevance AI — Diagnostic IA absent ou très court. Claude validera sans contexte diagnostic.');
-        }
+    var rep=d.answer||'';
+    if(rep){
+      var clean=rep.replace(/```json|```/g,'').trim();
+      var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
+      var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
+      resume=JSON.parse(clean);
+      dbg('RESUME keys='+Object.keys(resume).join(','));
+      // ── Contrôle qualité du résumé ──
+      var champsOMS=['recommandations','medicaments_oms','contre_indications'];
+      var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
+      if(omsMissingCount===3){
+        dbgError('RAG — Tous les champs OMS sont vides. Claude validera SANS base de référence OMS.');
+      } else if(omsMissingCount>0){
+        dbgWarn('RAG — '+omsMissingCount+' champ(s) OMS incomplet(s).');
+      } else {
+        dbg('RAG — Champs OMS complets ✅ chunks utilisés: '+(d.chunks_used||0));
+      }
+      if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
+        dbgWarn('RAG — Diagnostic IA absent ou très court.');
       }
     }
   }catch(e){
-    dbgError('Relevance AI — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES. Claude improvisera pour la validation.');
+    dbgError('RAG — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES.');
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
       ville:String(p.ville||'Non renseignee'),voyage:'Aucun',
