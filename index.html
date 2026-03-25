@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.2
-     DATE    : 2026-03-23
-     STACK   : Claude API (RAG Supabase) + Supabase + Vercel Functions
+     VERSION : V4.1
+     DATE    : 2026-03-15
+     STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
      STATUS  : Workflow complet validé — Phase test
      CHANGELOG:
        V4.0 — 2026-03-15 : Bouton 🏠 accueil sur tous les écrans
@@ -681,6 +681,7 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Historique</div><div class="hdr-sub">Consultations précédentes</div></div>
     <div onclick="actualiserStatutConsultations()" style="background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:10px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;">↻ Actualiser</div>
+    <div onclick="effacerHistorique()" title="Effacer" style="width:36px;height:36px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;">🗑️</div>
     <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="histo-list" id="histoList"></div>
@@ -1190,13 +1191,11 @@ function genConsultId(patientId){
 // CONFIG
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
-var RA_PROXY='https://heydoc-medecin.vercel.app/api/rag';
-var SAVE_URL='https://heydoc-medecin.vercel.app/api/save';
-var DB_URL='https://heydoc-medecin.vercel.app/api/db';
+var RA_PROXY='https://heydoc-medecin.vercel.app/api/relevance';
+var RA_POLL_PROXY='https://heydoc-medecin.vercel.app/api/relevance-poll';
+var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
 
-// poll() obsolète — Relevance AI supprimé V4.2 — RA_POLL_PROXY désactivé
 async function poll(sid,jid,ah,maxIter,interval){
-  return null; // désactivé
   maxIter=maxIter||40;
   interval=interval||1500;
   dbg('poll start sid='+sid+' jid='+jid);
@@ -1995,23 +1994,18 @@ async function sendMsg(){
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
   try{
-    // Construire l'historique pour /api/rag
-    var messages=msgs.map(function(m){
-      return {role:m.role==='ai'?'assistant':'user', content:m.text};
-    });
-    var b={messages:messages, patient:{prenom:p.prenom,nom:p.nom,age:a,poids:p.poids,ville:p.ville}};
+    var b={message:{role:'user',content:fullTxt}};
+    if(CID)b.conversation_id=CID;
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
-    dbg("RAG status="+r.status+" answerLen="+(d.answer||'').length+" chunks="+d.chunks_used);
-    hideTyping();
-    if(d.answer){
-      var repClean=d.answer.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();
-      addMsg('ai',repClean);
-      checkDiag(d.answer);
-    } else {
-      addMsg('ai','Je n\'ai pas pu traiter votre message.');
-    }
-  }catch(e){hideTyping();dbg('CATCH: '+e.message);addMsg('ai','Erreur: '+e.message);}
+    dbg("RA status="+r.status+" keys="+Object.keys(d).join(",")+" detail="+(d.detail||d.message||d.error||""));
+    if(d.conversation_id)CID=d.conversation_id;
+    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
+    dbg("sid="+sid+" jid="+jid);
+    dbg('avant poll sid='+sid+' jid='+jid+' bool='+(!!sid&&!!jid));
+    if(sid&&jid){var rep=await poll(sid,jid);hideTyping();if(rep){var repClean=rep.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();addMsg('ai',repClean);checkDiag(rep);}else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}}
+    else{hideTyping();addMsg('ai','Une erreur est survenue.');}
+  }catch(e){hideTyping();dbg('CATCH: '+e.message+' | '+e.stack);addMsg('ai','Erreur: '+e.message);}
 }
 
 
@@ -2027,22 +2021,31 @@ function checkDiag(txt){
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
-    var r=await fetch(DB_URL+'?table=medecins&filter=statut=eq.Actif&filter=partenaire_dokita=eq.true',{
-      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}
+    var data=await notionPatientRequest('/databases/'+NOTION_MEDECINS_DB+'/query','POST',{
+      filter:{property:'Statut',select:{equals:'Actif'}},
+      page_size:20
     });
-    var data=await r.json();
-    if(data&&data.length){
-      NOTION_MEDS=data.map(function(m){
+    if(data.results&&data.results.length){
+      NOTION_MEDS=data.results.map(function(page){
+        var props=page.properties;
+        function txt(k){var p=props[k];if(!p)return '';var t=p.type;
+          if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
+          if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
+          if(t==='email')return p.email||'';
+          if(t==='phone_number')return p.phone_number||'';
+          if(t==='select')return p.select?p.select.name:'';
+          if(t==='number')return p.number!=null?p.number:null;
+          return '';}
         return {
-          nom:m.nom_complet||('Dr. '+(m.prenom||'')+' '+m.nom),
-          specialite:m.specialite||m.type_medecin||'Médecin',
-          tel:m.telephone||'',
-          email:m.email||'',
-          tarif:m.tarif_consultation?(m.tarif_consultation+' '+(m.devise||'FCFA')):'',
-          note:m.note_moyenne||'',
-          referent:false,
-          ville:m.ville||'',
-          distance:m.consultation_distance||false
+          nom:'Dr. '+(txt('Prénom')?txt('Prénom')+' ':'')+txt('Nom'),
+          specialite:txt('Spécialité')||txt('Type de médecin')||'Médecin',
+          tel:txt('Numéro de téléphone'),
+          email:txt('Email'),
+          tarif:txt('Tarif consultation')?(txt('Tarif consultation')+' '+(txt('Devise')||'FCFA')):'',
+          note:txt('Note moyenne')||'',
+          referent:txt('Médecin référent')==='Oui'||txt('Médecin référent')===true,
+          ville:txt('Ville'),
+          distance:txt('Consultation à distance')==='Oui'
         };
       });
       MEDS_LOADED=true;
@@ -2090,40 +2093,40 @@ async function envoyerDossier(email,nomMed){
 
   toast('⏳ Résumé en cours...');
 
-  // ── ÉTAPE 1 : résumé JSON via /api/rag (RESUME_CONSULTATION) ──
+  // ── ÉTAPE 1 : résumé JSON via Relevance AI (RESUME_CONSULTATION) ──
   var resume={};
   try{
-    var msgsAvecResume = msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user', content:m.text};});
-    msgsAvecResume.push({role:'user', content:'RESUME_CONSULTATION'});
-    var b={
-      messages: msgsAvecResume,
-      patient: {prenom:p.prenom, nom:p.nom, age:a, poids:p.poids, ville:p.ville}
-    };
+    var b={message:{role:'user',content:'RESUME_CONSULTATION'}};
+    if(CID)b.conversation_id=CID;
     var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
     var d=await r.json();
-    var rep=d.answer||'';
-    if(rep){
-      var clean=rep.replace(/```json|```/g,'').trim();
-      var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
-      var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
-      resume=JSON.parse(clean);
-      dbg('RESUME keys='+Object.keys(resume).join(','));
-      // ── Contrôle qualité du résumé ──
-      var champsOMS=['recommandations','medicaments_oms','contre_indications'];
-      var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
-      if(omsMissingCount===3){
-        dbgError('RAG — Tous les champs OMS sont vides. Claude validera SANS base de référence OMS.');
-      } else if(omsMissingCount>0){
-        dbgWarn('RAG — '+omsMissingCount+' champ(s) OMS incomplet(s).');
-      } else {
-        dbg('RAG — Champs OMS complets ✅ chunks utilisés: '+(d.chunks_used||0));
-      }
-      if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
-        dbgWarn('RAG — Diagnostic IA absent ou très court.');
+    var sid=d.job_info&&d.job_info.studio_id;
+    var jid=d.job_info&&d.job_info.job_id;
+    if(sid&&jid){
+      var rep=await poll(sid,jid,null,150,2000);
+      if(rep){
+        var clean=rep.replace(/```json|```/g,'').trim();
+        var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
+        var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
+        resume=JSON.parse(clean);
+        dbg('RESUME keys='+Object.keys(resume).join(','));
+        // ── Contrôle qualité du résumé ──
+        var champsOMS=['recommandations','medicaments_oms','contre_indications'];
+        var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
+        if(omsMissingCount===3){
+          dbgError('Relevance AI — Tous les champs OMS sont vides (recommandations, médicaments OMS, contre-indications). Claude validera SANS base de référence OMS.');
+        } else if(omsMissingCount>0){
+          dbgWarn('Relevance AI — '+omsMissingCount+' champ(s) OMS incomplet(s). Claude peut improviser partiellement.');
+        } else {
+          dbg('Relevance AI — Champs OMS complets ✅ Claude dispose d\'une base de référence.');
+        }
+        if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
+          dbgWarn('Relevance AI — Diagnostic IA absent ou très court. Claude validera sans contexte diagnostic.');
+        }
       }
     }
   }catch(e){
-    dbgError('RAG — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES.');
+    dbgError('Relevance AI — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES. Claude improvisera pour la validation.');
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
       ville:String(p.ville||'Non renseignee'),voyage:'Aucun',
@@ -2158,40 +2161,26 @@ async function envoyerDossier(email,nomMed){
     date:dateISO
   };
 
-  // ── ÉTAPE 3 : /api/save → Supabase (remplace Make → Notion) ──
-  var saveOk=false;
+  // ── ÉTAPE 3 : Make → Notion ──
+  var makeOk=false;
   try{
-    var savePayload={
-      patient_id:       payload.patient_id,
-      nom:              payload.patient_nom,
-      age:              payload.patient_age,
-      poids:            payload.patient_poids,
-      ville:            payload.patient_ville,
-      voyage:           payload.patient_voyage,
-      symptomes:        payload.symptomes,
-      diagnostic:       payload.diagnostic_ia,
-      recommandations:  payload.recommandations_oms,
-      examens:          payload.examens_recommandes,
-      medicaments_oms:  payload.medicaments_oms,
-      contre_indications: payload.contre_indications,
-      sources:          payload.sources_oms
-    };
-    var resp=await fetch(SAVE_URL,{
+    var resp=await fetch(MAKE_WEBHOOK,{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-      body:JSON.stringify(savePayload)
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
     });
-    var saveData=await resp.json();
-    saveOk=resp.status>=200&&resp.status<300&&saveData.success;
-    dbg('Save status='+resp.status+' consultation_id='+(saveData.consultation_id||'?')+' is_test='+(saveData.is_test));
-    if(saveOk){
+    makeOk=resp.status>=200&&resp.status<300;
+    dbg('Make status='+resp.status);
+    if(makeOk){
       sauvegarderSession(resume);
+      // Créer fiche patient dans BDD Patients si elle n'existe pas
+      creerOuMettreAJourPatientNotion(patId,p,resume);
     }
-  }catch(e){dbg('Save erreur: '+e.message);}
+  }catch(e){dbg('Make erreur: '+e.message);}
 
   // ── ÉTAPE 4 : message patient ──
   addMsg('ai','Votre dossier a bien été transmis au Dr. '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
-  toast(saveOk?'✅ Dossier envoyé au médecin':'⚠️ Erreur envoi — réessayez');
+  toast(makeOk?'✅ Dossier envoyé au médecin':'⚠️ Erreur envoi — réessayez');
 
   // ── ÉTAPE 5 : email médecin (après 2s pour laisser Make terminer) ──
   var ds=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
@@ -3313,6 +3302,18 @@ async function confirmerRecuperationProfil(){
     btn.textContent='✅ Confirmer et ajouter ce profil';btn.disabled=false;
   }
 }
+function effacerHistorique(){
+  if(!confirm('Effacer tout l\'historique de ce profil ?'))return;
+  try{
+    var key=getHistoKey();
+    localStorage.removeItem(key);
+    // Effacer aussi toutes les clés histo_ au cas où le patientId aurait changé
+    Object.keys(localStorage).filter(function(k){return k.indexOf('histo_')===0;}).forEach(function(k){localStorage.removeItem(k);});
+  }catch(e){}
+  document.getElementById('histoList').innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:14px;">Historique effacé</div>';
+  toast('🗑️ Historique effacé');
+}
+
 function getHistoKey(){var p=PROFILS[SEL];return 'histo_'+(p.patientId||SEL+'_'+(p.prenom||'')+'_'+(p.nom||''));}
 
 function sauvegarderSession(resume){
