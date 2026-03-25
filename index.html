@@ -681,7 +681,6 @@ select.finput option{background:var(--bg3);}
     <div class="hdr-ico">📋</div>
     <div style="flex:1"><div class="hdr-title">Historique</div><div class="hdr-sub">Consultations précédentes</div></div>
     <div onclick="actualiserStatutConsultations()" style="background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.25);border-radius:10px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--accent);cursor:pointer;">↻ Actualiser</div>
-    <div onclick="effacerHistorique()" title="Effacer" style="width:36px;height:36px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;">🗑️</div>
     <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="histo-list" id="histoList"></div>
@@ -1011,94 +1010,53 @@ async function seConnecter(){
   if(!/^\d{4}$/.test(code)){err.textContent='Le code doit contenir 4 chiffres';err.classList.add('on');return;}
   err.textContent='Connexion en cours...';err.classList.add('on');
   try{
-    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Email',email:{equals:email}},page_size:1
+    var r=await fetch(DB_URL+'?table=patients&filter=email=eq.'+encodeURIComponent(email)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    if(!data.results||data.results.length===0){
-      err.textContent='Aucun compte trouvé pour cet email';err.classList.add('on');return;
-    }
-    var page=data.results[0];
-    var props=page.properties;
-    function txt(k){var p=props[k];if(!p)return '';var t=p.type;if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');if(t==='title')return(p.title[0]||{}).plain_text||'';if(t==='email')return p.email||'';if(t==='phone_number')return p.phone_number||'';if(t==='date')return p.date?p.date.start:'';if(t==='number')return p.number!=null?String(p.number):'';if(t==='select')return p.select?p.select.name:'';return '';}
-    var storedCode=txt('Code');
-    if(storedCode!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
-    // Détecter si ce profil a été transféré
-    var codeTransfert=txt('Code transfert');
-    var estTransfere=codeTransfert==='TRANSFERE';
-    // Charger le profil depuis Notion
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){err.textContent='Aucun compte trouvé pour cet email';err.classList.add('on');return;}
+    var p=rows[0];
+    if(p.code_acces!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
     SESSION_EMAIL=email;
-    SESSION_PATIENT_ID=txt('ID Patient');
+    SESSION_PATIENT_ID=p.patient_id||p.id;
     var profilPrincipal={
-      prenom:txt('Prenom'),nom:txt('Nom'),
-      naiss:txt('Date naissance'),
-      tel:txt('Téléphone'),email:email,
-      ville:txt('Ville'),
-      poids:txt('Poids'),
-      sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',
-      allergies:txt('Allergies'),
-      antecedents:txt('Antécédents'),
-      traitements:txt('Traitements réguliers'),
-      patientId:SESSION_PATIENT_ID,
-      notionPageId:page.id,
-      lien:'moi',compteParent:'',
-      transfere:estTransfere
+      prenom:p.prenom||'',nom:p.nom||'',naiss:p.date_naissance||'',
+      tel:p.telephone||'',email:email,ville:p.ville||'',
+      poids:p.poids?String(p.poids):'',
+      sx:p.sexe==='Masculin'?'H':p.sexe==='Féminin'?'F':'',
+      allergies:p.allergies||'',antecedents:p.antecedents||'',
+      traitements:p.traitements_reguliers||'',
+      patientId:SESSION_PATIENT_ID,supabaseId:p.id,
+      lien:'moi',compteParent:'',transfere:false
     };
-
-    // ── Charger membres famille en parallèle (non bloquant) ──
-    // On affiche d'abord le profil principal, les membres arrivent après
     PROFILS=[profilPrincipal];SEL=0;
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
-    syncTraitementsDepuisNotion(profilPrincipal);
+    if(profilPrincipal.traitements)syncTraitementsDepuisNotion(profilPrincipal);
     nav('accueilScreen');
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
-
-    // Charger les membres en arrière-plan sans bloquer l'UI
-    // Double filtre : Email et rich_text pour couvrir les deux types de champ Notion
-    Promise.all([
-      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-        filter:{property:'Compte parent',email:{equals:email}},
-        page_size:10
-      }).catch(function(){return {results:[]};}),
-      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-        filter:{property:'Compte parent',rich_text:{equals:email}},
-        page_size:10
-      }).catch(function(){return {results:[]};})
-    ]).then(function(res){
-      // Fusionner les résultats et dédupliquer par notionPageId
-      var tous=(res[0].results||[]).concat(res[1].results||[]);
-      var vus={};
-      var dataMembres={results:tous.filter(function(p){
-        if(vus[p.id])return false;vus[p.id]=true;return true;
-      })};
-      if(!dataMembres.results.length)return;
-      var membres=dataMembres.results.map(function(mp){
-        var pp=mp.properties;
-        function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
-          if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
-          if(t==='title')return(p.title[0]||{}).plain_text||'';
-          if(t==='email')return p.email||'';
-          if(t==='phone_number')return p.phone_number||'';
-          if(t==='date')return p.date?p.date.start:'';
-          if(t==='number')return p.number!=null?String(p.number):'';
-          if(t==='select')return p.select?p.select.name:'';
-          return '';}
-        var lienNotion=t2('Lien familial');
-        var lienKey='autre';
-        Object.keys(LIENS).forEach(function(k){if(LIENS[k]===lienNotion)lienKey=k;});
+    // Membres famille en arrière-plan
+    fetch(DB_URL+'?table=patients&filter=compte_parent=eq.'+encodeURIComponent(email)+'&limit=10',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    }).then(function(rf){return rf.json();}).then(function(dataF){
+      var famille=Array.isArray(dataF)?dataF:(dataF.data||[]);
+      if(!famille.length)return;
+      var membres=famille.map(function(mp){
         return {
-          prenom:t2('Prenom'),nom:t2('Nom'),naiss:t2('Date naissance'),
-          tel:t2('Téléphone'),email:'',ville:t2('Ville'),
-          poids:t2('Poids'),sx:t2('Sexe')==='Masculin'?'H':t2('Sexe')==='Féminin'?'F':'',
-          allergies:t2('Allergies'),antecedents:t2('Antécédents'),
-          traitements:t2('Traitements réguliers'),
-          patientId:t2('ID Patient'),notionPageId:mp.id,
-          lien:lienKey,compteParent:email
+          prenom:mp.prenom||'',nom:mp.nom||'',naiss:mp.date_naissance||'',
+          tel:mp.telephone||'',email:'',ville:mp.ville||'',
+          poids:mp.poids?String(mp.poids):'',
+          sx:mp.sexe==='Masculin'?'H':mp.sexe==='Féminin'?'F':'',
+          allergies:mp.allergies||'',antecedents:mp.antecedents||'',
+          traitements:mp.traitements_reguliers||'',
+          patientId:mp.patient_id||mp.id,supabaseId:mp.id,
+          lien:mp.lien_familial||'autre',compteParent:email
         };
       });
       PROFILS=[profilPrincipal].concat(membres);
       saveProfils();
-      renderProfils(); // rafraîchir si l'écran profils est visible
+      renderProfils();
       dbg('Membres famille chargés: '+membres.length);
     }).catch(function(e){dbg('Membres ERR: '+e.message);});
   }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
@@ -1116,19 +1074,16 @@ async function creerCompte(){
   if(code!==code2){err.textContent='Les codes ne correspondent pas';err.classList.add('on');return;}
   err.textContent='Vérification en cours...';err.classList.add('on');
   try{
-    // Vérifier si email déjà utilisé
-    var check=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:{property:'Email',email:{equals:email}},page_size:1
+    var r=await fetch(DB_URL+'?table=patients&filter=email=eq.'+encodeURIComponent(email)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    if(check.results&&check.results.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
-
-    // ── Ne pas créer de fiche Notion ici ──
-    // La fiche sera créée dans saveProfil() avec toutes les infos complètes
-    // On stocke juste le code en session temporaire
+    var check=await r.json();
+    var existing=Array.isArray(check)?check:(check.data||[]);
+    if(existing.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
     SESSION_EMAIL=email;
     SESSION_PATIENT_ID='';
-    SESSION_CODE_TEMP=code; // code temporaire → sera écrit dans Notion avec la fiche complète
-    PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',notionPageId:''}];
+    SESSION_CODE_TEMP=code;
+    PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',supabaseId:''}];
     SEL=0;
     err.className='login-err';
     nav('addProfilScreen');
@@ -1191,51 +1146,9 @@ function genConsultId(patientId){
 // CONFIG
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
-var RA_PROXY='https://heydoc-medecin.vercel.app/api/relevance';
-var RA_POLL_PROXY='https://heydoc-medecin.vercel.app/api/relevance-poll';
-var MAKE_WEBHOOK='https://hook.eu1.make.com/dvv6uq6w32qreff3h2g0dy00jeksnjxz';
-
-async function poll(sid,jid,ah,maxIter,interval){
-  maxIter=maxIter||40;
-  interval=interval||1500;
-  dbg('poll start sid='+sid+' jid='+jid);
-  for(var i=0;i<maxIter;i++){
-    await new Promise(function(r){setTimeout(r,i<5?800:interval);});
-    dbg('poll iter='+i);
-    try{
-      var r=await fetch(RA_POLL_PROXY+'?sid='+encodeURIComponent(sid)+'&jid='+encodeURIComponent(jid),{headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}});
-      var d=await r.json();
-      if(i===0)dbg('poll[0] status='+r.status+' keys='+Object.keys(d).join(','));
-      if(i===0&&d.updates&&d.updates.length)dbg('poll[0] update types='+d.updates.map(function(u){return u.type;}).join(','));
-      var updates=d.updates||[];
-      for(var up of updates){
-        if(up.type==='agent-complete'){
-          if(up.output&&up.output.answer)return up.output.answer;
-          if(up.output&&up.output.output)return up.output.output;
-          if(up.message&&up.message.content)return up.message.content;
-        }
-        if(up.type==='chain-success'){
-          var o=up.output||{};
-          var inner=o.output||{};
-          if(typeof inner==='string'&&inner.length>10)return inner;
-          if(inner.answer&&typeof inner.answer==='string')return inner.answer;
-          if(inner.response&&typeof inner.response==='string')return inner.response;
-          if(inner.text&&typeof inner.text==='string')return inner.text;
-          for(var k in inner){if(typeof inner[k]==='string'&&inner[k].length>30)return inner[k];}
-          for(var k2 in o){if(typeof o[k2]==='string'&&o[k2].length>30)return o[k2];}
-        }
-        if(up.type==='message'&&up.message&&up.message.role==='assistant'){
-          if(up.message.content)return up.message.content;
-        }
-      }
-      if(d.output&&d.output.answer)return d.output.answer;
-      if(d.answer)return d.answer;
-      if(d.status==='failed')break;
-      if(d.status==='complete'&&i>2)break;
-    }catch(e){}
-  }
-  return null;
-}
+var RAG_URL   ='https://heydoc-medecin.vercel.app/api/rag';
+var SAVE_URL  ='https://heydoc-medecin.vercel.app/api/save';
+var DB_URL    ='https://heydoc-medecin.vercel.app/api/db';
 
 // ══════════════════════════════
 // STATE
@@ -1286,104 +1199,54 @@ function goPatient(){if(!SESSION_EMAIL){nav('loginScreen');return;}renderProfils
 async function rechargerSessionNotion(){
   if(!SESSION_EMAIL)return false;
   try{
-    // ── Lancement parallèle des 3 requêtes Notion ──
-    var results=await Promise.all([
-      // Requête 1 : profil principal (par email)
-      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-        filter:{property:'Email',email:{equals:SESSION_EMAIL}},
-        page_size:1
-      }),
-      // Requête 2a : membres famille (Compte parent = Email)
-      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-        filter:{property:'Compte parent',email:{equals:SESSION_EMAIL}},
-        page_size:10
-      }).catch(function(){return {results:[]};}),
-      // Requête 2b : membres famille (Compte parent = Text) — fallback si champ mal typé
-      notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-        filter:{property:'Compte parent',rich_text:{equals:SESSION_EMAIL}},
-        page_size:10
-      }).catch(function(){return {results:[]};})
-    ]);
-
-    var dataPrincipal=results[0];
-    // Fusionner 2a + 2b et dédupliquer
-    var tousMembers=(results[1].results||[]).concat(results[2].results||[]);
-    var vus={};
-    var dataMembres={results:tousMembers.filter(function(p){
-      if(vus[p.id])return false;vus[p.id]=true;return true;
-    })};
-
-    if(!dataPrincipal.results||!dataPrincipal.results.length)return false;
-
-    // ── Parser le profil principal ──
-    var page=dataPrincipal.results[0];
-    var props=page.properties;
-    function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-      if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
-      if(t==='title')return(p.title[0]||{}).plain_text||'';
-      if(t==='email')return p.email||'';
-      if(t==='phone_number')return p.phone_number||'';
-      if(t==='date')return p.date?p.date.start:'';
-      if(t==='number')return p.number!=null?String(p.number):'';
-      if(t==='select')return p.select?p.select.name:'';
-      return '';}
-    SESSION_PATIENT_ID=txt('ID Patient');
-    var codeTransfert=txt('Code transfert');
-    var estTransfere=codeTransfert==='TRANSFERE';
-    var profilPrincipal={
-      prenom:txt('Prenom'),nom:txt('Nom'),naiss:txt('Date naissance'),
-      tel:txt('Téléphone'),email:SESSION_EMAIL,ville:txt('Ville'),
-      poids:txt('Poids'),sx:txt('Sexe')==='Masculin'?'H':txt('Sexe')==='Féminin'?'F':'',
-      allergies:txt('Allergies'),antecedents:txt('Antécédents'),
-      traitements:txt('Traitements réguliers'),
-      patientId:SESSION_PATIENT_ID,notionPageId:page.id,
-      lien:'moi',compteParent:'',
-      transfere:estTransfere
-    };
-
-    // ── Parser les membres famille depuis Notion ──
-    var membres=[];
-    if(dataMembres.results&&dataMembres.results.length){
-      membres=dataMembres.results.map(function(mp){
-        var pp=mp.properties;
-        function t2(k){var p=pp[k];if(!p)return '';var t=p.type;
-          if(t==='rich_text')return(p.rich_text||[]).map(function(b){return b.plain_text||'';}).join('');
-          if(t==='title')return(p.title[0]||{}).plain_text||'';
-          if(t==='email')return p.email||'';
-          if(t==='phone_number')return p.phone_number||'';
-          if(t==='date')return p.date?p.date.start:'';
-          if(t==='number')return p.number!=null?String(p.number):'';
-          if(t==='select')return p.select?p.select.name:'';
-          return '';}
-        var lienNotion=t2('Lien familial');
-        // Retrouver la clé interne depuis le libellé Notion
-        var lienKey='autre';
-        Object.keys(LIENS).forEach(function(k){if(LIENS[k]===lienNotion)lienKey=k;});
-        var codeT=t2('Code transfert');
-        return {
-          prenom:t2('Prenom'),nom:t2('Nom'),naiss:t2('Date naissance'),
-          tel:t2('Téléphone'),email:'',ville:t2('Ville'),
-          poids:t2('Poids'),sx:t2('Sexe')==='Masculin'?'H':t2('Sexe')==='Féminin'?'F':'',
-          allergies:t2('Allergies'),antecedents:t2('Antécédents'),
-          traitements:t2('Traitements réguliers'),
-          patientId:t2('ID Patient'),notionPageId:mp.id,
-          lien:lienKey,compteParent:SESSION_EMAIL,
-          transfere:false // membre famille → toujours accessible chez le destinataire
-        };
-      });
+    // Chercher profil principal par email
+    var r=await fetch(DB_URL+'?table=patients&filter=email=eq.'+encodeURIComponent(SESSION_EMAIL)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){
+      // Fallback localStorage
+      var profilsLocaux=[];
+      try{var _p=localStorage.getItem('hd_profils');if(_p)profilsLocaux=JSON.parse(_p);}catch(e2){}
+      if(profilsLocaux.length){PROFILS=profilsLocaux;SEL=0;return true;}
+      return false;
     }
-
-    // ── Fusionner : principal + membres Notion ──
+    var p=rows[0];
+    SESSION_PATIENT_ID=p.patient_id||p.id;
+    var profilPrincipal={
+      prenom:p.prenom||'',nom:p.nom||'',naiss:p.date_naissance||'',
+      tel:p.telephone||'',email:SESSION_EMAIL,ville:p.ville||'',
+      poids:p.poids?String(p.poids):'',sx:p.sexe==='Masculin'?'H':p.sexe==='Féminin'?'F':'',
+      allergies:p.allergies||'',antecedents:p.antecedents||'',
+      traitements:p.traitements_reguliers||'',
+      patientId:SESSION_PATIENT_ID,supabaseId:p.id,
+      lien:'moi',compteParent:'',transfere:false
+    };
+    // Chercher membres famille (compte_parent = email)
+    var rf=await fetch(DB_URL+'?table=patients&filter=compte_parent=eq.'+encodeURIComponent(SESSION_EMAIL)+'&limit=10',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var dataF=await rf.json();
+    var famille=Array.isArray(dataF)?dataF:(dataF.data||[]);
+    var membres=famille.map(function(mp){
+      return {
+        prenom:mp.prenom||'',nom:mp.nom||'',naiss:mp.date_naissance||'',
+        tel:mp.telephone||'',email:'',ville:mp.ville||'',
+        poids:mp.poids?String(mp.poids):'',sx:mp.sexe==='Masculin'?'H':mp.sexe==='Féminin'?'F':'',
+        allergies:mp.allergies||'',antecedents:mp.antecedents||'',
+        traitements:mp.traitements_reguliers||'',
+        patientId:mp.patient_id||mp.id,supabaseId:mp.id,
+        lien:mp.lien_familial||'autre',compteParent:SESSION_EMAIL,transfere:false
+      };
+    });
     PROFILS=[profilPrincipal].concat(membres);
     SEL=0;
-    saveProfils(); // mettre à jour localStorage = cache
-
-    // ── Sync traitements ALD — profil principal seulement si non transféré ──
-    if(!PROFILS[0].transfere) syncTraitementsDepuisNotion(PROFILS[0]);
+    saveProfils();
+    if(profilPrincipal.traitements)syncTraitementsDepuisNotion(profilPrincipal);
     return true;
   }catch(e){
     dbg('rechargerSession ERR: '+e.message);
-    // Fallback : utiliser localStorage si Notion échoue
     var profilsLocaux=[];
     try{var _p=localStorage.getItem('hd_profils');if(_p)profilsLocaux=JSON.parse(_p);}catch(e2){}
     if(profilsLocaux.length){PROFILS=profilsLocaux;SEL=0;return true;}
@@ -1391,40 +1254,33 @@ async function rechargerSessionNotion(){
   }
 }
 async function goMedecin(){
-  // 1. Liste médecins réseau Dokita depuis BDD Notion
   nav('cliniqueScreen');
   loadGeo('medecin');
-  // Charger médecins Notion en parallèle
   try{
-    var data=await notionPatientRequest('/databases/'+NOTION_MEDECINS_DB+'/query','POST',{
-      filter:{property:'Statut',select:{equals:'Actif'}},
-      page_size:20
+    var r=await fetch(DB_URL+'?table=medecins&filter=statut=eq.Actif&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    if(data.results&&data.results.length){
-      var mockMedecinsData=data.results.map(function(page){
-        var props=page.properties;
-        function txt(k){var p=props[k];if(!p)return '';
-          if(p.type==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-          if(p.type==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
-          if(p.type==='email')return p.email||'';
-          if(p.type==='phone_number')return p.phone_number||'';
-          if(p.type==='select')return p.select?p.select.name:'';
-          if(p.type==='number')return p.number!=null?String(p.number):'';
-          return '';}
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length){
+      var mockMedecinsData=rows.map(function(med){
         return {
-          nom:'Dr. '+(txt('Prénom')?txt('Prénom')+' ':'')+txt('Nom'),
-          addr:txt('Adresse cabinet')||txt('Quartier / Zone')||'Abidjan',
-          dist:txt('Zone de couverture')||'',
+          nom:'Dr. '+(med.prenom?med.prenom+' ':'')+med.nom,
+          addr:med.quartier||med.ville||'Abidjan',
+          dist:med.zone_couverture_km?med.zone_couverture_km+'km':'',
           open:true,
-          tel:txt('Numéro de téléphone'),
-          services:[txt('Spécialité')||'Médecin général',txt('Délai moyen RDV')?'RDV: '+txt('Délai moyen RDV'):'',txt('Tarif consultation')?txt('Tarif consultation')+' FCFA':''].filter(Boolean),
-          note:txt('Note moyenne'),
-          consultation_distance:txt('Consultation à distance')==='Oui',
-          ordre:txt('Numéro d\'ordre médical'),
-          dokita:true // tous les médecins de la BDD Notion sont partenaires Dokita
+          tel:med.telephone||med.whatsapp||'',
+          services:[
+            med.specialite||'Médecin général',
+            med.delai_moyen_rdv?'RDV: '+med.delai_moyen_rdv+'j':'',
+            med.tarif_consultation?med.tarif_consultation+' '+(med.devise||'FCFA'):''
+          ].filter(Boolean),
+          note:med.note_moyenne||'',
+          consultation_distance:med.consultation_distance||false,
+          ordre:med.numero_ordre||'',
+          dokita:med.partenaire_dokita||false
         };
       });
-      // Dédupliquer par numéro d'ordre
       var vus={};
       mockMedecinsData=mockMedecinsData.filter(function(m){
         if(!m.ordre||vus[m.ordre])return false;
@@ -1433,9 +1289,7 @@ async function goMedecin(){
       GEO_DATA['medecin']=mockMedecinsData;
       renderGeo('medecin',mockMedecinsData);
     }
-  }catch(e){dbg('goMedecin Notion: '+e.message);}
-  // TODO quand Google Places dispo :
-  // rechercherPlaces(USER_LAT,USER_LNG,'doctor',3000).then(...)
+  }catch(e){dbg('goMedecin Supabase: '+e.message);}
 }
 function goClinique(){nav('cliniqueScreen');loadGeo('clinique');}
 function goLabo(){nav('laboScreen');loadGeo('labo');}
@@ -1832,64 +1686,79 @@ function saveProfil(){
     email:document.getElementById('fEmail').value||'',
     ville:document.getElementById('fVille').value||'',
     lien:document.getElementById('fLien').value||'moi'};
+
   if(EDIT_I>=0){
-    // ── Modification d'un profil existant ──
+    // ── Modification profil existant → PATCH Supabase ──
     var oldP=PROFILS[EDIT_I];
     p.patientId=oldP.patientId||genPatientId(pr,no,na);
-    p.notionPageId=oldP.notionPageId||'';
+    p.supabaseId=oldP.supabaseId||'';
     p.email=oldP.email||SESSION_EMAIL||'';
     p.compteParent=oldP.compteParent||'';
     PROFILS[EDIT_I]=p;
     saveProfils();renderProfils();
-    mettreAJourProfilNotion(p);
+    mettreAJourProfilNotion(p); // mettreAJourProfilNotion est déjà migré vers Supabase
     nav('profilsScreen');toast('✅ Profil modifié');
+
   } else {
     var lien=document.getElementById('fLien').value||'moi';
     p.patientId=genPatientId(pr,no,na);
     p.lien=lien;
 
-    if(lien==='moi'&&!PROFILS[0].notionPageId){
-      // ── Première création de profil "moi-même" après creerCompte() ──
-      // Créer la fiche Notion complète maintenant (avec email + code + toutes les infos)
+    if(lien==='moi'&&!PROFILS[0].supabaseId){
+      // ── Première création compte "moi" → INSERT Supabase ──
       p.email=SESSION_EMAIL;
-      p.notionPageId='';
+      p.supabaseId='';
       p.compteParent='';
-      PROFILS[0]=p;
-      SEL=0;
+      PROFILS[0]=p;SEL=0;
       saveProfils();renderProfils();
       nav('profilsScreen');
       toast('⏳ Enregistrement...');
-      // Créer fiche Notion complète avec email + code + profil
-      creerFicheProfilComplet(p,SESSION_CODE_TEMP).then(function(pageId){
-        if(pageId){
-          PROFILS[0].notionPageId=pageId;
+      // INSERT dans Supabase
+      var body={
+        prenom:pr,nom:no,
+        nom_complet:(pr+' '+no).trim(),
+        date_naissance:na,
+        sexe:SX==='H'?'Masculin':SX==='F'?'Féminin':'',
+        poids:parseFloat(p.poids)||0,
+        telephone:p.tel||'',
+        email:SESSION_EMAIL,
+        ville:p.ville||'',
+        patient_id:p.patientId,
+        code_acces:SESSION_CODE_TEMP,
+        lien_familial:'moi'
+      };
+      fetch(DB_URL+'?table=patients',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify(body)
+      }).then(function(r){return r.json();}).then(function(data){
+        var row=Array.isArray(data)?data[0]:data;
+        if(row&&row.id){
+          PROFILS[0].supabaseId=row.id;
           SESSION_PATIENT_ID=p.patientId;
           try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:p.patientId}));}catch(e){}
           saveProfils();
           toast('✅ Profil créé !');
-          dbg('Fiche profil créée: '+pageId);
+          dbg('Fiche profil créée: '+row.id);
         } else {
-          toast('⚠️ Erreur sync Notion — réessayez plus tard');
+          toast('⚠️ Erreur création profil');
+          dbg('saveProfil INSERT err: '+JSON.stringify(data).slice(0,100));
         }
         SESSION_CODE_TEMP='';
+      }).catch(function(e){
+        toast('⚠️ Erreur réseau');
+        dbg('saveProfil ERR: '+e.message);
+        SESSION_CODE_TEMP='';
       });
+
     } else {
-      // ── Nouveau membre famille ──
-      p.email='';
-      p.notionPageId='';
-      p.compteParent=SESSION_EMAIL;
-      PROFILS.push(p);
-      SEL=PROFILS.length-1;
+      // ── Nouveau membre famille → stub (session suivante) ──
+      p.email='';p.supabaseId='';p.compteParent=SESSION_EMAIL;
+      PROFILS.push(p);SEL=PROFILS.length-1;
       saveProfils();renderProfils();
-      creerFicheMembreFamille(p).then(function(pageId){
-        if(pageId){
-          p.notionPageId=pageId;
-          PROFILS[SEL].notionPageId=pageId;
-          saveProfils();
-          dbg('Fiche membre créée: '+pageId);
-        }
-      });
-      nav('profilsScreen');toast('✅ Profil ajouté — '+(lien==='moi'?'Vous-même':LIENS[lien]||lien));
+      nav('profilsScreen');
+      toast('✅ Profil ajouté localement — sync famille en cours de migration');
+      dbgWarn('creerFicheMembreFamille — migration pending');
     }
   }
 }
@@ -1993,19 +1862,26 @@ async function sendMsg(){
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
+  // Construire historique messages pour /api/rag
+  var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
+  messages.push({role:'user',content:fullTxt});
   try{
-    var b={message:{role:'user',content:fullTxt}};
-    if(CID)b.conversation_id=CID;
-    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
+    var r=await fetch(RAG_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({messages:messages,isResume:false})
+    });
     var d=await r.json();
-    dbg("RA status="+r.status+" keys="+Object.keys(d).join(",")+" detail="+(d.detail||d.message||d.error||""));
-    if(d.conversation_id)CID=d.conversation_id;
-    var sid=d.job_info&&d.job_info.studio_id,jid=d.job_info&&d.job_info.job_id;
-    dbg("sid="+sid+" jid="+jid);
-    dbg('avant poll sid='+sid+' jid='+jid+' bool='+(!!sid&&!!jid));
-    if(sid&&jid){var rep=await poll(sid,jid);hideTyping();if(rep){var repClean=rep.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();addMsg('ai',repClean);checkDiag(rep);}else{addMsg('ai','Je n\'ai pas pu traiter votre message.');}}
-    else{hideTyping();addMsg('ai','Une erreur est survenue.');}
-  }catch(e){hideTyping();dbg('CATCH: '+e.message+' | '+e.stack);addMsg('ai','Erreur: '+e.message);}
+    hideTyping();
+    var rep=d.answer||d.response||d.text||'';
+    if(rep){
+      var repClean=rep.replace(/===MEDECIN===[\s\S]*?===FIN===/g,'').replace(/Remarque importante[\s\S]*$/m,'').trim();
+      addMsg('ai',repClean);
+      checkDiag(rep);
+    } else {
+      addMsg('ai','Je n\'ai pas pu traiter votre message.');
+    }
+  }catch(e){hideTyping();dbg('CATCH: '+e.message);addMsg('ai','Erreur: '+e.message);}
 }
 
 
@@ -2021,41 +1897,29 @@ function checkDiag(txt){
 async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
-    var data=await notionPatientRequest('/databases/'+NOTION_MEDECINS_DB+'/query','POST',{
-      filter:{property:'Statut',select:{equals:'Actif'}},
-      page_size:20
+    var r=await fetch(DB_URL+'?table=medecins&filter=statut=eq.Actif&filter2=partenaire_dokita=eq.true&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    if(data.results&&data.results.length){
-      NOTION_MEDS=data.results.map(function(page){
-        var props=page.properties;
-        function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-          if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-          if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
-          if(t==='email')return p.email||'';
-          if(t==='phone_number')return p.phone_number||'';
-          if(t==='select')return p.select?p.select.name:'';
-          if(t==='number')return p.number!=null?p.number:null;
-          return '';}
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length){
+      NOTION_MEDS=rows.map(function(med){
         return {
-          nom:'Dr. '+(txt('Prénom')?txt('Prénom')+' ':'')+txt('Nom'),
-          specialite:txt('Spécialité')||txt('Type de médecin')||'Médecin',
-          tel:txt('Numéro de téléphone'),
-          email:txt('Email'),
-          tarif:txt('Tarif consultation')?(txt('Tarif consultation')+' '+(txt('Devise')||'FCFA')):'',
-          note:txt('Note moyenne')||'',
-          referent:txt('Médecin référent')==='Oui'||txt('Médecin référent')===true,
-          ville:txt('Ville'),
-          distance:txt('Consultation à distance')==='Oui'
+          nom:'Dr. '+(med.prenom?med.prenom+' ':'')+med.nom,
+          specialite:med.specialite||med.type_medecin||'Médecin',
+          tel:med.telephone||med.whatsapp||'',
+          email:med.email||'',
+          tarif:med.tarif_consultation?(med.tarif_consultation+' '+(med.devise||'FCFA')):'',
+          note:med.note_moyenne||'',
+          ville:med.ville||'',
+          distance:med.consultation_distance||false,
+          supabaseId:med.id
         };
       });
       MEDS_LOADED=true;
       renderMeds(NOTION_MEDS);
-      return;
     }
-  }catch(e){dbg('loadMeds err: '+e.message);}
-  // Fallback
-  NOTION_MEDS=[{nom:'Dr. Kouassi Amed',specialite:'Infectiologue',tel:'+225 07 12 34 56',email:'amed.kouassi@gmail.com',tarif:'15000 FCFA',note:'4.8',referent:true}];
-  MEDS_LOADED=true;renderMeds(NOTION_MEDS);
+  }catch(e){dbg('loadMeds erreur: '+e.message);}
 }
 
 function renderMeds(list){
@@ -2081,7 +1945,7 @@ function renderMeds(list){
 }
 
 // ══════════════════════════════
-// ENVOI DOSSIER → NOTION
+// ENVOI DOSSIER → SUPABASE
 // ══════════════════════════════
 async function envoyerDossier(email,nomMed){
   var p=CURRENT;
@@ -2093,40 +1957,32 @@ async function envoyerDossier(email,nomMed){
 
   toast('⏳ Résumé en cours...');
 
-  // ── ÉTAPE 1 : résumé JSON via Relevance AI (RESUME_CONSULTATION) ──
+  // ── ÉTAPE 1 : résumé JSON via /api/rag ──
   var resume={};
   try{
-    var b={message:{role:'user',content:'RESUME_CONSULTATION'}};
-    if(CID)b.conversation_id=CID;
-    var r=await fetch(RA_PROXY,{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(b)});
+    var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
+    messages.push({role:'user',content:'RESUME_CONSULTATION'});
+    var r=await fetch(RAG_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({messages:messages,isResume:true})
+    });
     var d=await r.json();
-    var sid=d.job_info&&d.job_info.studio_id;
-    var jid=d.job_info&&d.job_info.job_id;
-    if(sid&&jid){
-      var rep=await poll(sid,jid,null,150,2000);
-      if(rep){
-        var clean=rep.replace(/```json|```/g,'').trim();
-        var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
-        var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
-        resume=JSON.parse(clean);
-        dbg('RESUME keys='+Object.keys(resume).join(','));
-        // ── Contrôle qualité du résumé ──
-        var champsOMS=['recommandations','medicaments_oms','contre_indications'];
-        var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
-        if(omsMissingCount===3){
-          dbgError('Relevance AI — Tous les champs OMS sont vides (recommandations, médicaments OMS, contre-indications). Claude validera SANS base de référence OMS.');
-        } else if(omsMissingCount>0){
-          dbgWarn('Relevance AI — '+omsMissingCount+' champ(s) OMS incomplet(s). Claude peut improviser partiellement.');
-        } else {
-          dbg('Relevance AI — Champs OMS complets ✅ Claude dispose d\'une base de référence.');
-        }
-        if(!resume.diagnostic||String(resume.diagnostic).trim().length<10){
-          dbgWarn('Relevance AI — Diagnostic IA absent ou très court. Claude validera sans contexte diagnostic.');
-        }
-      }
+    var rep=d.answer||d.response||d.text||'';
+    if(rep){
+      var clean=rep.replace(/```json|```/g,'').trim();
+      var start=clean.indexOf('{');if(start>=0)clean=clean.slice(start);
+      var end=clean.lastIndexOf('}')+1;if(end>0)clean=clean.slice(0,end);
+      resume=JSON.parse(clean);
+      dbg('RESUME keys='+Object.keys(resume).join(','));
+      var champsOMS=['recommandations','medicaments_oms','contre_indications'];
+      var omsMissingCount=champsOMS.filter(function(k){return !resume[k]||String(resume[k]).trim().length<5;}).length;
+      if(omsMissingCount===3){dbgError('RAG — Tous les champs OMS vides.');}
+      else if(omsMissingCount>0){dbgWarn('RAG — '+omsMissingCount+' champ(s) OMS incomplet(s).');}
+      else{dbg('RAG — Champs OMS complets ✅');}
     }
   }catch(e){
-    dbgError('Relevance AI — Échec résumé: '+e.message+'. Fallback activé — champs OMS VIDES. Claude improvisera pour la validation.');
+    dbgError('RAG — Échec résumé: '+e.message+'. Fallback activé.');
     resume={
       nom:nom,age:String(a||''),poids:String(p.poids||''),
       ville:String(p.ville||'Non renseignee'),voyage:'Aucun',
@@ -2136,19 +1992,20 @@ async function envoyerDossier(email,nomMed){
     };
   }
 
-  // ── ÉTAPE 2 : payload Make/Notion ──
-  function cleanStr(v,max){
-    return String(v||'').replace(/[\u0000-\u001F]/g,' ').replace(/,/g,' -').trim().slice(0,max||200);
-  }
+  // ── ÉTAPE 2 : payload Supabase ──
+  function cleanStr(v,max){return String(v||'').replace(/[\u0000-\u001F]/g,' ').trim().slice(0,max||200);}
+
+  // Trouver le medecin_id depuis NOTION_MEDS (qui a supabaseId depuis loadMeds)
+  var medObj=NOTION_MEDS.find(function(m){return m.email===email;})||null;
+
   var payload={
-    id:id,
+    consultation_id:id,
     patient_id:cleanStr(patId,50),
     patient_nom:cleanStr(resume.nom||nom,100),
-    patient_age:cleanStr(resume.age||a||'',20),
+    patient_age:parseInt(resume.age||a||0)||0,
     patient_poids:parseFloat(resume.poids||p.poids||0)||0,
     patient_ville:cleanStr(resume.ville||p.ville||'Non renseignee',50),
     patient_voyage:cleanStr(resume.voyage||'Aucun',80),
-    patient_sexe:p.sx==='H'?'Masculin':p.sx==='F'?'Feminin':'',
     symptomes:cleanStr(resume.symptomes,500),
     diagnostic_ia:cleanStr(resume.diagnostic,800),
     recommandations_oms:cleanStr(resume.recommandations,500),
@@ -2157,51 +2014,25 @@ async function envoyerDossier(email,nomMed){
     contre_indications:cleanStr(resume.contre_indications,300),
     sources_oms:cleanStr(resume.sources,300),
     statut:'en_attente',
-    medecin:cleanStr(nomMed,100),
-    date:dateISO
+    medecin_id:medObj?medObj.supabaseId:null
   };
 
-  // ── ÉTAPE 3 : Make → Notion ──
-  var makeOk=false;
+  // ── ÉTAPE 3 : /api/save → Supabase ──
+  var saveOk=false;
   try{
-    var resp=await fetch(MAKE_WEBHOOK,{
+    var resp=await fetch(SAVE_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify(payload)
     });
-    makeOk=resp.status>=200&&resp.status<300;
-    dbg('Make status='+resp.status);
-    if(makeOk){
-      sauvegarderSession(resume);
-      // Créer fiche patient dans BDD Patients si elle n'existe pas
-      creerOuMettreAJourPatientNotion(patId,p,resume);
-    }
-  }catch(e){dbg('Make erreur: '+e.message);}
+    saveOk=resp.status>=200&&resp.status<300;
+    dbg('Save status='+resp.status);
+    if(saveOk)sauvegarderSession(resume);
+  }catch(e){dbg('Save erreur: '+e.message);}
 
   // ── ÉTAPE 4 : message patient ──
-  addMsg('ai','Votre dossier a bien été transmis au Dr. '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié par email.');
-  toast(makeOk?'✅ Dossier envoyé au médecin':'⚠️ Erreur envoi — réessayez');
-
-  // ── ÉTAPE 5 : email médecin (après 2s pour laisser Make terminer) ──
-  var ds=new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
-  var emailPatient=p.email||'';
-  var sub=encodeURIComponent('[Dokita] Nouveau dossier — '+(resume.nom||nom)+' — '+ds);
-  var body=encodeURIComponent(
-    'Bonjour Dr. '+nomMed+',\n\n'+
-    'Un nouveau dossier patient vous a été transmis via Dokita.\n\n'+
-    '=== PATIENT ===\n'+
-    'Nom : '+(resume.nom||nom)+'\n'+
-    'Âge : '+(resume.age||a||'—')+' ans\n'+
-    'Sexe : '+(p.sx==='H'?'Masculin':p.sx==='F'?'Féminin':'—')+'\n'+
-    'Poids : '+(resume.poids||p.poids||'—')+'kg\n'+
-    'Ville : '+(p.ville||resume.ville||'—')+'\n'+
-    (emailPatient?'Email patient : '+emailPatient+'\n':'')+
-    '\n=== SYMPTÔMES ===\n'+String(resume.symptomes||'')+
-    '\n\n---\nConnectez-vous à Dokita Pro pour consulter et valider le dossier complet.'
-  );
-  setTimeout(function(){
-    window.location.href='mailto:'+email+'?subject='+sub+'&body='+body;
-  },2000);
+  addMsg('ai','Votre dossier a bien été transmis au '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié dès validation.');
+  toast(saveOk?'✅ Dossier envoyé':'⚠️ Erreur envoi — réessayez');
 }
 
 // ══════════════════════════════
@@ -3302,18 +3133,6 @@ async function confirmerRecuperationProfil(){
     btn.textContent='✅ Confirmer et ajouter ce profil';btn.disabled=false;
   }
 }
-function effacerHistorique(){
-  if(!confirm('Effacer tout l\'historique de ce profil ?'))return;
-  try{
-    var key=getHistoKey();
-    localStorage.removeItem(key);
-    // Effacer aussi toutes les clés histo_ au cas où le patientId aurait changé
-    Object.keys(localStorage).filter(function(k){return k.indexOf('histo_')===0;}).forEach(function(k){localStorage.removeItem(k);});
-  }catch(e){}
-  document.getElementById('histoList').innerHTML='<div style="text-align:center;padding:60px 20px;color:var(--text3);font-size:14px;">Historique effacé</div>';
-  toast('🗑️ Historique effacé');
-}
-
 function getHistoKey(){var p=PROFILS[SEL];return 'histo_'+(p.patientId||SEL+'_'+(p.prenom||'')+'_'+(p.nom||''));}
 
 function sauvegarderSession(resume){
@@ -3513,22 +3332,25 @@ function _dbgLog(msg,color){
 
 
 async function mettreAJourProfilNotion(p){
-  if(!p.notionPageId)return;
-  var nom=(p.prenom||'')+' '+(p.nom||'');
-  var props={
-    'Nom complet':{title:[{text:{content:nom.trim()||p.email||''}}]},
-    'Nom':{rich_text:[{text:{content:p.nom||''}}]},
-    'Prenom':{rich_text:[{text:{content:p.prenom||''}}]},
-    'ID Patient':{rich_text:[{text:{content:p.patientId||''}}]}
+  if(!p.supabaseId)return;
+  var body={
+    prenom:p.prenom||'',
+    nom:p.nom||'',
+    nom_complet:((p.prenom||'')+' '+(p.nom||'')).trim()||p.email||'',
+    patient_id:p.patientId||''
   };
-  if(p.naiss)props['Date naissance']={date:{start:p.naiss}};
-  if(p.tel)props['Téléphone']={phone_number:p.tel};
-  if(p.ville)props['Ville']={rich_text:[{text:{content:p.ville}}]};
-  if(p.poids)props['Poids']={number:parseFloat(p.poids)||0};
-  if(p.sx)props['Sexe']={select:{name:p.sx==='H'?'Masculin':'Féminin'}};
+  if(p.naiss)body.date_naissance=p.naiss;
+  if(p.tel)body.telephone=p.tel;
+  if(p.ville)body.ville=p.ville;
+  if(p.poids)body.poids=parseFloat(p.poids)||0;
+  if(p.sx)body.sexe=p.sx==='H'?'Masculin':'Féminin';
   try{
-    await notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{properties:props});
-    dbg('Profil Notion mis à jour');
+    await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify(body)
+    });
+    dbg('Profil Supabase mis à jour');
   }catch(e){dbg('Erreur MAJ profil: '+e.message);}
 }
 
@@ -3673,35 +3495,24 @@ async function chargerHistoriqueNotion(){
   dbg('chargerHisto patId='+patId);
   if(!patId)return[];
   try{
-    var data=await notionConsultRequest('/databases/'+NOTION_CONSULT_DB+'/query','POST',{
-      filter:{property:'Patient ID',rich_text:{equals:patId}},
-      sorts:[{property:'Date',direction:'descending'}],
-      page_size:20
+    var r=await fetch(DB_URL+'?table=consultations&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    dbg('histo results='+(data.results?data.results.length:'null'));
-    if(!data.results)return[];
-    return data.results.map(function(page){
-      var props=page.properties||{};
-      function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-        if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-        if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
-        if(t==='select')return p.select?p.select.name:'';
-        if(t==='date')return p.date?p.date.start:'';
-        if(t==='number')return p.number!=null?String(p.number):'';
-        return '';}
-      var statut=txt('Statut')||'en_attente';
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    dbg('histo results='+rows.length);
+    return rows.map(function(row){
+      var statut=row.statut||'en_attente';
       var traite=statut==='valide'||statut==='cloture';
-      var ordRaw=txt('Ordonnance');
-      var ord=null;try{if(ordRaw)ord=JSON.parse(ordRaw);}catch(e){}
       return {
-        notionId:page.id,
-        date:txt('Date')||'',
-        symptomes:txt('Symptomes')||'',
-        diagnostic:txt('Diagnostic IA')||'',
+        supabaseId:row.id,
+        date:row.created_at?row.created_at.slice(0,10):'',
+        symptomes:row.symptomes||'',
+        diagnostic:row.diagnostic_ia||row.diagnostic_medecin||'',
         statut:statut,
         traite:traite,
-        ordonnance:ord,
-        dossierId:txt('ID')||page.id.slice(0,8)
+        ordonnance:null, // chargé à la demande depuis table ordonnances
+        dossierId:row.consultation_id||row.id.slice(0,8)
       };
     });
   }catch(e){dbg('Erreur chargement historique: '+e.message);return[];}
@@ -3743,67 +3554,39 @@ async function ouvrirOffres(){
   nav('offresScreen');
   var el=document.getElementById('offresBody');
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);"><span style="font-size:24px;">⏳</span><br><br>Chargement des offres...</div>';
-
-  // Récupérer la dernière ordonnance du profil courant
   var p=PROFILS[SEL];
   if(!p){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Sélectionnez un profil</div>';return;}
-
   try{
-    // Chercher les appels d'offre liés à ce patient
-    var data=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
-      filter:{property:'Patient ID',rich_text:{contains:p.patientId||''}},
-      sorts:[{property:'Date envoi',direction:'descending'}],
-      page_size:20
+    var r=await fetch(DB_URL+'?table=appels_offres&filter=patient_id=eq.'+encodeURIComponent(p.patientId||'')+'&order=created_at.desc&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-
-    if(!data.results||!data.results.length){
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){
       el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.<br><br><span style="font-size:12px;">Les offres apparaissent après avoir utilisé<br>"💰 Moins cher" sur une ordonnance.</span></div>';
       return;
     }
-
-    // Parser toutes les offres
-    var offres=data.results.map(function(page){
-      var props=page.properties;
-      function txt(k){var pr=props[k];if(!pr)return '';
-        if(pr.type==='rich_text')return(pr.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-        if(pr.type==='title')return(pr.title||[]).map(function(x){return x.plain_text;}).join('');
-        if(pr.type==='select')return pr.select?pr.select.name:'';
-        if(pr.type==='number')return pr.number!=null?pr.number:0;
-        if(pr.type==='date')return pr.date?pr.date.start:'';
-        return '';}
-      var offreJson=txt('Offre JSON');
+    var offres=rows.map(function(row){
       var offreItems=[];
-      try{
-        if(offreJson){
-          var parsed=JSON.parse(offreJson);
-          // Normaliser les deux formats :
-          // Nouveau : {medicament, disponible, boites, prixUnitaire, total}
-          // Ancien  : {medicament, disponible, quantite, prix}
-          offreItems=parsed.map(function(item){
-            var total=item.total||(item.boites&&item.prixUnitaire?item.boites*item.prixUnitaire:0)||(item.quantite&&item.prix?item.quantite*item.prix:0)||0;
-            return {
-              medicament:item.medicament||'',
-              disponible:item.disponible||false,
-              boites:item.boites||item.quantite||0,
-              prixUnitaire:item.prixUnitaire||item.prix||0,
-              total:total
-            };
-          });
-        }
-      }catch(e){}
-      var pharmNom=txt('Pharmacie Nom');
-      // Trouver coordonnées GPS de cette pharmacie
+      try{if(row.offre_json){
+        var parsed=typeof row.offre_json==='string'?JSON.parse(row.offre_json):row.offre_json;
+        offreItems=parsed.map(function(item){
+          var total=item.total||(item.boites&&item.prixUnitaire?item.boites*item.prixUnitaire:0)||0;
+          return {medicament:item.medicament||'',disponible:item.disponible||false,boites:item.boites||0,prixUnitaire:item.prixUnitaire||0,total:total};
+        });
+      }}catch(e){}
+      var pharmNom=row.pharmacie_nom||'';
       var pharmaInfo=PHARMACIES.find(function(ph){return ph.nom===pharmNom;})||null;
       return {
-        notionPageId:page.id,
-        aoId:txt('ID'),
+        supabaseId:row.id,
+        aoId:row.ao_id||row.id.slice(0,8),
         pharmNom:pharmNom,
-        pharmTel:txt('Pharmacie Tel'),
-        statut:txt('Statut'),
+        pharmTel:row.pharmacie_tel||'',
+        statut:row.statut||'en_attente',
         items:offreItems,
-        rayon:txt('Rayon')||5,
-        dateEnvoi:txt('Date envoi'),
-        codeRetrait:txt('Code retrait')||'',
+        rayon:row.rayon||5,
+        dateEnvoi:row.created_at?row.created_at.slice(0,10):'',
+        codeRetrait:row.code_retrait||'',
         gps:pharmaInfo?{lat:pharmaInfo.lat,lon:pharmaInfo.lon}:null
       };
     });
@@ -4544,27 +4327,24 @@ function reouvriConsultation(i){
 // ══════════════════════════════
 // CONFIG NOTION
 // ══════════════════════════════
-var DOKITA_PROXY='https://heydoc-medecin.vercel.app/api/notion';
-var NOTION_MEDECINS_DB='314dce21-e1d3-802e-88a1-fc736fb3bde9';
-var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb';
-var NOTION_CONSULT_DB='319dce21-e1d3-8094-a601-fe3bb4abff3a';
+// NOTION — STUBS V4.2 (migration en cours)
+// Les fonctions secondaires (transfert, création famille, sélection AO)
+// seront migrées vers Supabase en session suivante.
+// En attendant elles retournent vide sans crasher.
+// ══════════════════════════════
+var DOKITA_PROXY=''; // obsolète V4.2
+var NOTION_MEDECINS_DB='314dce21-e1d3-802e-88a1-fc736fb3bde9'; // obsolète
+var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb'; // obsolète
+var NOTION_CONSULT_DB='319dce21-e1d3-8094-a601-fe3bb4abff3a';  // obsolète
 
 async function notionConsultRequest(endpoint,method,body){
-  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
-  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
-  if(body)opts.body=JSON.stringify(body);
-  var r=await fetch(url,opts);
-  if(!r.ok)throw new Error('Notion '+r.status);
-  return await r.json();
+  dbgWarn('notionConsultRequest — migration pending: '+endpoint.slice(0,50));
+  return {results:[]};
 }
 
 async function notionPatientRequest(endpoint,method,body){
-  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
-  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
-  if(body)opts.body=JSON.stringify(body);
-  var r=await fetch(url,opts);
-  if(!r.ok)throw new Error('Notion '+r.status);
-  return await r.json();
+  dbgWarn('notionPatientRequest — migration pending: '+endpoint.slice(0,50));
+  return {results:[]};
 }
 
 async function chargerDossierPatientNotion(nom,patId){
