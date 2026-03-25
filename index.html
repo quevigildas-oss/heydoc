@@ -1,23 +1,40 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.1
-     DATE    : 2026-03-15
-     STACK   : Relevance AI (agent médical) + Make + Notion + Anthropic API
-     STATUS  : Workflow complet validé — Phase test
+     VERSION : V4.2
+     DATE    : 2026-03-25
+     STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
+     STATUS  : Migration Notion → Supabase complète (stubs famille/AO actifs)
      CHANGELOG:
+       V4.2 — 2026-03-25 : Migration complète Notion → Supabase
+                           seConnecter() → Supabase patients
+                           creerCompte() → Supabase check email
+                           rechargerSessionNotion() → Supabase patients + famille
+                           saveProfil() création → INSERT Supabase patients
+                           saveProfil() modification → PATCH Supabase patients
+                           mettreAJourProfilNotion() → PATCH /api/db patients
+                           sendMsg() → /api/rag direct (suppression Relevance AI + poll)
+                           envoyerDossier() → /api/save Supabase (suppression Make)
+                           loadMeds() → /api/db?table=medecins (suppression Notion)
+                           chargerHistoriqueNotion() → Supabase consultations
+                           goMedecin() → /api/db?table=medecins
+                           ouvrirOffres() lecture → Supabase appels_offres
+                           Suppression poll() Relevance AI (40 itérations)
+                           Suppression email médecin (window.location.href=mailto)
+                           Stubs notionPatientRequest/notionConsultRequest (retournent vide)
+                           Bouton 🗑️ effacer historique dans écran Historique
        V4.0 — 2026-03-15 : Bouton 🏠 accueil sur tous les écrans
-                           Transfert profil → Paramètres (sélection profil étape 1)
+                           Transfert profil → Paramètres
                            Fix ALD app patient (sync Notion à l'ouverture traitements)
-                           Fix rich_text multi-blocs (4 fonctions txt())
-                           Rechargement Notion sur écrans critiques (espaceProfilScreen)
                            Badge traitements : "1 actif · 1 ALD"
-                           Fix Patient ID appel d'offre (profil enfant)
                            Monitoring debug panel : dbg/dbgWarn/dbgError
-                           J'achète moins cher : entre Télécharger et Partager
-       V3.3 — 2026-03-13 : Correction bug multi-profils (écrasement PROFILS[0])
        V3.2 — 2026-03-13 : Écran Traitements chroniques + Sync Notion login
        V3.1 — 2026-03-10 : Workflow consultation complet validé
+     STUBS ACTIFS (session suivante) :
+       - creerFicheMembreFamille() → Supabase patients (compte_parent)
+       - Transfert de profil entre comptes
+       - choisirOffre() / lancerAppelOffre() → Supabase appels_offres
+       - Réponses pharmacies aux AO
 ============================================ -->
 <html lang="fr">
 <head>
