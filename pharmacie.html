@@ -46,20 +46,10 @@ body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:10
 .pharm-field label{display:block;font-size:11px;font-weight:700;color:#6B7280;margin-bottom:4px;text-transform:uppercase;}
 .pharm-field input{width:100%;border:1px solid #D1D5DB;border-radius:8px;padding:10px 14px;font-size:14px;outline:none;}
 .pharm-field input:focus{border-color:#0A7E6A;}
-/* Code retrait */
-.code-box{background:#0A7E6A;border-radius:16px;padding:24px;text-align:center;margin:16px 0;}
-.code-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,.8);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;}
-.code-val{font-size:52px;font-weight:800;color:#fff;letter-spacing:12px;font-family:monospace;}
-.code-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:12px;line-height:1.5;}
-/* Saisie code retrait */
 .retrait-box{background:#fff;border:2px solid #0A7E6A;border-radius:12px;padding:20px;margin:16px 0;}
 .retrait-title{font-size:15px;font-weight:700;color:#0A7E6A;margin-bottom:12px;text-align:center;}
 .retrait-input{width:100%;border:2px solid #D1D5DB;border-radius:10px;padding:14px;font-size:28px;font-weight:800;letter-spacing:8px;text-align:center;color:#1A2B3C;outline:none;font-family:monospace;}
 .retrait-input:focus{border-color:#0A7E6A;}
-.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
-.badge-ok{background:#dcfce7;color:#15803d;}
-.badge-pending{background:#fef9c3;color:#854d0e;}
-.badge-done{background:#dbeafe;color:#1d4ed8;}
 </style>
 </head>
 <body>
@@ -75,13 +65,13 @@ body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:10
 <div class="toast" id="toast"></div>
 
 <script>
-var DOKITA_PROXY='https://heydoc-medecin.vercel.app/api/notion';
-var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
+var DB_URL='https://heydoc-medecin.vercel.app/api/db';
+var DOKITA_KEY='dk-2026-prod-x9f7m';
 var params=new URLSearchParams(window.location.search);
 var aoId=params.get('id');
 var pharmTel=params.get('tel')||'';
 var aoData=null;
-var STATE=''; // 'form' | 'confirme' | 'retrait_attente' | 'valide'
+var STATE='';
 
 function toast(msg){
   var t=document.getElementById('toast');
@@ -90,12 +80,12 @@ function toast(msg){
 }
 function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-async function notionReq(endpoint,method,body){
-  var url=DOKITA_PROXY+'?path='+encodeURIComponent(endpoint);
-  var opts={method:method||'GET',headers:{'Content-Type':'application/json'}};
+async function dbReq(method,body,qs){
+  var url=DB_URL+(qs?'?'+qs:'');
+  var opts={method:method||'GET',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}};
   if(body)opts.body=JSON.stringify(body);
   var r=await fetch(url,opts);
-  if(!r.ok)throw new Error('Notion '+r.status);
+  if(!r.ok)throw new Error('DB '+r.status);
   return await r.json();
 }
 
@@ -103,117 +93,66 @@ async function init(){
   var el=document.getElementById('mainContent');
   if(!aoId){el.innerHTML='<div class="error">❌ Lien invalide.</div>';return;}
   try{
-    var res=await notionReq('/databases/'+NOTION_AO_DB+'/query','POST',{
-      filter:{property:'ID',title:{equals:aoId}}
-    });
-    if(!res.results||!res.results.length){
-      el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';return;
-    }
-    var page=res.results[0];
-    var props=page.properties;
-    function txt(k){var p=props[k];if(!p)return '';
-      if(p.type==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-      if(p.type==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
-      if(p.type==='select')return p.select?p.select.name:'';
-      if(p.type==='number')return p.number!=null?String(p.number):'';
-      return '';}
-
-    var statut=txt('Statut');
-    var codeRetraitRaw=txt('Code retrait').trim();
-    // Format : "CODE|med1,med2" ou juste "CODE"
-    var codeRetraitParts=codeRetraitRaw.split('|');
-    var codeRetrait=codeRetraitParts[0].trim().replace(/\s/g,'').replace(/[^\d]/g,'');
-    // DEBUG — afficher sur la page
-    console.log('codeRetraitRaw brut: "'+codeRetraitRaw+'" len='+codeRetraitRaw.length);
-    console.log('codeRetrait nettoyé: "'+codeRetrait+'" len='+codeRetrait.length);
-    // Afficher les codes char par char
-    var chars=[];for(var ci=0;ci<codeRetraitRaw.length;ci++)chars.push(codeRetraitRaw.charCodeAt(ci));
-    console.log('charCodes: '+chars.join(','));
-    var medsAttribues=codeRetraitParts[1]?codeRetraitParts[1].split(','):null;
-    var allMeds=JSON.parse(txt('Medicaments')||'[]');
-    // Si médicaments attribués → filtrer l'ordonnance
-    var medsAffiches=medsAttribues
-      ?allMeds.filter(function(m){return medsAttribues.some(function(ma){return m.indexOf(ma.trim())>=0||ma.trim().indexOf(m)>=0;});})
-      :allMeds;
+    var data=await dbReq('GET',null,'table=appels_offres&filter=ao_id=eq.'+encodeURIComponent(aoId));
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';return;}
+    var row=rows[0];
+    var statut=row.statut||'en_attente';
+    var codeRetrait=(row.code_retrait||'').trim().replace(/\s/g,'').replace(/[^\d]/g,'');
+    var allMeds=[];
+    try{allMeds=typeof row.medicaments==='string'?JSON.parse(row.medicaments):(row.medicaments||[]);}catch(e){}
+    var offreJson=null;
+    try{offreJson=typeof row.offre_json==='string'?JSON.parse(row.offre_json):(row.offre_json||null);}catch(e){}
 
     aoData={
-      notionPageId:page.id,
+      supabaseId:row.id,
       aoId:aoId,
-      pharmTel:pharmTel,
-      consultId:txt('Consultation ID'),
-      patientId:txt('Patient ID'),
-      pharmNom:txt('Pharmacie Nom'),
-      meds:medsAffiches,
-      medsAttribues:medsAttribues,
+      pharmTel:pharmTel||row.pharmacie_tel||'',
+      consultId:row.consultation_id||'',
+      patientId:row.patient_id||'',
+      pharmNom:row.pharmacie_nom||'',
+      meds:allMeds,
       statut:statut,
       codeRetrait:codeRetrait,
-      offre:txt('Offre JSON')?JSON.parse(txt('Offre JSON')):null
+      offre:offreJson
     };
-    // Afficher debug en bas de page
-    var dbgDiv=document.createElement('div');
-    dbgDiv.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#1a1a1a;color:#00ff88;font-family:monospace;font-size:11px;padding:8px 12px;z-index:9999;';
-    dbgDiv.innerHTML='CODE STOCKÉ: "'+codeRetrait+'" ('+codeRetrait.length+' chars) | RAW: "'+codeRetraitRaw+'"';
-    document.body.appendChild(dbgDiv);
 
-    // Routage selon statut
-    if(statut==='valide'){
-      renderValide();
-    } else if(statut==='selectionne'){
-      // Pharmacie sélectionnée → afficher code retrait + saisie
-      renderSelectionne();
-    } else if(statut==='repondu'){
-      // Déjà soumis → montrer confirmation + bouton retour formulaire
-      renderDejaRepondu();
-    } else {
-      renderForm();
-    }
+    if(statut==='valide'){renderValide();}
+    else if(statut==='selectionne'){renderRetraitAttente();}
+    else if(statut==='repondu'){renderDejaRepondu();}
+    else{renderForm();}
   }catch(e){
-    el.innerHTML='<div class="error">❌ Erreur : '+e.message+'</div>';
+    el.innerHTML='<div class="error">❌ Erreur chargement : '+escHtml(e.message)+'</div>';
   }
 }
 
 function renderForm(){
   STATE='form';
+  document.getElementById('hdrSub').textContent='Répondre à l\'appel d\'offre';
   var d=aoData;
   var medsHtml=d.meds.map(function(m,i){
-    return '<div class="med-row" id="med_row_'+i+'">'+
+    return '<div class="med-row">'+
       '<div class="med-name"><div class="med-num">'+(i+1)+'</div>'+escHtml(m)+'</div>'+
-      '<label class="check-total">'+
-        '<input type="checkbox" id="total_'+i+'" onchange="toggleTotal('+i+')">'+
-        '✅ Totalité disponible'+
-      '</label>'+
+      '<label class="check-total"><input type="checkbox" id="total_'+i+'" onchange="toggleTotal('+i+')"> Médicament disponible en totalité (1 boîte)</label>'+
       '<div class="med-fields-grid">'+
-        '<div class="field-group"><div class="field-lbl">📦 Boîtes</div>'+
-          '<input class="field-input" type="number" id="boites_'+i+'" min="0" placeholder="0" oninput="calcTotal('+i+')"></div>'+
-        '<div class="field-group"><div class="field-lbl">💊 Cp. partiel</div>'+
-          '<input class="field-input" type="number" id="comprimes_'+i+'" min="0" placeholder="0"></div>'+
-        '<div class="field-group"><div class="field-lbl">💰 Prix/boîte</div>'+
-          '<input class="field-input" type="number" id="prix_'+i+'" min="0" placeholder="0" oninput="calcTotal('+i+')"></div>'+
-        '<div class="field-group"><div class="field-lbl">🟰 Total FCFA</div>'+
-          '<input class="field-input total-auto" type="text" id="total_fcfa_'+i+'" placeholder="—" readonly></div>'+
+        '<div class="field-group"><div class="field-lbl">Boîtes</div><input class="field-input" id="boites_'+i+'" type="number" min="0" placeholder="0" oninput="calcTotal('+i+')"></div>'+
+        '<div class="field-group"><div class="field-lbl">Comprimés</div><input class="field-input" id="comprimes_'+i+'" type="number" min="0" placeholder="0"></div>'+
+        '<div class="field-group"><div class="field-lbl">Prix/boîte (FCFA)</div><input class="field-input" id="prix_'+i+'" type="number" min="0" placeholder="0" oninput="calcTotal('+i+')"></div>'+
+        '<div class="field-group"><div class="field-lbl">Total (FCFA)</div><input class="field-input total-auto" id="total_fcfa_'+i+'" readonly></div>'+
       '</div>'+
     '</div>';
   }).join('');
 
   document.getElementById('mainContent').innerHTML=
     '<div class="card">'+
-      '<div class="card-hdr">📋 ORDONNANCE #'+d.aoId+'</div>'+
+      '<div class="card-hdr">📋 INFORMATIONS PHARMACIE</div>'+
       '<div class="card-body">'+
-        '<div class="info-grid">'+
-          '<div class="info-box"><div class="info-lbl">PHARMACIE</div><div class="info-val">'+escHtml(d.pharmNom||'—')+'</div></div>'+
-          '<div class="info-box"><div class="info-lbl">STATUT</div><div class="info-val"><span class="badge badge-pending">En attente</span></div></div>'+
-        '</div>'+
+        '<div class="pharm-field"><label>Nom de la pharmacie</label><input id="pharmNom" type="text" value="'+escHtml(d.pharmNom)+'" placeholder="ex: Pharmacie de la Paix"></div>'+
+        '<div class="pharm-field"><label>Téléphone WhatsApp</label><input id="pharmTel" type="tel" value="'+escHtml(d.pharmTel)+'" placeholder="+225 07 XX XX XX XX"></div>'+
       '</div>'+
     '</div>'+
     '<div class="card">'+
-      '<div class="card-hdr">🏪 VOS INFORMATIONS</div>'+
-      '<div class="card-body">'+
-        '<div class="pharm-field"><label>Nom de la pharmacie</label><input id="pharmNom" type="text" value="'+escHtml(d.pharmNom)+'"></div>'+
-        '<div class="pharm-field"><label>Téléphone</label><input id="pharmTel" type="tel" value="'+escHtml(d.pharmTel)+'"></div>'+
-      '</div>'+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="card-hdr">💊 MÉDICAMENTS</div>'+
+      '<div class="card-hdr">💊 MÉDICAMENTS DEMANDÉS ('+d.meds.length+')</div>'+
       '<div class="card-body">'+medsHtml+'</div>'+
     '</div>'+
     '<button class="btn-submit" onclick="soumettre()">✅ Soumettre mon offre</button>'+
@@ -222,36 +161,36 @@ function renderForm(){
 
 function renderDejaRepondu(){
   STATE='confirme';
+  document.getElementById('hdrSub').textContent='Offre soumise';
   var d=aoData;
-  var medsHtml=(d.offre||[]).map(function(o,i){
-    return '<div style="padding:10px 0;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">'+
-      '<div style="font-size:13px;font-weight:600;">'+escHtml(o.medicament)+'</div>'+
-      '<div style="text-align:right;font-size:12px;color:#6B7280;">'+
-        (o.disponible?'<span class="badge badge-ok">✅ '+o.boites+' boîte(s)</span>':'<span class="badge" style="background:#fee2e2;color:#dc2626;">❌ Indisponible</span>')+
-        (o.total?' · <strong>'+o.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+
+  var offreHtml='';
+  if(d.offre&&d.offre.length){
+    offreHtml='<div class="card">'+
+      '<div class="card-hdr">💊 VOTRE OFFRE</div>'+
+      '<div class="card-body">'+
+        d.offre.map(function(item){
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">'+
+            '<span style="font-size:13px;font-weight:600;">'+(item.disponible?'✅':'❌')+' '+escHtml(item.medicament||'')+'</span>'+
+            '<span style="font-size:13px;color:#0A7E6A;font-weight:700;">'+(item.total>0?item.total.toLocaleString('fr-FR')+' FCFA':'—')+'</span>'+
+          '</div>';
+        }).join('')+
       '</div>'+
     '</div>';
-  }).join('');
-
+  }
   document.getElementById('mainContent').innerHTML=
     '<div class="success">'+
       '<div class="success-ico">📤</div>'+
-      '<div class="success-title">Offre soumise</div>'+
-      '<div class="success-sub">Votre offre a été transmise.<br>En attente de sélection par le patient.</div>'+
+      '<div class="success-title">Offre soumise avec succès !</div>'+
+      '<div class="success-sub">En attente de la décision du patient.<br>Vous serez contacté si votre offre est retenue.</div>'+
     '</div>'+
-    '<div class="card">'+
-      '<div class="card-hdr">📋 VOTRE OFFRE<span class="badge badge-pending" style="font-size:10px;">En attente</span></div>'+
-      '<div class="card-body">'+medsHtml+'</div>'+
-    '</div>'+
-    '<button class="btn-secondary" onclick="renderForm()">✏️ Modifier mon offre</button>'+
+    offreHtml+
     '<div style="height:30px;"></div>';
 }
 
-function renderSelectionne(){
+function renderRetraitAttente(){
   STATE='retrait_attente';
   var d=aoData;
   document.getElementById('hdrSub').textContent='Retrait client en attente';
-  // Utiliser d.meds (tous les médicaments attribués à cette pharmacie)
   var medsHtml='';
   if(d.meds&&d.meds.length){
     medsHtml='<div class="card">'+
@@ -274,7 +213,7 @@ function renderSelectionne(){
     medsHtml+
     '<div class="retrait-box">'+
       '<div class="retrait-title">🔐 Saisir le code du patient</div>'+
-      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute. La validation est automatique.</div>'+
+      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute.</div>'+
       '<input class="retrait-input" id="codeRetraitInput" type="text" inputmode="numeric" maxlength="6" placeholder="——————" oninput="autoValiderRetrait(this)">'+
       '<div id="retraitErr" style="color:#dc2626;font-size:12px;text-align:center;margin-top:8px;display:none;"></div>'+
     '</div>'+
@@ -294,15 +233,8 @@ function renderValide(){
 
 function toggleTotal(i){
   var checked=document.getElementById('total_'+i).checked;
-  if(checked){
-    document.getElementById('boites_'+i).value=1;
-    document.getElementById('comprimes_'+i).value=0;
-    calcTotal(i);
-  } else {
-    document.getElementById('boites_'+i).value='';
-    document.getElementById('comprimes_'+i).value='';
-    document.getElementById('total_fcfa_'+i).value='';
-  }
+  if(checked){document.getElementById('boites_'+i).value=1;document.getElementById('comprimes_'+i).value=0;calcTotal(i);}
+  else{document.getElementById('boites_'+i).value='';document.getElementById('comprimes_'+i).value='';document.getElementById('total_fcfa_'+i).value='';}
 }
 
 function calcTotal(i){
@@ -317,9 +249,7 @@ async function soumettre(){
   var nom=(document.getElementById('pharmNom').value||'').trim();
   var tel=(document.getElementById('pharmTel').value||'').trim();
   if(!nom||!tel){toast('⚠️ Remplissez le nom et téléphone');return;}
-  var auMoinsUn=aoData.meds.some(function(m,i){
-    return parseInt(document.getElementById('boites_'+i).value||'0')>0;
-  });
+  var auMoinsUn=aoData.meds.some(function(m,i){return parseInt(document.getElementById('boites_'+i).value||'0')>0;});
   if(!auMoinsUn){toast('⚠️ Renseignez au moins un médicament');return;}
   var offre=aoData.meds.map(function(m,i){
     var boites=parseInt(document.getElementById('boites_'+i).value||'0')||0;
@@ -330,17 +260,12 @@ async function soumettre(){
   var btn=document.querySelector('.btn-submit');
   btn.disabled=true;btn.textContent='⏳ Envoi...';
   try{
-    await notionReq('/pages/'+aoData.notionPageId,'PATCH',{
-      properties:{
-        'Pharmacie Nom':{rich_text:[{text:{content:nom}}]},
-        'Pharmacie Tel':{rich_text:[{text:{content:tel}}]},
-        'Offre JSON':{rich_text:[{text:{content:JSON.stringify(offre).slice(0,2000)}}]},
-        'Statut':{select:{name:'repondu'}},
-        'Date reponse':{date:{start:new Date().toISOString()}}
-      }
+    await dbReq('PATCH',{
+      table:'appels_offres',
+      id:aoData.supabaseId,
+      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'repondu',date_reponse:new Date().toISOString()}
     });
-    aoData.offre=offre;
-    aoData.statut='repondu';
+    aoData.offre=offre;aoData.statut='repondu';
     renderDejaRepondu();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ Soumettre mon offre';
@@ -350,55 +275,30 @@ async function soumettre(){
 
 function autoValiderRetrait(input){
   var code=(input.value||'').trim().replace(/\s/g,'').replace(/[^\d]/g,'');
-  if(code.length===6) validerRetrait();
+  if(code.length===6)validerRetrait();
 }
 
 async function validerRetrait(){
   var code=(document.getElementById('codeRetraitInput').value||'').trim().replace(/\s/g,'').replace(/[^\d]/g,'');
   var errEl=document.getElementById('retraitErr');
   if(errEl)errEl.style.display='none';
-  if(!/^\d{6}$/.test(code)){
-    if(errEl){errEl.textContent='Code invalide — 6 chiffres requis';errEl.style.display='block';}
-    return;
-  }
+  if(!/^\d{6}$/.test(code)){if(errEl){errEl.textContent='Code invalide — 6 chiffres requis';errEl.style.display='block';}return;}
   if(aoData.codeRetrait&&code!==aoData.codeRetrait){
-    var dbgDiv=document.querySelector('div[style*="position:fixed;bottom:0"]');
-    if(dbgDiv)dbgDiv.innerHTML='❌ SAISI: "'+code+'" ('+code.length+') vs STOCKÉ: "'+aoData.codeRetrait+'" ('+aoData.codeRetrait.length+')';
-    console.log('Code saisi: "'+code+'" ('+code.length+') vs stocké: "'+aoData.codeRetrait+'" ('+aoData.codeRetrait.length+')');
     if(errEl){errEl.textContent='❌ Code incorrect — vérifiez avec le patient';errEl.style.display='block';}
-    // Vider le champ pour ressaisir
     var inp=document.getElementById('codeRetraitInput');
     if(inp){inp.value='';inp.focus();}
     return;
   }
   try{
-    await notionReq('/pages/'+aoData.notionPageId,'PATCH',{
-      properties:{
-        'Statut':{select:{name:'valide'}},
-        'Date validation':{date:{start:new Date().toISOString()}}
-      }
-    });
-    // Annuler les autres offres du même Consultation ID
+    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'valide',date_validation:new Date().toISOString()}});
+    // Annuler les autres offres du même consultation_id
     try{
-      var autresOffres=await notionReq('/databases/'+NOTION_AO_DB+'/query','POST',{
-        filter:{
-          and:[
-            {property:'Consultation ID',rich_text:{contains:aoData.consultId}},
-            {property:'Statut',select:{does_not_equal:'valide'}}
-          ]
-        },
-        page_size:10
-      });
-      if(autresOffres.results&&autresOffres.results.length){
-        await Promise.all(autresOffres.results.map(function(page){
-          return notionReq('/pages/'+page.id,'PATCH',{
-            properties:{'Statut':{select:{name:'annule'}}}
-          }).catch(function(){});
-        }));
-        console.log('Annulé '+autresOffres.results.length+' offre(s) restante(s)');
-      }
-    }catch(e){console.log('Annulation autres offres: '+e.message);}
-    // Toast pop-up puis écran validé
+      var autres=await dbReq('GET',null,'table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(aoData.consultId));
+      var rows=Array.isArray(autres)?autres:(autres.data||[]);
+      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='valide';}).map(function(r){
+        return dbReq('PATCH',{table:'appels_offres',id:r.id,data:{statut:'annule'}}).catch(function(){});
+      }));
+    }catch(e){}
     toast('✅ Retrait validé !');
     setTimeout(function(){renderValide();},1500);
   }catch(e){
