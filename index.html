@@ -4,7 +4,7 @@
      VERSION : V4.2
      DATE    : 2026-03-25
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
-     STATUS  : Migration Notion → Supabase complète (stubs famille/AO actifs)
+     STATUS  : Migration AO complète — lancerAppelOffre/choisirOffre/compterReponses → Supabase
      CHANGELOG:
        V4.2 — 2026-03-25 : Migration complète Notion → Supabase
                            seConnecter() → Supabase patients
@@ -3751,7 +3751,7 @@ function renderOffres(complete,stops2,toutes){
             '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
           '</div>'+
         '</div>'+
-        '<button onclick="choisirOffre(\''+complete.notionPageId+'\',\''+escHtml(complete.pharmNom)+'\')" style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--bg);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
+        '<button onclick="choisirOffre(\''+complete.supabaseId+'\',\''+escHtml(complete.pharmNom)+'\')" style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--bg);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
       '</div>';
   } else {
     html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;text-align:center;color:var(--text2);">Aucune pharmacie ne dispose de l\'ordonnance complète</div>';
@@ -3891,16 +3891,19 @@ function renderCarteCode(code,pharmNom,meds,num){
   '</div>';
 }
 
-async function choisirOffre(notionPageId,pharmNom){
+async function choisirOffre(supabaseId,pharmNom){
   // Générer code retrait 6 chiffres
   var code=String(Math.floor(100000+Math.random()*900000));
   toast('⏳ Confirmation en cours...');
   try{
-    await notionConsultRequest('/pages/'+notionPageId,'PATCH',{
-      properties:{
-        'Statut':{select:{name:'selectionne'}},
-        'Code retrait':{rich_text:[{text:{content:code}}]}
-      }
+    await fetch(DB_URL,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        table:'appels_offres',
+        id:supabaseId,
+        data:{statut:'selectionne',code_retrait:code}
+      })
     });
     var el=document.getElementById('offresBody');
     var shareMsg='Mon code de retrait Dokita : '+code+'\nPharmacie : '+pharmNom;
@@ -3956,27 +3959,32 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   }
   toast('📤 Création des offres pour '+proches.length+' pharmacie(s)...');
 
-  // Créer une entrée Notion par pharmacie et collecter les liens
+  // Créer une entrée Supabase par pharmacie et collecter les liens
   var lignes=[];
   var now=new Date().toISOString();
   for(var k=0;k<proches.length;k++){
     var ph=proches[k];
     var aoId=genAoId();
     try{
-      await notionConsultRequest('/pages','POST',{
-        parent:{database_id:NOTION_AO_DB},
-        properties:{
-          'ID':{title:[{text:{content:aoId}}]},
-          'Consultation ID':{rich_text:[{text:{content:s.notionId||''}}]},
-          'Patient ID':{rich_text:[{text:{content:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||''}}]},
-          'Pharmacie Nom':{rich_text:[{text:{content:ph.nom}}]},
-          'Pharmacie Tel':{rich_text:[{text:{content:ph.tel}}]},
-          'Medicaments':{rich_text:[{text:{content:JSON.stringify(meds)}}]},
-          'Statut':{select:{name:'en_attente'}},
-          'Rayon':{number:rayon},
-          'Date envoi':{date:{start:now}}
-        }
+      var aoRes=await fetch(DB_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({
+          table:'appels_offres',
+          data:{
+            ao_id:aoId,
+            consultation_id:s.supabaseId||s.id||'',
+            patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
+            pharmacie_nom:ph.nom,
+            pharmacie_tel:ph.tel,
+            medicaments:JSON.stringify(meds),
+            statut:'en_attente',
+            rayon:rayon,
+            created_at:now
+          }
+        })
       });
+      var aoData=await aoRes.json();
       var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
       lignes.push(encodeURIComponent(ph.nom)+' : '+encodeURIComponent(lien));
     }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
@@ -4006,13 +4014,11 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
 
 async function compterReponses(consultId){
   try{
-    var res=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
-      filter:{and:[
-        {property:'Consultation ID',rich_text:{equals:consultId}},
-        {property:'Statut',select:{equals:'repondu'}}
-      ]}
+    var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.repondu',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    return res.results?res.results.length:0;
+    var data=await r.json();
+    return Array.isArray(data)?data.length:0;
   }catch(e){return 0;}
 }
 
