@@ -4191,7 +4191,6 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         body:JSON.stringify({
           table:'appels_offres',
           data:{
-            ao_id:aoId,
             consultation_id:s.supabaseId||s.id||'',
             patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
             pharmacie_nom:ph.nom,
@@ -4210,7 +4209,11 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         toast('⚠️ '+errMsg);
         continue;
       }
-      var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
+      // Utiliser l'UUID Supabase retourné comme identifiant
+      var aoRows=Array.isArray(aoData)?aoData:[aoData];
+      var aoUuid=aoRows[0]&&aoRows[0].id;
+      if(!aoUuid){dbgWarn('AO INSERT — pas d\'UUID retourné');continue;}
+      var lien=PHARMA_URL+'?id='+aoUuid+'&tel='+encodeURIComponent(ph.tel);
       lignes.push(ph.nom+' : '+lien);
     }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
   }
