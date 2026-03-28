@@ -2234,7 +2234,7 @@ async function ouvrirAnalyses(){
           (dateStr?'<span style="font-size:10px;color:var(--text3);">Prescrit le '+dateStr+'</span>':'')+
         '</div>'+
         (statut==='prescrit'?
-          '<button onclick="marquerExamenFait(\''+ex.id+'\')" style="width:100%;margin-top:10px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:10px;padding:9px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">✅ Marquer comme fait</button>'
+          '<button onclick="ajouterResultatAnalyse(\''+ex.id+'\',\''+ex.type_examen.replace(/'/g,"\\'")+'\')" style="width:100%;margin-top:10px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:10px;padding:9px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">📝 Saisir le résultat</button>'
         :'')+
       '</div>';
     }).join('');
@@ -2285,36 +2285,58 @@ function supprimerAnalyseLocale(i){
   ouvrirAnalyses();
 }
 
-function ajouterResultatAnalyse(){
+function ajouterResultatAnalyse(examenId, nomExamen){
   var p=PROFILS[SEL];
   var patId=p&&p.patientId||'';
   var key='dossier_ordonnances_bio_'+(patId||SEL);
   var modal=document.createElement('div');
+  modal.id='analyseResultatModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;';
   modal.innerHTML='<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px;width:100%;padding-bottom:calc(24px + var(--sb));">'+
-    '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:16px;">Nouveau résultat</div>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:16px;">Saisir le résultat</div>'+
     '<div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">Examen</label>'+
-    '<input id="analyseModalTitre" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;" placeholder="Ex: NFS, Glycémie, ECG..."/></div>'+
+    '<input id="analyseModalTitre" value="'+(nomExamen||'')+'" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;" placeholder="Ex: NFS, Glycémie, ECG..."/></div>'+
     '<div style="margin-bottom:16px;"><label style="font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;">Résultat</label>'+
-    '<textarea id="analyseModalVal" rows="3" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--text);outline:none;resize:none;" placeholder="Ex: Hémoglobine 12g/dl, Glycémie 1.2g/l..."></textarea></div>'+
+    '<textarea id="analyseModalVal" rows="3" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:11px 13px;font-family:\'DM Sans\',sans-serif;font-size:13px;color:var(--text);outline:none;resize:none;" placeholder="Ex: FR = 18/min, SpO2 = 96% — Normal"></textarea></div>'+
     '<div style="display:flex;gap:10px;">'+
-    '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
-    '<button onclick="confirmerResultatAnalyse(\''+key+'\')" style="flex:1;background:var(--grad);border:none;border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">Enregistrer</button>'+
+    '<button onclick="document.getElementById(\'analyseResultatModal\').remove()" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+    '<button onclick="confirmerResultatAnalyse(\''+key+'\',\''+( examenId||'')+'\',\''+( nomExamen||'').replace(/'/g,'\\\'')+'\')" style="flex:1;background:var(--grad);border:none;border-radius:11px;padding:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">Enregistrer</button>'+
     '</div></div>';
   document.body.appendChild(modal);
-  setTimeout(function(){document.getElementById('analyseModalTitre').focus();},100);
+  setTimeout(function(){
+    var v=document.getElementById('analyseModalVal');
+    if(v)v.focus();
+  },100);
 }
 
-function confirmerResultatAnalyse(key){
+async function confirmerResultatAnalyse(key, examenId, nomExamen){
   var titre=(document.getElementById('analyseModalTitre').value||'').trim();
   var valeur=(document.getElementById('analyseModalVal').value||'').trim();
   if(!titre){toast('⚠️ Saisissez le nom de l\'examen');return;}
+  if(!valeur){toast('⚠️ Saisissez le résultat');return;}
+
+  // Fermer le modal immédiatement
+  var modal=document.getElementById('analyseResultatModal');
+  if(modal)modal.remove();
+
+  // Sauvegarder en localStorage
   var items=[];
   try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
-  items.unshift({titre:titre,valeur:valeur,date:new Date().toLocaleDateString('fr-FR')});
+  items.unshift({titre:titre,valeur:valeur,date:new Date().toLocaleDateString('fr-FR'),examenId:examenId||null});
   try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
-  var modal=document.querySelector('div[style*="position:fixed"][style*="z-index:200"]');
-  if(modal)modal.remove();
+
+  // Si lié à un examen Supabase → marquer comme fait
+  if(examenId){
+    try{
+      await fetch(DB_URL+'?table=examens&id='+examenId,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({statut:'fait',date_realisation:new Date().toISOString()})
+      });
+      dbg('Examen marqué fait: '+examenId);
+    }catch(e){dbgWarn('Erreur PATCH examen: '+e.message);}
+  }
+
   toast('✅ Résultat enregistré');
   ouvrirAnalyses();
 }
