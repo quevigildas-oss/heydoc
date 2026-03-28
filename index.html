@@ -1837,10 +1837,54 @@ function startChat(){
   document.getElementById('chatSub').textContent=nom+(a?' — '+a+' ans':'');
 
   var w='Bonjour '+p.prenom+' ! 👋\n\n';
+
+  // ── Bloc profil (non éphémère uniquement) ──
+  if(!p._eph){
+    var lignesProfil=[];
+    if(a!==null&&a!==undefined)lignesProfil.push(a+' ans');
+    if(p.sx)lignesProfil.push(p.sx==='H'?'Masculin':'Féminin');
+    if(p.poids)lignesProfil.push(p.poids+'kg');
+    if(p.ville)lignesProfil.push(p.ville);
+
+    w+='**Profil :** '+lignesProfil.join(' · ')+'\n';
+
+    // Allergies
+    if(p.allergies&&p.allergies.trim()){
+      w+='**Allergies :** '+p.allergies+'\n';
+    }
+
+    // Antécédents
+    if(p.antecedents&&p.antecedents.trim()){
+      w+='**Antécédents :** '+p.antecedents+'\n';
+    }
+
+    // Traitements chroniques actifs
+    var traitsActifs=[];
+    try{
+      var key='traits_'+(p.patientId||'');
+      var ts=localStorage.getItem(key);
+      if(ts){
+        var items=JSON.parse(ts);
+        traitsActifs=items.filter(function(t){return t.statut==='actif';});
+      }
+    }catch(e){}
+    if(traitsActifs.length){
+      w+='**Traitements en cours :** '+traitsActifs.map(function(t){
+        return t.nom+(t.dosage?' '+t.dosage:'')+(t.ald?' (ALD)':'');
+      }).join(', ')+'\n';
+    } else if(p.traitements&&p.traitements.trim()){
+      w+='**Traitements en cours :** '+p.traitements+'\n';
+    }
+
+    w+='\n';
+  }
+
   w+='Je suis Dokita, votre assistant médical IA.\n\n';
-  w+='Pour un diagnostic précis, **décrivez-moi un maximum de symptômes dès maintenant** :\n\n';
-  w+='• Depuis combien de temps ?\n• Où exactement ? (localisation)\n• Intensité (1 à 10) ?\n• Ce qui aggrave ou soulage ?\n• Autres symptômes associés ?\n\n';
-  if(a&&a<15)w+='_Je prends en compte que '+p.prenom+' est un enfant de '+a+' ans._';
+  w+='Pour un diagnostic précis, **décrivez-moi vos symptômes** :\n\n';
+  w+='• Depuis combien de temps ?\n• Où exactement ? (localisation)\n• Intensité (1 à 10) ?\n• Ce qui aggrave ou soulage ?\n• Autres symptômes associés ?';
+
+  if(a&&a<15)w+='\n\n_Je prends en compte que '+p.prenom+' est un enfant de '+a+' ans._';
+
   addMsg('ai',w);
   nav('chatScreen');
 }
@@ -1879,7 +1923,10 @@ async function sendMsg(){
     (a?', '+a+' ans':'')+
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+
-    (p.ville?', '+p.ville:'')+'] ';
+    (p.ville?', '+p.ville:'')+
+    (p.allergies?', Allergies: '+p.allergies:'')+
+    (p.antecedents?', Antécédents: '+p.antecedents:'')+
+    '] ';
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
   var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
