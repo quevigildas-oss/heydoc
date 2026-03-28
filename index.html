@@ -3717,11 +3717,43 @@ var HISTO_CACHE=[];
 var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
 var PHARMA_URL='https://heydoc-mu.vercel.app/pharmacie';
 
-var PHARMACIES=[
-  {nom:'Pharmacie du Plateau',  tel:'+22527203412',lat:5.3467,lon:-4.0167},
-  {nom:'Pharmacie Cocody',      tel:'+22527234578',lat:5.3567,lon:-3.9834},
-  {nom:'Pharmacie Marcory',     tel:'+22527289013',lat:5.3123,lon:-4.0034}
-];
+var PHARMACIES=[]; // chargé depuis Supabase table pharmacies
+
+async function chargerPharmaciess(){
+  try{
+    var r=await fetch(DB_URL+'?table=pharmacies&limit=50',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length){
+      PHARMACIES=rows.map(function(p){
+        return {
+          nom:p.nom||p.pharmacie_nom||'',
+          tel:p.telephone||p.tel||'',
+          lat:p.latitude||p.lat||0,
+          lon:p.longitude||p.lon||0
+        };
+      });
+      dbg('Pharmacies chargées depuis Supabase: '+PHARMACIES.length);
+    } else {
+      // Fallback test si table vide
+      PHARMACIES=[
+        {nom:'Pharmacie du Plateau',  tel:'+33781787293',lat:5.3467,lon:-4.0167},
+        {nom:'Pharmacie Cocody',      tel:'+33781787293',lat:5.3567,lon:-3.9834},
+        {nom:'Pharmacie Marcory',     tel:'+33781787293',lat:5.3123,lon:-4.0034}
+      ];
+      dbgWarn('Table pharmacies vide — fallback test activé');
+    }
+  }catch(e){
+    PHARMACIES=[
+      {nom:'Pharmacie du Plateau',  tel:'+33781787293',lat:5.3467,lon:-4.0167},
+      {nom:'Pharmacie Cocody',      tel:'+33781787293',lat:5.3567,lon:-3.9834},
+      {nom:'Pharmacie Marcory',     tel:'+33781787293',lat:5.3123,lon:-4.0034}
+    ];
+    dbgWarn('Erreur chargement pharmacies: '+e.message+' — fallback activé');
+  }
+}
 
 function distKm(lat1,lon1,lat2,lon2){
   var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
@@ -4108,6 +4140,11 @@ async function lancerAppelOffre(i){
   var meds=medsStructures.length?medsStructures:ord.medicaments||[];
   if(!meds.length){toast('Aucun médicament dans l\'ordonnance');return;}
 
+  // Charger pharmacies depuis Supabase au moment du clic
+  toast('⏳ Chargement pharmacies...');
+  await chargerPharmaciess();
+  if(!PHARMACIES.length){toast('Aucune pharmacie disponible');return;}
+
   toast('📍 Géolocalisation en cours...');
   // TEST MODE — coords Abidjan Plateau
   var lat=5.3467,lon=-4.0167;
@@ -4135,6 +4172,12 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   }
   toast('📤 Création des offres pour '+proches.length+' pharmacie(s)...');
 
+  // Normaliser meds en tableau d'objets
+  var medsObj=meds.map(function(m){
+    if(typeof m==='string')return {nom:m};
+    return m;
+  });
+
   // Créer une entrée Supabase par pharmacie et collecter les liens
   var lignes=[];
   var now=new Date().toISOString();
@@ -4153,7 +4196,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
             patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
             pharmacie_nom:ph.nom,
             pharmacie_tel:ph.tel,
-            medicaments:JSON.stringify(meds),
+            medicaments:medsObj,
             statut:'en_attente',
             rayon:rayon,
             created_at:now
@@ -4161,25 +4204,38 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         })
       });
       var aoData=await aoRes.json();
+      if(aoData&&aoData.error){dbgWarn('AO INSERT err: '+JSON.stringify(aoData.error).slice(0,100));continue;}
       var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
-      lignes.push(encodeURIComponent(ph.nom)+' : '+encodeURIComponent(lien));
+      lignes.push(ph.nom+' : '+lien);
     }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
   }
 
   if(!lignes.length){toast('Erreur création des offres');return;}
 
-  // Un seul WhatsApp vers numéro de test avec tous les liens
-  var medsList=meds.map(function(m,idx){return (idx+1)+'. '+encodeURIComponent(m);}).join('%0A');
-  var msg='%F0%9F%8F%AA%20Appel%20d%27offre%20Dokita%0A%0AM%C3%A9dicaments%20:%0A'+medsList+'%0A%0ALiens%20par%20pharmacie%20:%0A'+lignes.join('%0A')+'%0A%0AMerci%20de%20r%C3%A9pondre%20dans%2030%20min.';
-  var waUrl='https://wa.me/33781787293?text='+msg;
-  window.open(waUrl,'_blank');
+  // Message WhatsApp formaté
+  var medsStr=medsObj.map(function(m,idx){
+    var l=(idx+1)+'. '+(m.nom||'');
+    if(m.dose)l+=' '+m.dose;
+    if(m.poso)l+=' — '+m.poso;
+    if(m.duree)l+=' — '+m.duree;
+    return l;
+  }).join('\n');
+
+  var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nLiens par pharmacie :\n'+lignes.join('\n')+'\n\nMerci de répondre dans 30 min.';
+
+  // Envoyer vers les vrais numéros des pharmacies
+  proches.forEach(function(ph,k){
+    var lignesPh=lignes.filter(function(l){return l.indexOf(ph.nom)>=0;});
+    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien : '+lignesPh[0]+'\n\nMerci de répondre dans 30 min.';
+    var waUrl='https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msgPh);
+    if(k===0)window.open(waUrl,'_blank');
+  });
 
   toast('✅ WhatsApp ouvert — '+proches.length+' pharmacie(s) dans '+rayon+'km');
 
-  // Timer 30min — relance à 10km si rayon=5
   if(rayon===5){
     setTimeout(async function(){
-      var reps=await compterReponses(s.notionId);
+      var reps=await compterReponses(s.supabaseId);
       if(reps===0){
         toast('⏰ Aucune réponse — relance à 10km...');
         await envoyerAux(s,meds,lat,lon,10,cacheIdx);
