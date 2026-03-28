@@ -4103,7 +4103,9 @@ async function choisirOffre(supabaseId,pharmNom){
 async function lancerAppelOffre(i){
   var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return;
   var ord=s.ordonnance;
-  var meds=ord.medicaments||[];
+  // Utiliser les données structurées si disponibles, sinon les strings formatées
+  var medsStructures=(ord.medsRaw||[]).concat((ord.medsAldRaw||[]).map(function(m){return Object.assign({},m,{ald:true});}));
+  var meds=medsStructures.length?medsStructures:ord.medicaments||[];
   if(!meds.length){toast('Aucun médicament dans l\'ordonnance');return;}
 
   toast('📍 Géolocalisation en cours...');
@@ -4345,17 +4347,37 @@ async function voirOrdonnanceHisto(i){
           if(m.poso)l+=' — '+m.poso;
           return l;
         });
-        var medNom=(NOTION_MEDS&&NOTION_MEDS[0]&&NOTION_MEDS[0].nom)||'Dr.';
+
+        // Charger nom prescripteur depuis Supabase medecins
+        var medNom='Dr.';
+        var medSpec='';
+        if(row.medecin_id){
+          try{
+            var rm=await fetch(DB_URL+'?table=medecins&filter=id=eq.'+row.medecin_id+'&limit=1',{
+              headers:{'x-dokita-key':DOKITA_KEY}
+            });
+            var dm=await rm.json();
+            var medRows=Array.isArray(dm)?dm:(dm.data||[]);
+            if(medRows.length){
+              medNom=(medRows[0].nom_complet||('Dr. '+(medRows[0].prenom||'')+' '+(medRows[0].nom||''))).trim();
+              medSpec=medRows[0].specialite||medRows[0].sous_specialite||'';
+            }
+          }catch(e){dbgWarn('Medecin load err: '+e.message);}
+        }
+
         s.ordonnance={
           medecin:medNom,
-          specialite:'',
+          specialite:medSpec,
           diagnostic:s.diagnostic||'',
           medicaments:meds.concat(medsAld),
+          medsRaw:pf.meds||[],
+          medsAldRaw:pf.medsAld||[],
           notes:row.justification||'',
           date:s.date,
-          conforme:row.conforme_oms
+          conforme:row.conforme_oms,
+          ordonnanceId:row.id
         };
-        dbg('Ordonnance chargée depuis Supabase ✅');
+        dbg('Ordonnance chargée depuis Supabase ✅ medecin='+medNom);
       }
     }catch(e){dbg('Ordonnance Supabase err: '+e.message);}
   }
