@@ -2224,7 +2224,9 @@ async function ouvrirAnalyses(){
       var statutColor=statut==='prescrit'?'#F59E0B':statut==='fait'?'#00C896':'#8B9EC7';
       var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='fait'?'✅ Fait':'📋 '+statut;
       var dateStr=ex.created_at?(new Date(ex.created_at)).toLocaleDateString('fr-FR'):'';
-      return '<div style="background:var(--card);border:1px solid '+(obligatoire?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
+      // Chercher résultat lié dans localStorage
+      var resultatLie=examensLocaux.find(function(it){return it.examenId===ex.id;});
+      return '<div style="background:var(--card);border:1px solid '+(statut==='fait'?'rgba(0,200,150,.3)':obligatoire?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
           '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(ex.type_examen)+'</div>'+
           '<span style="font-size:10px;font-weight:700;color:'+statutColor+';">'+statutLabel+'</span>'+
@@ -2233,6 +2235,13 @@ async function ouvrirAnalyses(){
           (obligatoire?'<span style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;color:#ef4444;">OBLIGATOIRE</span>':'<span style="background:rgba(139,156,199,.1);border:1px solid rgba(139,156,199,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--text3);">Recommandé</span>')+
           (dateStr?'<span style="font-size:10px;color:var(--text3);">Prescrit le '+dateStr+'</span>':'')+
         '</div>'+
+        (resultatLie?
+          '<div style="margin-top:10px;background:rgba(0,200,150,.05);border:1px solid rgba(0,200,150,.2);border-radius:10px;padding:10px 12px;">'+
+            '<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:4px;">RÉSULTAT</div>'+
+            '<div style="font-size:13px;color:var(--text);">'+escHtml(resultatLie.valeur)+'</div>'+
+            '<div style="font-size:10px;color:var(--text3);margin-top:4px;">'+resultatLie.date+'</div>'+
+          '</div>'
+        :'')+
         (statut==='prescrit'?
           '<button onclick="ajouterResultatAnalyse(\''+ex.id+'\',\''+ex.type_examen.replace(/'/g,"\\'")+'\')" style="width:100%;margin-top:10px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:10px;padding:9px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">📝 Saisir le résultat</button>'
         :'')+
@@ -2240,11 +2249,11 @@ async function ouvrirAnalyses(){
     }).join('');
   }
 
-  // ── Section saisies manuelles ──
-  html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:'+(examensSupabase.length?'20px':'0')+'px 0 10px;">Mes résultats saisis</div>';
-
-  if(examensLocaux.length){
-    html+=examensLocaux.map(function(it,i){
+  // ── Section saisies manuelles (sans les résultats liés à un examen prescrit) ──
+  var examensLocauxSansLien=examensLocaux.filter(function(it){return !it.examenId;});
+  if(examensLocauxSansLien.length){
+    html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:'+(examensSupabase.length?'20px':'0')+'px 0 10px;">Mes résultats saisis</div>';
+    html+=examensLocauxSansLien.map(function(it,i){
       return '<div class="detail-item">'+
         '<div class="detail-item-title">'+escHtml(it.titre)+'</div>'+
         '<div class="detail-item-val">'+escHtml(it.valeur).split('\n').join('<br>')+'</div>'+
@@ -2253,11 +2262,9 @@ async function ouvrirAnalyses(){
           '<span onclick="supprimerAnalyseLocale('+i+')" style="color:var(--danger);cursor:pointer;font-size:12px;">🗑 Supprimer</span>'+
         '</div></div>';
     }).join('');
-  } else {
-    html+='<div class="detail-empty" style="padding:20px 0;">📂 Aucun résultat saisi manuellement.</div>';
   }
 
-  html+='<button onclick="ajouterResultatAnalyse()" style="width:100%;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;padding:12px;font-size:13px;color:var(--text2);cursor:pointer;font-family:\'DM Sans\',sans-serif;margin-top:8px;">＋ Saisir un résultat</button>';
+  html+='<button onclick="ajouterResultatAnalyse()" style="width:100%;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;padding:12px;font-size:13px;color:var(--text2);cursor:pointer;font-family:\'DM Sans\',sans-serif;margin-top:8px;">＋ Saisir un résultat manuel</button>';
 
   el.innerHTML=html;
 }
