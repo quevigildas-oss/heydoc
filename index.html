@@ -1060,7 +1060,7 @@ async function seConnecter(){
     PROFILS=[profilPrincipal];SEL=0;
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
-    if(profilPrincipal.traitements)syncTraitementsDepuisNotion(profilPrincipal);
+    syncTraitementsDepuisNotion(profilPrincipal); // toujours appeler — efface les ALD si traitements vide
     nav('accueilScreen');
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
     // Membres famille via compte_parent_id (UUID)
@@ -1270,7 +1270,7 @@ async function rechargerSessionNotion(){
     PROFILS=[profilPrincipal].concat(membres);
     SEL=0;
     saveProfils();
-    if(profilPrincipal.traitements)syncTraitementsDepuisNotion(profilPrincipal);
+    syncTraitementsDepuisNotion(profilPrincipal); // toujours appeler — efface les ALD si traitements vide
     return true;
   }catch(e){
     dbg('rechargerSession ERR: '+e.message);
@@ -1332,84 +1332,67 @@ function goCentreSante(){nav('cliniqueScreen');loadGeo('centre_sante');}
 // les traitements saisis manuellement par le patient.
 function syncTraitementsDepuisNotion(profil){
   dbg('syncTraitements — profil='+( profil?profil.prenom:'NULL')+' traitements="'+(profil&&profil.traitements?profil.traitements.slice(0,80):'VIDE')+'"');
-  if(!profil||!profil.traitements){dbgWarn('syncTraitements — traitements vide ou profil null');return;}
+  if(!profil){dbgWarn('syncTraitements — profil null');return;}
+
+  var key='traits_'+(profil.patientId||'0_'+(profil.prenom||''));
+  var existants=[];
+  try{var s=localStorage.getItem(key);if(s)existants=JSON.parse(s);}catch(e){}
+
+  // Si traitements_reguliers vide dans Supabase → effacer les ALD venant de Supabase
+  if(!profil.traitements||!profil.traitements.trim()){
+    var avantCount=existants.length;
+    // Garder uniquement les traitements saisis manuellement (source != 'notion')
+    existants=existants.filter(function(t){return t.source!=='notion';});
+    if(existants.length<avantCount){
+      try{localStorage.setItem(key,JSON.stringify(existants));}catch(e){}
+      dbg('syncTraitements — ALD Supabase effacés ('+( avantCount-existants.length)+' supprimé(s))');
+      mettreAJourBadgeTuile(key);
+    }
+    return;
+  }
+
   var lignes=profil.traitements.split('\n').map(function(l){return l.trim();}).filter(function(l){return l.length>3;});
   dbg('syncTraitements — '+lignes.length+' ligne(s) à parser');
-  if(!lignes.length){dbgWarn('syncTraitements — aucune ligne valide');return;}
+  if(!lignes.length){return;}
 
-  // Clé localStorage pour ce profil
-  var key='traits_'+(profil.patientId||'0_'+(profil.prenom||''));
   dbg('syncTraitements — clé localStorage: "'+key+'"');
-  var existants=[];
-  try{var s=localStorage.getItem(key);if(s)existants=JSON.parse(s);dbg('syncTraitements — '+existants.length+' traitement(s) existant(s) en local');}catch(e){}
+  dbg('syncTraitements — '+existants.length+' traitement(s) existant(s) en local');
 
   var nouveaux=0;
   lignes.forEach(function(ligne){
-    // Parse le format enrichi :
-    // "Metformine 850mg — 2x/jour [ALD] (Diabète type 2) — Dr. Kouassi — Début: 2026-03-13"
     var estALD=ligne.indexOf('[ALD]')>=0;
-
-    // Extraire nom + dosage (avant le premier " — ")
     var parts=ligne.split(' — ');
     var nomDosage=(parts[0]||'').trim();
-    // Séparer nom et dosage : dernier mot qui commence par chiffre = dosage
     var mots=nomDosage.split(' ');
     var dosage='',nom=nomDosage;
     if(mots.length>=2&&/^\d/.test(mots[mots.length-1])){
       dosage=mots[mots.length-1];
       nom=mots.slice(0,-1).join(' ');
     }
-
-    // Extraire fréquence (parts[1] sans [ALD])
     var freq=(parts[1]||'').replace('[ALD]','').trim();
-
-    // Extraire indication entre parenthèses
     var indMatch=ligne.match(/\(([^)]+)\)/);
     var indication=indMatch?indMatch[1]:'';
-
-    // Extraire prescripteur (partie "Dr. ...")
     var prescripteur='';
     parts.forEach(function(p){if(p.trim().indexOf('Dr.')===0)prescripteur=p.trim();});
-
-    // Extraire date début
     var dateMatch=ligne.match(/Début:\s*(\d{4}-\d{2}-\d{2})/);
     var dateDebut=dateMatch?dateMatch[1]:new Date().toISOString().slice(0,10);
-
     if(!nom){dbgWarn('syncTraitements — nom vide pour ligne: '+ligne);return;}
 
-    // Vérifier si ce médicament existe déjà (par nom, insensible casse)
-    // Inclut aussi les doublons depuis Notion (source='notion')
-    var dejaPresent=existants.some(function(t){
-      return t.nom&&t.nom.toLowerCase()===nom.toLowerCase();
-    });
-    // Double vérification : si déjà importé depuis Notion avec même nom+dosage → skip
-    var dejaNotiom=existants.some(function(t){
-      return t.source==='notion'&&t.nom&&t.nom.toLowerCase()===nom.toLowerCase()&&t.dosage===dosage;
-    });
-    dbg('syncTraitements — ligne="'+ligne.slice(0,60)+'" nom="'+nom+'" ald='+estALD+' déjà='+dejaPresent);
+    var dejaPresent=existants.some(function(t){return t.nom&&t.nom.toLowerCase()===nom.toLowerCase();});
+    var dejaNotion=existants.some(function(t){return t.source==='notion'&&t.nom&&t.nom.toLowerCase()===nom.toLowerCase()&&t.dosage===dosage;});
+    dbg('syncTraitements — "'+nom+'" ald='+estALD+' déjà='+dejaPresent);
 
-    if(!dejaPresent&&!dejaNotiom){
+    if(!dejaPresent&&!dejaNotion){
       existants.unshift({
         id:'trait_notion_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-        nom:nom,
-        dosage:dosage,
-        frequence:freq||'—',
-        heures:'',
-        date_debut:dateDebut,
-        duree_type:estALD?'indefini':'jours',
-        date_fin:'',
-        duree_jours:'',
-        indication:indication,
-        prescripteur:prescripteur,
-        ald:estALD,
-        statut:'actif',
-        source:'notion', // marque comme venant de Notion
-        created_at:new Date().toISOString(),
-        updated_at:new Date().toISOString()
+        nom:nom,dosage:dosage,frequence:freq||'—',heures:'',
+        date_debut:dateDebut,duree_type:estALD?'indefini':'jours',
+        date_fin:'',duree_jours:'',indication:indication,prescripteur:prescripteur,
+        ald:estALD,statut:'actif',source:'notion',
+        created_at:new Date().toISOString(),updated_at:new Date().toISOString()
       });
       nouveaux++;
     } else {
-      // Mettre à jour le prescripteur et l'indication si vides
       existants=existants.map(function(t){
         if(t.nom&&t.nom.toLowerCase()===nom.toLowerCase()){
           if(!t.prescripteur&&prescripteur)t.prescripteur=prescripteur;
@@ -1422,7 +1405,7 @@ function syncTraitementsDepuisNotion(profil){
     }
   });
 
-  try{localStorage.setItem(key,JSON.stringify(existants));dbg('syncTraitements — sauvegardé '+existants.length+' traitement(s) sous clé "'+key+'"');}catch(e){dbgError('syncTraitements — erreur localStorage: '+e.message);}
+  try{localStorage.setItem(key,JSON.stringify(existants));dbg('syncTraitements — sauvegardé '+existants.length+' traitement(s)');}catch(e){dbgError('syncTraitements — erreur localStorage: '+e.message);}
 
   // Toujours mettre à jour le badge avec la clé correcte
   setTimeout(function(){
