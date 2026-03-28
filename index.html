@@ -2205,7 +2205,7 @@ async function ouvrirAnalyses(){
   }catch(e){}
 
   // 3. Mettre à jour badge tuile
-  var nbPrescrit=examensSupabase.filter(function(e){return e.statut==='prescrit';}).length;
+  var nbPrescrit=examensSupabase.filter(function(e){return e.statut==='prescrit'||e.statut==='en_attente_patient';}).length;
   var badge=document.getElementById('analysesTileBadge');
   var sub=document.getElementById('analysesTileSub');
   if(badge){
@@ -2221,12 +2221,12 @@ async function ouvrirAnalyses(){
     html+=examensSupabase.map(function(ex){
       var statut=ex.statut||'prescrit';
       var obligatoire=ex.obligatoire;
-      var statutColor=statut==='prescrit'?'#F59E0B':statut==='fait'?'#00C896':'#8B9EC7';
-      var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='fait'?'✅ Fait':'📋 '+statut;
+      var statutColor=statut==='prescrit'?'#F59E0B':statut==='resultat_recu'?'#00C896':'#8B9EC7';
+      var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='resultat_recu'?'✅ Fait':'📋 '+statut;
       var dateStr=ex.created_at?(new Date(ex.created_at)).toLocaleDateString('fr-FR'):'';
-      // Chercher résultat lié dans localStorage
-      var resultatLie=examensLocaux.find(function(it){return it.examenId===ex.id;});
-      return '<div style="background:var(--card);border:1px solid '+(statut==='fait'?'rgba(0,200,150,.3)':obligatoire?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
+      // Chercher résultat : priorité Supabase (row.resultat), fallback localStorage
+      var resultatLie=ex.resultat?{valeur:ex.resultat,date:ex.date_realisation?(new Date(ex.date_realisation)).toLocaleDateString('fr-FR'):''}:examensLocaux.find(function(it){return it.examenId===ex.id;});
+      return '<div style="background:var(--card);border:1px solid '+(statut==='resultat_recu'?'rgba(0,200,150,.3)':obligatoire?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
           '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(ex.type_examen)+'</div>'+
           '<span style="font-size:10px;font-weight:700;color:'+statutColor+';">'+statutLabel+'</span>'+
@@ -2274,7 +2274,7 @@ async function marquerExamenFait(examenId){
     await fetch(DB_URL+'?table=examens&id='+examenId,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-      body:JSON.stringify({statut:'fait',date_realisation:new Date().toISOString()})
+      body:JSON.stringify({statut:'resultat_recu',date_realisation:new Date().toISOString()})
     });
     toast('✅ Examen marqué comme fait');
     ouvrirAnalyses(); // refresh
@@ -2326,21 +2326,25 @@ async function confirmerResultatAnalyse(key, examenId, nomExamen){
   var modal=document.getElementById('analyseResultatModal');
   if(modal)modal.remove();
 
-  // Sauvegarder en localStorage
+  // Sauvegarder en localStorage (cache local)
   var items=[];
   try{var s=localStorage.getItem(key);if(s)items=JSON.parse(s);}catch(e){}
   items.unshift({titre:titre,valeur:valeur,date:new Date().toLocaleDateString('fr-FR'),examenId:examenId||null});
   try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
 
-  // Si lié à un examen Supabase → marquer comme fait
+  // Si lié à un examen Supabase → PATCH statut + résultat + date_realisation
   if(examenId){
     try{
       await fetch(DB_URL+'?table=examens&id='+examenId,{
         method:'PATCH',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-        body:JSON.stringify({statut:'fait',date_realisation:new Date().toISOString()})
+        body:JSON.stringify({
+          statut:'resultat_recu',
+          resultat:valeur,
+          date_realisation:new Date().toISOString()
+        })
       });
-      dbg('Examen marqué fait: '+examenId);
+      dbg('Examen résultat reçu: '+examenId);
     }catch(e){dbgWarn('Erreur PATCH examen: '+e.message);}
   }
 
