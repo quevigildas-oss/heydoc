@@ -4200,41 +4200,28 @@ async function voirDetailConsultation(i){
   nav('consultDetailScreen');
   var el=document.getElementById('consultDetailBody');
   el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
-  
-  // Utiliser le cache ou recharger
+
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
   if(!s){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Consultation introuvable</div>';return;}
-  
+
   var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
   document.getElementById('consultDetailDate').textContent=dateAff;
-  
-  // Charger la page complète depuis Notion pour avoir tous les champs
-  var html='';
+
   try{
-    var page=await notionConsultRequest('/pages/'+s.notionId,'GET');
-    var props=page.properties||{};
-    function txt(k){var p=props[k];if(!p)return '';var t=p.type;
-      if(t==='rich_text')return(p.rich_text||[]).map(function(x){return x.plain_text;}).join('');
-      if(t==='title')return(p.title||[]).map(function(x){return x.plain_text;}).join('');
-      if(t==='select')return p.select?p.select.name:'';
-      if(t==='date')return p.date?p.date.start:'';
-      return '';}
-    
-    var symptomes=txt('Symptomes');
-    var diagIA=txt('Diagnostic IA');
-    var recommandations=txt('Recommandations OMS');
-    var medecin=txt('Medecin');
-    var statut=txt('Statut');
-    var diagMed=txt('Diagnostic Medecin');
-    var traitementMed=txt('Traitement Prescrit');
-    var ordonnanceRaw=txt('Ordonnance');
-    var ordonnance=null;
-    try{if(ordonnanceRaw)ordonnance=JSON.parse(ordonnanceRaw);}catch(e){}
-    var traite=statut==='valide'||statut==='cloture';
-    
-    html='<div style="display:flex;flex-direction:column;gap:12px;">';
-    
+    // Charger depuis Supabase par supabaseId
+    var r=await fetch(DB_URL+'?table=consultations&filter=id=eq.'+s.supabaseId+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    var row=rows[0]||{};
+
+    var statut=row.statut||s.statut||'en_attente';
+    var traite=statut==='valide'||statut==='cloture'||statut==='valide_override';
+
+    var html='<div style="display:flex;flex-direction:column;gap:12px;">';
+
     // Statut
     html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
     html+='<div style="display:flex;justify-content:space-between;align-items:center;">';
@@ -4243,41 +4230,43 @@ async function voirDetailConsultation(i){
       ?'<span style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:3px 10px;font-size:11px;color:var(--accent);">✅ Traité</span>'
       :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:3px 10px;font-size:11px;color:#fbbf24;">⏳ En attente</span>';
     html+='</div></div>';
-    
+
     // Symptômes
-    if(symptomes){
+    if(row.symptomes){
       html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
       html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🤒 SYMPTÔMES</div>';
-      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(symptomes)+'</div></div>';
+      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(row.symptomes)+'</div></div>';
     }
-    
+
     // Diagnostic IA
-    if(diagIA){
+    if(row.diagnostic_ia){
       html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
       html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🤖 DIAGNOSTIC IA</div>';
-      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(diagIA).split('\\n').join('<br>')+'</div></div>';
+      html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(row.diagnostic_ia).split('\n').join('<br>')+'</div></div>';
     }
-    
-    
-    // Ordonnance médecin
-    if(ordonnance){
-      html+='<div style="background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.3);border-radius:14px;padding:14px;">';
-      html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#818cf8;margin-bottom:8px;">📋 ORDONNANCE — '+escHtml(ordonnance.medecin||medecin||'')+'</div>';
-      if(ordonnance.diagnostic)html+='<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Diagnostic : '+escHtml(ordonnance.diagnostic)+'</div>';
-      if(ordonnance.medicaments&&ordonnance.medicaments.length){
-        html+='<div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:6px;">MÉDICAMENTS :</div>';
-        ordonnance.medicaments.forEach(function(m){
-          html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text);">• '+escHtml(m)+'</div>';
-        });
+
+    // Diagnostic médecin + validation
+    if(row.diagnostic_medecin||row.validation_ia){
+      html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
+      html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🩺 DÉCISION MÉDECIN</div>';
+      if(row.diagnostic_medecin)html+='<div style="font-size:13px;color:var(--text);margin-bottom:6px;">Diagnostic : '+escHtml(row.diagnostic_medecin)+'</div>';
+      if(row.validation_ia){
+        var conforme=row.validation_ia==='CONFORME';
+        html+='<span style="background:'+(conforme?'rgba(0,200,150,.12)':'rgba(239,68,68,.1)')+';border:1px solid '+(conforme?'rgba(0,200,150,.3)':'rgba(239,68,68,.3)')+';border-radius:6px;padding:2px 8px;font-size:10px;color:'+(conforme?'var(--accent)':'#ef4444')+'">'+(conforme?'✅ CONFORME OMS':'⚠️ NON CONFORME')+'</span>';
       }
-      if(ordonnance.notes)html+='<div style="margin-top:8px;font-size:11px;color:var(--text2);font-style:italic;">📝 '+escHtml(ordonnance.notes)+'</div>';
       html+='</div>';
     }
-    
+
     html+='</div>';
-  }catch(e){html='<div style="color:var(--danger);padding:20px;">Erreur chargement: '+e.message+'</div>';}
-  
-  el.innerHTML=html;
+    el.innerHTML=html;
+
+    // Mettre à jour le cache
+    HISTO_CACHE[i].statut=statut;
+    HISTO_CACHE[i].traite=traite;
+
+  }catch(e){
+    el.innerHTML='<div style="color:var(--danger);padding:20px;">Erreur chargement: '+e.message+'</div>';
+  }
 }
 
 
@@ -4333,35 +4322,56 @@ async function voirOrdonnanceHisto(i){
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
   if(!s){toast('Consultation introuvable');return;}
-  // Si ordonnance pas encore dans le cache, recharger depuis Notion
-  if(!s.ordonnance){
+
+  // Charger ordonnance depuis Supabase
+  if(!s.ordonnance&&s.supabaseId){
     try{
-      var page=await notionConsultRequest('/pages/'+s.notionId,'GET');
-      var props=page.properties||{};
-      var ordRaw=(props['Ordonnance']&&props['Ordonnance'].rich_text||[]).map(function(x){return x.plain_text;}).join('');
-      if(ordRaw)s.ordonnance=JSON.parse(ordRaw);
-    }catch(e){dbg('reload ord err: '+e.message);}
+      var r=await fetch(DB_URL+'?table=ordonnances&filter=consultation_id=eq.'+s.supabaseId+'&limit=1',{
+        headers:{'x-dokita-key':DOKITA_KEY}
+      });
+      var data=await r.json();
+      var rows=Array.isArray(data)?data:(data.data||[]);
+      if(rows.length){
+        var row=rows[0];
+        var pf=row.prescription_finale||row.prescription_medecin||{};
+        var meds=(pf.meds||[]).map(function(m){
+          var l=m.nom+(m.dose?' '+m.dose:'');
+          if(m.poso)l+=' — '+m.poso;
+          if(m.duree)l+=' — '+m.duree;
+          return l;
+        });
+        var medsAld=(pf.medsAld||[]).map(function(m){
+          var l=m.nom+(m.dose?' '+m.dose:'')+' [ALD]';
+          if(m.poso)l+=' — '+m.poso;
+          return l;
+        });
+        var medNom=(NOTION_MEDS&&NOTION_MEDS[0]&&NOTION_MEDS[0].nom)||'Dr.';
+        s.ordonnance={
+          medecin:medNom,
+          specialite:'',
+          diagnostic:s.diagnostic||'',
+          medicaments:meds.concat(medsAld),
+          notes:row.justification||'',
+          date:s.date,
+          conforme:row.conforme_oms
+        };
+        dbg('Ordonnance chargée depuis Supabase ✅');
+      }
+    }catch(e){dbg('Ordonnance Supabase err: '+e.message);}
   }
   if(!s.ordonnance){toast('Ordonnance non disponible');return;}
-  
-  // Vérifier usage unique — stocker dans localStorage
-  var usageKey='ord_used_'+s.notionId;
-  var deja=localStorage.getItem(usageKey);
 
-  // Vérifier si un appel d'offre existe déjà pour cette consultation
+  // Vérifier AO depuis Supabase
   var aoStatut='';
   try{
-    var aoCheck=await notionConsultRequest('/databases/'+NOTION_AO_DB+'/query','POST',{
-      filter:{property:'Consultation ID',rich_text:{equals:s.notionId||''}},
-      page_size:1,
-      sorts:[{property:'Date reponse',direction:'descending'}]
+    var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&order=created_at.desc&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
     });
-    if(aoCheck.results&&aoCheck.results.length){
-      var aoProps=aoCheck.results[0].properties;
-      aoStatut=aoProps['Statut']&&aoProps['Statut'].select?aoProps['Statut'].select.name:'';
-      dbg('aoStatut pour '+s.notionId+': '+aoStatut);
-    }
-  }catch(e){dbg('aoCheck err: '+e.message);}
+    var aoData=await aoR.json();
+    var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
+    if(aoRows.length)aoStatut=aoRows[0].statut||'';
+    dbg('aoStatut: '+aoStatut);
+  }catch(e){}
 
   var ord=s.ordonnance;
   var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
