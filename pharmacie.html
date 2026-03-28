@@ -93,7 +93,7 @@ async function init(){
   var el=document.getElementById('mainContent');
   if(!aoId){el.innerHTML='<div class="error">❌ Lien invalide.</div>';return;}
   try{
-    var data=await dbReq('GET',null,'table=appels_offres&filter=ao_id=eq.'+encodeURIComponent(aoId));
+    var data=await dbReq('GET',null,'table=appels_offres&filter=id=eq.'+encodeURIComponent(aoId));
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';return;}
     var row=rows[0];
