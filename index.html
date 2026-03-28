@@ -4388,11 +4388,10 @@ async function voirOrdonnanceHisto(i){
   } else {
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
   }
-  
-  // Construire le template ordonnance HTML
-  // template construit via buildOrdHtml(i)
-  
-  // Boutons action
+
+  var usageKey='ord_used_'+s.supabaseId;
+  var deja=localStorage.getItem(usageKey);
+
   var btnHtml=
     '<div style="display:flex;gap:10px;margin-top:12px;">'+
       (deja?
@@ -4404,15 +4403,14 @@ async function voirOrdonnanceHisto(i){
       '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
     '</div>';
 
-  document.getElementById('ordDetailBody').innerHTML=
-    buildOrdHtml(i)+btnHtml;
+  document.getElementById('ordDetailBody').innerHTML=buildOrdHtml(i)+btnHtml;
   nav('ordonnanceDetailScreen');
 }
 
 function telechargerOrdonnance(i){
   var s=HISTO_CACHE[i];if(!s)return;
   var ord=s.ordonnance;if(!ord)return;
-  localStorage.setItem('ord_used_'+s.notionId,'1');
+  localStorage.setItem('ord_used_'+s.supabaseId,'1');
   var p=PROFILS[SEL]||{};
   var patNom=(p.prenom||'')+' '+(p.nom||'');
   var medsHtml=(ord.medicaments||[]).map(function(m,idx){
@@ -4468,7 +4466,7 @@ function telechargerOrdonnance(i){
 
 async function partagerOrdonnance(i){
   var s=HISTO_CACHE[i];if(!s)return;
-  localStorage.setItem('ord_used_'+s.notionId,'1');
+  localStorage.setItem('ord_used_'+s.supabaseId,'1');
   if(!s)return;
   var ord=s.ordonnance;
   var txt='🏥 ORDONNANCE DOKITA PRO\n\n'+
