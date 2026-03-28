@@ -2004,28 +2004,39 @@ async function envoyerDossier(email,nomMed){
     }
   }catch(e){
     dbgError('RAG — Échec résumé: '+e.message+'. Fallback activé.');
-    resume={
-      nom:nom,age:String(a||''),poids:String(p.poids||''),
-      ville:String(p.ville||'Non renseignee'),voyage:'Aucun',
-      symptomes:msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500),
-      diagnostic:msgs.filter(function(m){return m.role==='ai';}).slice(-1).map(function(m){return m.text;}).join('').slice(0,800),
-      recommandations:'',examens:''
-    };
   }
+
+  // ── Toujours garantir les données patient (fallback sur CURRENT) ──
+  // Le RESUME peut avoir des clés variables selon la version du prompt
+  if(!resume.nom && !resume.patient_nom) resume.nom = nom;
+  if(!resume.age && !resume.patient_age) resume.age = String(a||'');
+  if(!resume.poids && !resume.patient_poids) resume.poids = String(p.poids||'');
+  if(!resume.ville) resume.ville = p.ville||'Non renseignée';
+  if(!resume.symptomes) resume.symptomes = msgs.filter(function(m){return m.role==='user';}).map(function(m){return m.text;}).join(' | ').slice(0,500);
+  if(!resume.diagnostic) resume.diagnostic = msgs.filter(function(m){return m.role==='ai';}).slice(-1).map(function(m){return m.text;}).join('').slice(0,800);
 
   // ── ÉTAPE 2 : payload Supabase ──
   function cleanStr(v,max){return String(v||'').replace(/[\u0000-\u001F]/g,' ').trim().slice(0,max||200);}
 
-  // Trouver le medecin_id depuis NOTION_MEDS (qui a supabaseId depuis loadMeds)
-  var medObj=NOTION_MEDS.find(function(m){return m.email===email;})||null;
+  // Trouver medecin_id — cherche par email (insensible casse) ou par nom
+  var emailNorm=(email||'').toLowerCase().trim();
+  var medObj=NOTION_MEDS.find(function(m){
+    return (m.email||'').toLowerCase().trim()===emailNorm;
+  })||null;
+  if(!medObj)dbgWarn('envoyerDossier — médecin non trouvé dans NOTION_MEDS pour email: '+email+' | NOTION_MEDS.length='+NOTION_MEDS.length);
+  else dbg('envoyerDossier — medecin_id: '+medObj.supabaseId);
+
+  var nomResume=resume.nom||resume.patient_nom||nom;
+  var ageResume=parseInt(resume.age||resume.patient_age||a||0)||0;
+  var poidsResume=parseFloat(resume.poids||resume.patient_poids||p.poids||0)||0;
 
   var payload={
     consultation_id:id,
     patient_id:cleanStr(patId,50),
-    patient_nom:cleanStr(resume.nom||nom,100),
-    patient_age:parseInt(resume.age||a||0)||0,
-    patient_poids:parseFloat(resume.poids||p.poids||0)||0,
-    patient_ville:cleanStr(resume.ville||p.ville||'Non renseignee',50),
+    patient_nom:cleanStr(nomResume,100),
+    patient_age:ageResume,
+    patient_poids:poidsResume,
+    patient_ville:cleanStr(resume.ville||p.ville||'Non renseignée',50),
     patient_voyage:cleanStr(resume.voyage||'Aucun',80),
     symptomes:cleanStr(resume.symptomes,500),
     diagnostic_ia:cleanStr(resume.diagnostic,800),
