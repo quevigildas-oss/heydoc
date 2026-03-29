@@ -3764,6 +3764,17 @@ var HISTO_CACHE=[];
 var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
 var PHARMA_URL='https://heydoc-mu.vercel.app/pharmacie';
 
+// Labels affichage pour statuts AO (valeurs Supabase sans accents → labels UI)
+var STATUT_AO_LABELS={
+  'en_attente':    '⏳ En attente',
+  'offres_recues': '📬 Offres reçues',
+  'accepte':       '✅ Accepté',
+  'en_livraison':  '🚚 En livraison',
+  'livre':         '📦 Livré',
+  'annule':        '❌ Annulé'
+};
+function labelAO(statut){return STATUT_AO_LABELS[statut]||statut;}
+
 var PHARMACIES=[]; // chargé depuis Supabase table pharmacies
 
 async function chargerPharmaciess(){
@@ -4145,19 +4156,46 @@ function renderCarteCode(code,pharmNom,meds,num){
 }
 
 async function choisirOffre(supabaseId,pharmNom){
-  // Générer code retrait 6 chiffres
   var code=String(Math.floor(100000+Math.random()*900000));
   toast('⏳ Confirmation en cours...');
   try{
+    // 1. PATCH l'AO choisi → accepte
     await fetch(DB_URL,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-      body:JSON.stringify({
-        table:'appels_offres',
-        id:supabaseId,
-        data:{statut:'accepte',code_retrait:code}
-      })
+      body:JSON.stringify({table:'appels_offres',id:supabaseId,data:{statut:'accepte',code_retrait:code}})
     });
+
+    // 2. Annuler les autres AO en attente pour la même consultation
+    try{
+      var consultId='';
+      // Récupérer consultation_id depuis l'AO sélectionné
+      var aoR=await fetch(DB_URL+'?table=appels_offres&filter=id=eq.'+supabaseId+'&limit=1',{
+        headers:{'x-dokita-key':DOKITA_KEY}
+      });
+      var aoData=await aoR.json();
+      var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
+      if(aoRows.length)consultId=aoRows[0].consultation_id||'';
+
+      if(consultId){
+        var autresR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&limit=20',{
+          headers:{'x-dokita-key':DOKITA_KEY}
+        });
+        var autresData=await autresR.json();
+        var autres=Array.isArray(autresData)?autresData:(autresData.data||[]);
+        var aAnnuler=autres.filter(function(r){return r.id!==supabaseId&&r.statut!=='annule'&&r.statut!=='livre';});
+        await Promise.all(aAnnuler.map(function(r){
+          return fetch(DB_URL,{
+            method:'PATCH',
+            headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+            body:JSON.stringify({table:'appels_offres',id:r.id,data:{statut:'annule'}})
+          }).catch(function(){});
+        }));
+        dbg('AO annulés: '+aAnnuler.length);
+      }
+    }catch(e){dbgWarn('Annulation autres AO: '+e.message);}
+
+    // 3. Afficher confirmation + code retrait
     var el=document.getElementById('offresBody');
     var shareMsg='Mon code de retrait Dokita : '+code+'\nPharmacie : '+pharmNom;
     var shareKey='single_'+code;
@@ -4531,7 +4569,7 @@ async function voirOrdonnanceHisto(i){
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length)aoStatut=aoRows[0].statut||'';
-    dbg('aoStatut: '+aoStatut);
+    dbg('aoStatut: '+aoStatut+' → '+labelAO(aoStatut));
   }catch(e){}
 
   var ord=s.ordonnance;
