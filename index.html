@@ -2642,6 +2642,45 @@ function mettreAJourBadgeTuile(keyOverride){
   if(sub)sub.textContent=actifs?'En cours':items.length?'Historique':'Chroniques';
   // Mettre à jour badge analyses en même temps
   mettreAJourBadgeAnalyses();
+  mettreAJourBadgeOffres();
+}
+
+function mettreAJourBadgeOffres(){
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId)return;
+  fetch(DB_URL+'?table=appels_offres&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=date_envoi.desc&limit=20',{
+    headers:{'x-dokita-key':DOKITA_KEY}
+  }).then(function(r){return r.json();}).then(function(data){
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    var badge=document.getElementById('offresTileBadge');
+    var sub=document.getElementById('offresTileSub');
+    var nbOffres=rows.filter(function(r){return r.statut==='offres_recues';}).length;
+    var nbEnAttente=rows.filter(function(r){return r.statut==='en_attente';}).length;
+    var nbAccepte=rows.filter(function(r){return r.statut==='accepte';}).length;
+    if(badge){
+      if(nbOffres>0){
+        badge.style.display='inline-block';
+        badge.style.background='rgba(245,158,11,.2)';
+        badge.style.color='#d97706';
+        badge.style.border='1px solid rgba(245,158,11,.4)';
+        badge.textContent=nbOffres+' offre'+(nbOffres>1?'s':'')+' reçue'+(nbOffres>1?'s':'');
+      } else if(nbAccepte>0){
+        badge.style.display='inline-block';
+        badge.style.background='rgba(0,200,150,.12)';
+        badge.style.color='var(--accent)';
+        badge.style.border='1px solid rgba(0,200,150,.3)';
+        badge.textContent='✅ En cours de retrait';
+      } else {
+        badge.style.display='none';
+      }
+    }
+    if(sub){
+      if(nbOffres>0)sub.textContent=nbOffres+' pharmacie'+(nbOffres>1?'s':'')+' ont répondu';
+      else if(nbEnAttente>0)sub.textContent=nbEnAttente+' pharmacie'+(nbEnAttente>1?'s':'')+' contactée'+(nbEnAttente>1?'s':'');
+      else if(nbAccepte>0)sub.textContent='Retrait en cours';
+      else sub.textContent='Pharmacies';
+    }
+  }).catch(function(){});
 }
 
 function mettreAJourBadgeAnalyses(){
