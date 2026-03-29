@@ -4308,6 +4308,14 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
 
   toast('✅ '+proches.length+' pharmacie(s) contactée(s)');
 
+  // Mettre à jour le bouton "💰 Moins cher" → "Soumis ✅" dans la page ordonnance
+  var btnAO=document.querySelector('button[onclick*="lancerAppelOffre"]');
+  if(btnAO){
+    btnAO.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:var(--accent);">Soumis ✅</div>';
+  }
+  // Mettre à jour le badge tuile offres
+  mettreAJourBadgeOffres();
+
   if(rayon===5){
     setTimeout(async function(){
       var reps=await compterReponses(s.supabaseId);
@@ -4537,7 +4545,7 @@ async function voirOrdonnanceHisto(i){
   } else if(aoStatut==='accepte'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
   } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
-    btnMoinsCher='<button onclick="ouvrirOffres()" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">🏪 Voir offres</button>';
+    btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:var(--accent);">Soumis ✅</div>';
   } else {
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
   }
