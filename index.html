@@ -4228,17 +4228,38 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     return l;
   }).join('\n');
 
-  var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nLiens par pharmacie :\n'+lignes.join('\n')+'\n\nMerci de répondre dans 30 min.';
-
-  // Envoyer vers les vrais numéros des pharmacies
-  proches.forEach(function(ph,k){
+  // Construire les URLs WhatsApp par pharmacie
+  var waUrls=proches.map(function(ph,k){
     var lignesPh=lignes.filter(function(l){return l.indexOf(ph.nom)>=0;});
-    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien : '+lignesPh[0]+'\n\nMerci de répondre dans 30 min.';
-    var waUrl='https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msgPh);
-    if(k===0)window.open(waUrl,'_blank');
+    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien : '+(lignesPh[0]||'')+'\n\nMerci de répondre dans 30 min.';
+    return {
+      nom:ph.nom,
+      url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msgPh)
+    };
   });
 
-  toast('✅ WhatsApp ouvert — '+proches.length+' pharmacie(s) dans '+rayon+'km');
+  // Modal avec les liens à envoyer
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
+  modal.innerHTML=
+    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;padding-bottom:calc(24px + var(--sb));">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:20px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div>'+
+      waUrls.map(function(w,k){
+        return '<a href="'+w.url+'" target="_blank" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;text-decoration:none;">'+
+          '<div style="width:40px;height:40px;border-radius:12px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">💬</div>'+
+          '<div style="flex:1;">'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+escHtml(w.nom)+'</div>'+
+            '<div style="font-size:11px;color:#25D366;margin-top:2px;">Ouvrir WhatsApp →</div>'+
+          '</div>'+
+          '<div style="font-size:11px;background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 8px;color:#25D366;font-weight:700;">'+(k+1)+'/'+waUrls.length+'</div>'+
+        '</a>';
+      }).join('')+
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;margin-top:6px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:13px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">✅ Terminé</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+
+  toast('✅ '+proches.length+' pharmacie(s) contactée(s)');
 
   if(rayon===5){
     setTimeout(async function(){
