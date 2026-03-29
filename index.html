@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.3
-     DATE    : 2026-03-27
+     VERSION : V4.4
+     DATE    : 2026-03-29
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.4 — 2026-03-29 : Workflow ordonnance + AO pharmacie finalisé
+                           voirDetailConsultation() → Supabase (suppression Notion)
+                           voirOrdonnanceHisto() → Supabase ordonnances + nom prescripteur
+                           chargerPharmaciess() → Supabase pharmacies au clic
+                           envoyerAux() → INSERT ao_id,rayon_km,patient_lat/lng,date_envoi
+                           Modal 3 liens WhatsApp par pharmacie
+                           Statut examens resultat_recu (fix schéma)
+                           PATCH examens.resultat + Supabase priorité sur localStorage
        V4.3 — 2026-03-27 : Migration membre famille + AO pharmacie
                            creerFicheMembreFamille() → INSERT patients Supabase
                            saveProfil() membre famille → branche Supabase active
@@ -3816,7 +3824,7 @@ async function ouvrirOffres(){
 
     // Garder seulement les offres repondues/selectionnees
     var offresRepondues=offres.filter(function(o){
-      return o.statut==='repondu'||o.statut==='selectionne';
+      return o.statut==='offres_recues'||o.statut==='accepte';
     });
 
     // Dédupliquer par pharmacie — garder la plus récente si même pharmacie répond plusieurs fois
@@ -4108,7 +4116,7 @@ async function choisirOffre(supabaseId,pharmNom){
       body:JSON.stringify({
         table:'appels_offres',
         id:supabaseId,
-        data:{statut:'selectionne',code_retrait:code}
+        data:{statut:'accepte',code_retrait:code}
       })
     });
     var el=document.getElementById('offresBody');
@@ -4274,7 +4282,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
 
 async function compterReponses(consultId){
   try{
-    var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.repondu',{
+    var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.offres_recues',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
@@ -4485,11 +4493,11 @@ async function voirOrdonnanceHisto(i){
 
   // Bouton Moins cher selon statut AO
   var btnMoinsCher='';
-  if(aoStatut==='valide'){
+  if(aoStatut==='livre'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Retrait effectué</div>';
-  } else if(aoStatut==='selectionne'){
+  } else if(aoStatut==='accepte'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
-  } else if(aoStatut==='repondu'||aoStatut==='en_attente'){
+  } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
     btnMoinsCher='<button onclick="ouvrirOffres()" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">🏪 Voir offres</button>';
   } else {
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
