@@ -4183,6 +4183,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   var now=new Date().toISOString();
   for(var k=0;k<proches.length;k++){
     var ph=proches[k];
+    var aoId=genAoId();
     try{
       var aoRes=await fetch(DB_URL,{
         method:'POST',
@@ -4190,14 +4191,17 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         body:JSON.stringify({
           table:'appels_offres',
           data:{
+            ao_id:aoId,
             consultation_id:s.supabaseId||s.id||'',
             patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
             pharmacie_nom:ph.nom,
             pharmacie_tel:ph.tel,
             medicaments:medsObj,
             statut:'en_attente',
-            rayon:rayon,
-            created_at:now
+            rayon_km:rayon,
+            patient_lat:lat,
+            patient_lng:lon,
+            date_envoi:now
           }
         })
       });
@@ -4208,11 +4212,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         toast('⚠️ '+errMsg);
         continue;
       }
-      // Utiliser l'UUID Supabase retourné comme identifiant
-      var aoRows=Array.isArray(aoData)?aoData:[aoData];
-      var aoUuid=aoRows[0]&&aoRows[0].id;
-      if(!aoUuid){dbgWarn('AO INSERT — pas d\'UUID retourné');continue;}
-      var lien=PHARMA_URL+'?id='+aoUuid+'&tel='+encodeURIComponent(ph.tel);
+      var lien=PHARMA_URL+'?id='+aoId+'&tel='+encodeURIComponent(ph.tel);
       lignes.push(ph.nom+' : '+lien);
     }catch(e){dbg('AO err '+ph.nom+': '+e.message);}
   }
