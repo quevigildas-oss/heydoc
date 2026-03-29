@@ -4183,7 +4183,6 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   var now=new Date().toISOString();
   for(var k=0;k<proches.length;k++){
     var ph=proches[k];
-    var aoId=genAoId();
     try{
       var aoRes=await fetch(DB_URL,{
         method:'POST',
