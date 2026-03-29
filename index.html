@@ -3926,6 +3926,26 @@ async function ouvrirOffres(){
     var meilleur2stops=trouver2Stops(offresRepondues,patLat,patLon);
     dbg('2stops: '+(meilleur2stops?meilleur2stops.a.pharmNom+' + '+meilleur2stops.b.pharmNom+' total='+meilleur2stops.total:'null'));
 
+    // Si une offre est déjà acceptée → afficher directement le code de retrait
+    var dejaAccepte=offres.find(function(o){return o.statut==='accepte'&&o.codeRetrait;});
+    if(dejaAccepte){
+      var shareKey='reload_'+dejaAccepte.codeRetrait;
+      SHARE_MSGS[shareKey]='Mon code de retrait Dokita : '+dejaAccepte.codeRetrait+'\nPharmacie : '+dejaAccepte.pharmNom;
+      el.innerHTML=
+        '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:20px;margin-bottom:16px;">'+
+          '<div style="font-size:32px;text-align:center;margin-bottom:12px;">✅</div>'+
+          '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);text-align:center;margin-bottom:4px;">Pharmacie choisie</div>'+
+          '<div style="font-size:13px;color:var(--text2);text-align:center;margin-bottom:20px;">'+escHtml(dejaAccepte.pharmNom)+'</div>'+
+          '<div style="background:var(--bg);border-radius:10px;padding:16px;text-align:center;margin-bottom:14px;">'+
+            '<div style="font-size:10px;color:var(--text3);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:2px;">🔐 Votre code de retrait</div>'+
+            '<div style="font-family:Syne,sans-serif;font-size:36px;font-weight:800;letter-spacing:10px;color:var(--accent);">'+dejaAccepte.codeRetrait+'</div>'+
+            '<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.5;">Communiquez ce code au pharmacien<br>pour récupérer votre commande</div>'+
+          '</div>'+
+          '<button onclick="partagerCodeStop(\''+shareKey+'\')" style="width:100%;padding:12px;background:rgba(0,200,150,.15);border:1px solid var(--accent);border-radius:10px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">📤 Partager le code</button>'+
+        '</div><div style="height:30px;"></div>';
+      return;
+    }
+
     renderOffres(meilleureComplete,meilleur2stops,offresRepondues);
     // Stocker pour accès depuis le bouton
     DERNIERS_STOPS2=meilleur2stops;
@@ -4156,10 +4176,20 @@ function renderCarteCode(code,pharmNom,meds,num){
 }
 
 async function choisirOffre(supabaseId,pharmNom){
-  var code=String(Math.floor(100000+Math.random()*900000));
   toast('⏳ Confirmation en cours...');
   try{
-    // 1. PATCH l'AO choisi → accepte
+    // Vérifier si un code existe déjà dans Supabase
+    var existR=await fetch(DB_URL+'?table=appels_offres&filter=id=eq.'+supabaseId+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var existData=await existR.json();
+    var existRows=Array.isArray(existData)?existData:(existData.data||[]);
+    var existingCode=existRows.length&&existRows[0].code_retrait?existRows[0].code_retrait:'';
+
+    // Générer un code uniquement si pas encore de code
+    var code=existingCode||String(Math.floor(100000+Math.random()*900000));
+
+    // 1. PATCH l'AO choisi → accepte + code (idempotent)
     await fetch(DB_URL,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
