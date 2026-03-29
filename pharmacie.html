@@ -138,9 +138,9 @@ async function init(){
       offre:offreJson
     };
 
-    if(statut==='valide'){renderValide();}
-    else if(statut==='selectionne'){renderRetraitAttente();}
-    else if(statut==='repondu'){renderDejaRepondu();}
+    if(statut==='livre'){renderValide();}
+    else if(statut==='accepte'){renderRetraitAttente();}
+    else if(statut==='offres_recues'){renderDejaRepondu();}
     else{renderForm();}
   }catch(e){
     el.innerHTML='<div class="error">❌ Erreur chargement : '+escHtml(e.message)+'</div>';
@@ -287,9 +287,9 @@ async function soumettre(){
     await dbReq('PATCH',{
       table:'appels_offres',
       id:aoData.supabaseId,
-      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'repondu',date_reponse:new Date().toISOString()}
+      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'offres_recues',date_reponse:new Date().toISOString()}
     });
-    aoData.offre=offre;aoData.statut='repondu';
+    aoData.offre=offre;aoData.statut='offres_recues';
     renderDejaRepondu();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ Soumettre mon offre';
@@ -314,12 +314,12 @@ async function validerRetrait(){
     return;
   }
   try{
-    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'valide',date_validation:new Date().toISOString()}});
+    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'livre',date_validation:new Date().toISOString()}});
     // Annuler les autres offres du même consultation_id
     try{
       var autres=await dbReq('GET',null,'table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(aoData.consultId));
       var rows=Array.isArray(autres)?autres:(autres.data||[]);
-      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='valide';}).map(function(r){
+      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='livre';}).map(function(r){
         return dbReq('PATCH',{table:'appels_offres',id:r.id,data:{statut:'annule'}}).catch(function(){});
       }));
     }catch(e){}
