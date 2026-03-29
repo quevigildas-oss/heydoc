@@ -1,4 +1,16 @@
 <!DOCTYPE html>
+<!-- ============================================
+     DOKITA — Pharmacie (Réponse Appel d'Offre)
+     VERSION : V4.4
+     DATE    : 2026-03-29
+     CHANGELOG:
+       V4.4 — 2026-03-29 : Fix PATCH soumettre (table/id en query params)
+                           Médicaments normalisés objet→string (fix [object Object])
+                           ao_id restauré (ALTER TABLE confirmé)
+                           dbReq PATCH : extrait table/id du body → query params
+                           Médicaments lisibles dans renderForm + renderRetraitAttente + soumettre
+       V1.0 — 2026-03-20 : Version initiale pharmacie Supabase
+============================================ -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -82,16 +94,19 @@ function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 async function dbReq(method,body,qs){
   var url=DB_URL+(qs?'?'+qs:'');
-  // Pour PATCH : extraire table et id du body et les mettre en query params
+  // Pour PATCH : table et id en query params
   if(method==='PATCH'&&body&&body.table){
-    var q='table='+body.table+(body.id?'&id='+body.id:'');
-    url=DB_URL+'?'+q;
+    url=DB_URL+'?table='+body.table+(body.id?'&id='+encodeURIComponent(body.id):'');
     body=body.data||body;
   }
   var opts={method:method||'GET',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}};
   if(body)opts.body=JSON.stringify(body);
   var r=await fetch(url,opts);
-  if(!r.ok)throw new Error('DB '+r.status);
+  if(!r.ok){
+    var errBody='';
+    try{errBody=JSON.stringify(await r.json());}catch(e){errBody=r.statusText;}
+    throw new Error('DB '+r.status+' — '+errBody.slice(0,200));
+  }
   return await r.json();
 }
 
