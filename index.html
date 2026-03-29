@@ -659,6 +659,12 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-title">Vaccins & Allergies</div>
           <div class="doss-tile-sub">Carnet & Connues</div>
         </div>
+        <div class="doss-tile" onclick="ouvrirDocuments()">
+          <div class="doss-tile-ico" style="background:rgba(99,102,241,.1);">📁</div>
+          <div class="doss-tile-title">Documents</div>
+          <div class="doss-tile-sub" id="docsTileSub">Ordonnances & Résultats</div>
+          <div id="docsTileBadge" style="display:none;" class="doss-tile-badge"></div>
+        </div>
         <div class="doss-tile" onclick="ouvrirDossier('chirurgie','🏥','Opérations chirurgicales','Antécédents chirurgicaux')">
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.07);">🏥</div>
           <div class="doss-tile-title">Chirurgie</div>
@@ -695,6 +701,19 @@ select.finput option{background:var(--bg3);}
   </div>
 </div>
 
+
+<!-- ══ DOCUMENTS ══ -->
+<div class="screen" id="documentsScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(99,102,241,.2);">📁</div>
+    <div style="flex:1"><div class="hdr-title">Documents médicaux</div><div class="hdr-sub">Partagés avec vos médecins Dokita</div></div>
+    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
+  </div>
+  <div class="sbody" id="documentsList">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
 
 <div class="screen" id="dossierDetailScreen">
   <div class="hdr">
@@ -3917,6 +3936,211 @@ var PRIX_KM=100; // FCFA/km TEST — à ajuster en prod
 function ouvrirDossierVaccinsAllergies(){
   // Écran combiné vaccins + allergies
   ouvrirDossier('vaccins_allergies','💉','Vaccins & Allergies','Carnet et allergies connues');
+}
+
+// ══════════════════════════════
+// DOCUMENTS MÉDICAUX
+// ══════════════════════════════
+var DOCS_TYPES={
+  'ordonnance':   {ico:'📋', label:'Ordonnance',       color:'rgba(99,102,241,.15)',  border:'rgba(99,102,241,.3)'},
+  'analyse':      {ico:'🧪', label:'Résultat analyse', color:'rgba(130,80,220,.12)', border:'rgba(130,80,220,.3)'},
+  'radio':        {ico:'🩻', label:'Imagerie/Radio',   color:'rgba(14,165,233,.12)', border:'rgba(14,165,233,.3)'},
+  'certificat':   {ico:'📄', label:'Certificat',       color:'rgba(0,200,150,.12)',  border:'rgba(0,200,150,.3)'},
+  'autre':        {ico:'📎', label:'Autre document',   color:'rgba(245,158,11,.12)', border:'rgba(245,158,11,.3)'}
+};
+
+async function ouvrirDocuments(){
+  nav('documentsScreen');
+  var el=document.getElementById('documentsList');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Profil non disponible</div>';return;}
+
+  var addBtn='<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
+
+  try{
+    var r=await fetch(DB_URL+'?table=documents_patients&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=created_at.desc&limit=50',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+
+    if(!rows.length){
+      el.innerHTML=addBtn+
+        '<div style="text-align:center;padding:30px 20px;color:var(--text3);">'+
+          '<div style="font-size:40px;margin-bottom:12px;">📂</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">Aucun document</div>'+
+          '<div style="font-size:12px;line-height:1.6;">Ajoutez vos ordonnances, résultats d\'analyses,<br>radios ou certificats médicaux.<br><br>Vos médecins Dokita pourront les consulter.</div>'+
+        '</div>';
+      return;
+    }
+
+    var html=addBtn;
+    var byType={};
+    rows.forEach(function(doc){var t=doc.type_document||'autre';if(!byType[t])byType[t]=[];byType[t].push(doc);});
+    Object.keys(byType).forEach(function(type){
+      var tInfo=DOCS_TYPES[type]||DOCS_TYPES['autre'];
+      html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 8px;">'+tInfo.ico+' '+tInfo.label+'s</div>';
+      byType[type].forEach(function(doc){
+        var dateAff=doc.created_at?new Date(doc.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
+        html+='<div style="background:var(--card);border:1px solid '+tInfo.border+';border-radius:14px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;" onclick="ouvrirDocument(\''+doc.id+'\',\''+escHtml(doc.nom||'Document')+'\',\''+escHtml(doc.url||'')+'\',\''+escHtml(doc.contenu_base64?'base64':'')+'\',\''+escHtml(doc.mime_type||'')+'\')">'+
+          '<div style="width:44px;height:44px;border-radius:12px;background:'+tInfo.color+';display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">'+tInfo.ico+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
+            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
+            (doc.visible_medecin?'<div style="font-size:10px;color:var(--accent);margin-top:3px;">👨‍⚕️ Visible par votre médecin</div>':'<div style="font-size:10px;color:var(--text3);margin-top:3px;">🔒 Privé</div>')+
+          '</div>'+
+          '<div style="font-size:20px;color:var(--text3);">›</div>'+
+        '</div>';
+      });
+    });
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=addBtn+'<div style="text-align:center;padding:20px;color:var(--danger);">❌ Erreur : '+e.message+'</div>';
+  }
+}
+
+function ouvrirDocument(id,nom,url,isBase64,mime){
+  if(isBase64==='base64'){
+    toast('📄 Ouverture... (stockage local)');
+    // Pour les docs base64, récupérer depuis Supabase et ouvrir
+    fetch(DB_URL+'?table=documents_patients&filter=id=eq.'+encodeURIComponent(id)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    }).then(function(r){return r.json();}).then(function(data){
+      var rows=Array.isArray(data)?data:(data.data||[]);
+      if(!rows.length){toast('Document introuvable');return;}
+      var b64=rows[0].contenu_base64||'';
+      var mimeType=rows[0].mime_type||'application/octet-stream';
+      var byteStr=atob(b64);
+      var ab=new ArrayBuffer(byteStr.length);
+      var ia=new Uint8Array(ab);
+      for(var i=0;i<byteStr.length;i++)ia[i]=byteStr.charCodeAt(i);
+      var blob=new Blob([ab],{type:mimeType});
+      var blobUrl=URL.createObjectURL(blob);
+      window.open(blobUrl,'_blank');
+    }).catch(function(e){toast('❌ Erreur: '+e.message);});
+  } else if(url){
+    window.open(url,'_blank');
+  } else {
+    toast('Document non disponible');
+  }
+}
+
+function ouvrirModalAjoutDoc(){
+  var modal=document.createElement('div');
+  modal.id='modalAjoutDoc';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;overflow-y:auto;';
+  modal.innerHTML=
+    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;padding-bottom:calc(24px + var(--sb));max-height:90vh;overflow-y:auto;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📎 Ajouter un document</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:20px;">Photo ou fichier partagé avec vos médecins Dokita</div>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Type de document</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;" id="docTypeGrid">'+
+        Object.keys(DOCS_TYPES).map(function(t){
+          var info=DOCS_TYPES[t];
+          return '<div onclick="selectDocType(\''+t+'\',this)" style="background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px;text-align:center;cursor:pointer;" data-type="'+t+'">'+
+            '<div style="font-size:20px;margin-bottom:4px;">'+info.ico+'</div>'+
+            '<div style="font-size:11px;font-weight:700;color:var(--text);">'+info.label+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>'+
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Nom / Description</div>'+
+      '<input id="docNomInput" type="text" placeholder="Ex: Analyse sang 28/03/2026" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;margin-bottom:16px;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Fichier ou Photo</div>'+
+      '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
+        '<label style="flex:1;padding:14px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+          '📷 Prendre une photo<input type="file" accept="image/*" capture="environment" id="docFilePhoto" style="display:none;" onchange="previewDoc(this)">'+
+        '</label>'+
+        '<label style="flex:1;padding:14px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+          '📂 Choisir un fichier<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" id="docFilePDF" style="display:none;" onchange="previewDoc(this)">'+
+        '</label>'+
+      '</div>'+
+      '<div id="docPreview" style="display:none;margin-bottom:16px;text-align:center;"></div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:20px;">'+
+        '<div><div style="font-size:13px;font-weight:700;color:var(--text);">👨‍⚕️ Visible par mon médecin</div><div style="font-size:11px;color:var(--text2);margin-top:2px;">Vos médecins Dokita pourront consulter ce document</div></div>'+
+        '<div id="docVisibleToggle" onclick="toggleDocVisible()" style="width:44px;height:24px;border-radius:12px;background:var(--accent);cursor:pointer;position:relative;flex-shrink:0;">'+
+          '<div style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:2px;right:2px;"></div>'+
+        '</div>'+
+      '</div>'+
+      '<button onclick="soumettrDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">✅ Enregistrer le document</button>'+
+      '<button onclick="document.getElementById(\'modalAjoutDoc\').remove()" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+  window._docType='ordonnance';window._docVisible=true;window._docFile=null;
+  var firstTile=modal.querySelector('[data-type="ordonnance"]');
+  if(firstTile)selectDocType('ordonnance',firstTile);
+}
+
+function selectDocType(type,el){
+  window._docType=type;
+  document.querySelectorAll('#docTypeGrid [data-type]').forEach(function(t){t.style.border='1.5px solid var(--border)';t.style.background='var(--card)';});
+  if(el){var info=DOCS_TYPES[type]||DOCS_TYPES['autre'];el.style.border='1.5px solid '+info.border;el.style.background=info.color;}
+}
+
+function toggleDocVisible(){
+  window._docVisible=!window._docVisible;
+  var tog=document.getElementById('docVisibleToggle');
+  if(tog){
+    tog.style.background=window._docVisible?'var(--accent)':'var(--bg3)';
+    var ball=tog.querySelector('div');
+    if(ball){ball.style.right=window._docVisible?'2px':'22px';}
+  }
+}
+
+function previewDoc(input){
+  var file=input.files[0];if(!file)return;
+  window._docFile=file;
+  var nomInput=document.getElementById('docNomInput');
+  if(nomInput&&!nomInput.value){var info=DOCS_TYPES[window._docType||'autre']||DOCS_TYPES['autre'];nomInput.value=info.label+' — '+new Date().toLocaleDateString('fr-FR');}
+  var preview=document.getElementById('docPreview');if(!preview)return;
+  if(file.type.startsWith('image/')){
+    var reader=new FileReader();
+    reader.onload=function(e){preview.style.display='block';preview.innerHTML='<img src="'+e.target.result+'" style="max-width:100%;max-height:200px;border-radius:10px;border:1px solid var(--border);">';};
+    reader.readAsDataURL(file);
+  } else {
+    preview.style.display='block';
+    preview.innerHTML='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;color:var(--text);">📄 '+escHtml(file.name)+'</div>';
+  }
+}
+
+async function soumettrDoc(){
+  var nom=(document.getElementById('docNomInput')||{}).value||'';
+  nom=nom.trim();
+  var file=window._docFile;
+  var type=window._docType||'autre';
+  var visible=window._docVisible!==false;
+  var p=PROFILS[SEL];
+  if(!nom){toast('⚠️ Donnez un nom au document');return;}
+  if(!file){toast('⚠️ Sélectionnez un fichier ou une photo');return;}
+  if(file.size>4*1024*1024){toast('⚠️ Fichier trop lourd (max 4 MB)');return;}
+  if(!p||!p.patientId){toast('⚠️ Profil non disponible');return;}
+  var btn=document.querySelector('#modalAjoutDoc button[onclick="soumettrDoc()"]');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Envoi en cours...';}
+  try{
+    var base64=await new Promise(function(res,rej){
+      var reader=new FileReader();
+      reader.onload=function(e){res(e.target.result.split(',')[1]);};
+      reader.onerror=rej;
+      reader.readAsDataURL(file);
+    });
+    var r=await fetch(DB_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        table:'documents_patients',
+        data:{patient_id:p.patientId,nom:nom,type_document:type,contenu_base64:base64,mime_type:file.type,taille_octets:file.size,visible_medecin:visible}
+      })
+    });
+    var data=await r.json();
+    if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
+    document.getElementById('modalAjoutDoc').remove();
+    window._docFile=null;
+    toast('✅ Document enregistré');
+    ouvrirDocuments();
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='✅ Enregistrer le document';}
+    toast('❌ Erreur : '+e.message);
+  }
 }
 
 async function ouvrirOffres(){
