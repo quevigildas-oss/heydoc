@@ -141,6 +141,7 @@ async function init(){
     if(statut==='livre'){renderValide();}
     else if(statut==='accepte'){renderRetraitAttente();}
     else if(statut==='offres_recues'){renderDejaRepondu();}
+    else if(statut==='annule'){renderNonRetenu();}
     else{renderForm();}
   }catch(e){
     el.innerHTML='<div class="error">❌ Erreur chargement : '+escHtml(e.message)+'</div>';
@@ -207,6 +208,37 @@ function renderDejaRepondu(){
       '<div class="success-sub">En attente de la décision du patient.<br>Vous serez contacté si votre offre est retenue.</div>'+
     '</div>'+
     offreHtml+
+    '<div style="height:30px;"></div>';
+}
+
+function renderNonRetenu(){
+  STATE='non_retenu';
+  document.getElementById('hdrSub').textContent='Offre non retenue';
+  var d=aoData;
+  var offreHtml='';
+  if(d.offre&&d.offre.length){
+    offreHtml='<div class="card">'+
+      '<div class="card-hdr">💊 VOTRE OFFRE SOUMISE</div>'+
+      '<div class="card-body">'+
+        d.offre.map(function(item){
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">'+
+            '<span style="font-size:13px;font-weight:600;color:#9CA3AF;">'+(item.disponible?'✅':'❌')+' '+escHtml(item.medicament||'')+'</span>'+
+            '<span style="font-size:13px;color:#9CA3AF;">'+(item.total>0?item.total.toLocaleString('fr-FR')+' FCFA':'—')+'</span>'+
+          '</div>';
+        }).join('')+
+      '</div>'+
+    '</div>';
+  }
+  document.getElementById('mainContent').innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:24px 20px;text-align:center;margin-bottom:14px;border:1px solid #e5e7eb;">'+
+      '<div style="font-size:40px;margin-bottom:12px;">🙏</div>'+
+      '<div style="font-size:18px;font-weight:800;color:#1A2B3C;margin-bottom:8px;">Merci pour votre participation</div>'+
+      '<div style="font-size:13px;color:#6B7280;line-height:1.6;">Le patient a choisi une autre pharmacie pour cette commande.<br><br>Votre offre a bien été reçue et étudiée.<br>Nous vous remercions pour votre réactivité.</div>'+
+    '</div>'+
+    offreHtml+
+    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;">'+
+      '<div style="font-size:12px;color:#065f46;font-weight:600;">💡 Dokita vous contactera pour les prochaines opportunités</div>'+
+    '</div>'+
     '<div style="height:30px;"></div>';
 }
 
