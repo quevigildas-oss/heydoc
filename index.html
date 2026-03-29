@@ -1812,7 +1812,7 @@ function lancerEph(){
 // ══════════════════════════════
 // CHAT
 // ══════════════════════════════
-function startChat(){
+async function startChat(){
   CID=null;msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
   document.getElementById('msgsList').innerHTML='';
   document.getElementById('recoBox').style.display='none';
@@ -1863,7 +1863,7 @@ function startChat(){
       w+='**Antécédents :** '+p.antecedents+'\n';
     }
 
-    // Traitements chroniques actifs
+    // Traitements chroniques actifs (ALD)
     var traitsActifs=[];
     try{
       var key='traits_'+(p.patientId||'');
@@ -1873,13 +1873,42 @@ function startChat(){
         traitsActifs=items.filter(function(t){return t.statut==='actif';});
       }
     }catch(e){}
-    if(traitsActifs.length){
-      w+='**Traitements en cours :** '+traitsActifs.map(function(t){
-        return t.nom+(t.dosage?' '+t.dosage:'')+(t.ald?' (ALD)':'');
-      }).join(', ')+'\n';
-    } else if(p.traitements&&p.traitements.trim()){
-      w+='**Traitements en cours :** '+p.traitements+'\n';
+    var aldsStr=traitsActifs.length?
+      traitsActifs.map(function(t){return t.nom+(t.dosage?' '+t.dosage:'');}).join(', ')
+      :(p.traitements||'');
+
+    if(aldsStr){
+      w+='**Traitements ALD :** '+aldsStr+'\n';
     }
+
+    // Médicaments encore en cours depuis la dernière ordonnance
+    var medsEncours=[];
+    try{
+      var today=new Date();today.setHours(0,0,0,0);
+      var ordR=await fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(p.patientId||'')+'&order=created_at.desc&limit=1',{
+        headers:{'x-dokita-key':DOKITA_KEY}
+      });
+      var ordData=await ordR.json();
+      var ordRows=Array.isArray(ordData)?ordData:(ordData.data||[]);
+      if(ordRows.length){
+        var pf=ordRows[0].prescription_finale||ordRows[0].prescription_medecin||{};
+        var meds=pf.meds||[];
+        medsEncours=meds.filter(function(m){
+          if(!m.date_fin)return false;
+          var fin=new Date(m.date_fin);fin.setHours(0,0,0,0);
+          return fin>=today;
+        });
+        if(medsEncours.length){
+          w+='**Traitement en cours :** '+medsEncours.map(function(m){
+            return m.nom+(m.dose?' '+m.dose:'')+(m.date_fin?' (jusqu\'au '+m.date_fin+')':'');
+          }).join(', ')+'\n';
+        }
+      }
+    }catch(e){dbgWarn('Chargement ordonnance: '+e.message);}
+
+    // Stocker pour la question RAG
+    CURRENT._aldsStr=aldsStr;
+    CURRENT._medsEncours=medsEncours;
 
     w+='\n';
   }
@@ -1931,10 +1960,22 @@ async function sendMsg(){
     (p.ville?', '+p.ville:'')+
     (p.allergies?', Allergies: '+p.allergies:'')+
     (p.antecedents?', Antécédents: '+p.antecedents:'')+
+    (p.traitements?', ALD: '+p.traitements:'')+
     '] ';
+
+  // Construire contexte médicaments connus pour question dynamique RAG
+  var medsConnusStr='';
+  var aldsStr=p._aldsStr||p.traitements||'';
+  var medsEncours=p._medsEncours||[];
+  if(aldsStr||medsEncours.length){
+    var parts=[];
+    if(aldsStr)parts.push('ALD: '+aldsStr);
+    if(medsEncours.length)parts.push('En cours: '+medsEncours.map(function(m){return m.nom+(m.dose?' '+m.dose:'');}).join(', '));
+    medsConnusStr=' [MEDICAMENTS CONNUS DU PATIENT: '+parts.join(' | ')+'. Demander UNIQUEMENT si le patient prend d\'autres médicaments en dehors de ceux-ci.]';
+  }
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
-  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+txt:txt;
+  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+medsConnusStr+' '+txt:txt;
   // Construire historique messages pour /api/rag
   var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
   messages.push({role:'user',content:fullTxt});
@@ -2020,6 +2061,38 @@ function renderMeds(list){
 // ══════════════════════════════
 // ENVOI DOSSIER → SUPABASE
 // ══════════════════════════════
+async function enregistrerTraitementDetecte(traitement,btn){
+  btn.disabled=true;btn.textContent='⏳ Enregistrement...';
+  var p=CURRENT;
+  try{
+    var patId=p.patientId||genPatientId(p.prenom||'',p.nom||'',p.naiss||'');
+    // Chercher UUID patient dans Supabase
+    var rp=await fetch(DB_URL+'?table=patients&filter=patient_id=eq.'+encodeURIComponent(patId)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var dp=await rp.json();
+    var rows=Array.isArray(dp)?dp:(dp.data||[]);
+    if(rows.length){
+      var existants=rows[0].traitements_reguliers||'';
+      var nouveau=existants?(existants+'\n'+traitement):traitement;
+      await fetch(DB_URL,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({table:'patients',id:rows[0].id,data:{traitements_reguliers:nouveau}})
+      });
+      // Mettre à jour le profil local
+      p.traitements=nouveau;
+      PROFILS[SEL].traitements=nouveau;
+      try{localStorage.setItem('hd_profils',JSON.stringify(PROFILS));}catch(e){}
+      btn.closest('div[style*=fixed]').remove();
+      toast('✅ Traitement enregistré dans votre dossier');
+    }
+  }catch(e){
+    btn.disabled=false;btn.textContent='✅ Oui, enregistrer';
+    toast('❌ Erreur: '+e.message);
+  }
+}
+
 async function envoyerDossier(email,nomMed){
   var p=CURRENT;
   var a=p._age||calcAge(p.naiss);
@@ -2082,6 +2155,18 @@ async function envoyerDossier(email,nomMed){
   var ageResume=parseInt(resume.age||resume.patient_age||a||0)||0;
   var poidsResume=parseFloat(resume.poids||resume.patient_poids||p.poids||0)||0;
 
+  // Traitements : priorité localStorage/Supabase, fallback depuis résumé RAG
+  var traitsActifs=[];
+  try{
+    var traitKey='dk_traits_'+(p.patientId||p.prenom);
+    var ts=localStorage.getItem(traitKey);
+    if(ts)traitsActifs=JSON.parse(ts).filter(function(t){return t.statut==='actif';});
+  }catch(e){}
+  var traitementsStr=traitsActifs.length?
+    traitsActifs.map(function(t){return t.nom+(t.dosage?' '+t.dosage:'')+(t.ald?' [ALD]':'');}).join(', ')
+    :(p.traitements||resume.traitements_en_cours||'');
+  dbg('Traitements pour dossier: '+traitementsStr.slice(0,80));
+
   var payload={
     consultation_id:id,
     patient_id:cleanStr(patId,50),
@@ -2097,6 +2182,9 @@ async function envoyerDossier(email,nomMed){
     medicaments_oms:cleanStr(resume.medicaments_oms,500),
     contre_indications:cleanStr(resume.contre_indications,300),
     sources_oms:cleanStr(resume.sources,300),
+    traitements_reguliers:cleanStr(traitementsStr,300),
+    allergies:cleanStr(p.allergies||resume.allergies||'',200),
+    antecedents:cleanStr(p.antecedents||resume.antecedents||'',300),
     statut:'en_attente',
     medecin_id:medObj?medObj.supabaseId:null
   };
