@@ -3872,16 +3872,16 @@ async function ouvrirOffres(){
       };
     });
 
-    // Garder seulement les offres repondues/selectionnees
+    // Garder seulement les offres repondues/acceptees
     var offresRepondues=offres.filter(function(o){
       return o.statut==='offres_recues'||o.statut==='accepte';
     });
 
-    // Dédupliquer par pharmacie — garder la plus récente si même pharmacie répond plusieurs fois
-    var pharmVus={};
+    // Dédupliquer par supabaseId uniquement (pas par pharmNom — plusieurs pharmacies peuvent avoir le même nom en test)
+    var vus={};
     offresRepondues=offresRepondues.filter(function(o){
-      if(pharmVus[o.pharmNom])return false;
-      pharmVus[o.pharmNom]=true;
+      if(vus[o.supabaseId])return false;
+      vus[o.supabaseId]=true;
       return true;
     });
 
