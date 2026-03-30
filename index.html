@@ -2433,16 +2433,24 @@ async function chargerDossierDokita(){
     }).join('');
   }
 
-  // Bouton saisie manuelle
-  html+='<div onclick="ouvrirModalResultatManuel()" style="background:var(--card);border:1.5px dashed var(--border);border-radius:14px;padding:14px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;margin-top:8px;">＋ Saisir un résultat manuel</div>';
+  // Boutons upload résultat labo
+  var uploadBtns=
+    '<div style="margin-top:12px;">'+
+    '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">📤 Résultat reçu du labo</div>'+
+    '<div style="display:flex;gap:10px;">'+
+    '<label style="flex:1;padding:12px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+    '📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this)"></label>'+
+    '<label style="flex:1;padding:12px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+    '📂 Fichier<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this)"></label>'+
+    '</div></div>';
+  html+=uploadBtns;
 
   if(!examensSupabase.length&&!examensLocaux.length){
     html='<div style="text-align:center;padding:30px 20px;color:var(--text3);">'+
       '<div style="font-size:36px;margin-bottom:12px;">🧪</div>'+
       '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Aucun examen prescrit</div>'+
       '<div style="font-size:12px;line-height:1.6;">Vos examens prescrits par votre médecin<br>apparaîtront ici.</div>'+
-    '</div>'+
-    '<div onclick="ouvrirModalResultatManuel()" style="background:var(--card);border:1.5px dashed var(--border);border-radius:14px;padding:14px;text-align:center;font-size:12px;font-weight:600;color:var(--text3);cursor:pointer;">＋ Saisir un résultat manuel</div>';
+    '</div>'+uploadBtns;
   }
 
   el.innerHTML=html;
@@ -4089,6 +4097,44 @@ async function chargerDossierHorsReseau(){
 
 // Alias pour compatibilité
 function ouvrirDocuments(){ouvrirDossierMedical();}
+
+async function ajouterResultatReseau(input){
+  var file=input.files[0];if(!file)return;
+  if(file.size>4*1024*1024){toast('⚠️ Fichier trop lourd (max 4 MB)');return;}
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId){toast('⚠️ Profil non disponible');return;}
+  toast('⏳ Envoi en cours...');
+  try{
+    var base64=await new Promise(function(res,rej){
+      var reader=new FileReader();
+      reader.onload=function(e){res(e.target.result.split(',')[1]);};
+      reader.onerror=rej;
+      reader.readAsDataURL(file);
+    });
+    var r=await fetch(DB_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        table:'dossier_medical',
+        data:{
+          patient_id:p.patientId,
+          nom:'Résultat labo — '+new Date().toLocaleDateString('fr-FR'),
+          type_document:'analyse',
+          contenu_base64:base64,
+          mime_type:file.type,
+          taille_octets:file.size,
+          visible_medecin:true,
+          source:'prescrit_dokita',
+          statut:'actif'
+        }
+      })
+    });
+    var data=await r.json();
+    if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
+    toast('✅ Résultat ajouté — votre médecin peut le consulter');
+    chargerDossierDokita();
+  }catch(e){toast('❌ '+e.message);}
+}
 
 function ouvrirDocument(id,nom,url,isBase64,mime){
   if(isBase64==='base64'){
