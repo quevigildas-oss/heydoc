@@ -9,7 +9,7 @@
        V4.5 — 2026-03-30 : Documents médicaux + transfert profil finalisé
                            Tuile 📁 Documents : upload photo/fichier, types, visible_medecin
                            ouvrirDocuments() + ouvrirModalAjoutDoc() + soumettrDoc()
-                           Stockage base64 Supabase (table documents_patients)
+                           Stockage base64 Supabase (table dossier_medical)
                            Transfert profil : fix ilike wildcard |% + durée 48h
                            Sync traitements post-transfert sans Notion
                            Médicaments en cours calculés depuis date_fin ordonnance
@@ -3983,7 +3983,7 @@ async function ouvrirDocuments(){
   var addBtn='<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
 
   try{
-    var r=await fetch(DB_URL+'?table=documents_patients&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=created_at.desc&limit=50',{
+    var r=await fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=created_at.desc&limit=50',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
@@ -4012,7 +4012,16 @@ async function ouvrirDocuments(){
           '<div style="flex:1;min-width:0;">'+
             '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
             '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
-            (doc.visible_medecin?'<div style="font-size:10px;color:var(--accent);margin-top:3px;">👨‍⚕️ Visible par votre médecin</div>':'<div style="font-size:10px;color:var(--text3);margin-top:3px;">🔒 Privé</div>')+
+            '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">'+
+              (doc.source==='confirme_medecin'?
+                '<span style="font-size:9px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:4px;padding:1px 5px;">✅ Confirmé médecin</span>'
+              :doc.source==='prescrit_dokita'?
+                '<span style="font-size:9px;font-weight:700;color:#4a9eff;background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.3);border-radius:4px;padding:1px 5px;">📋 Dokita</span>'
+              :
+                '<span style="font-size:9px;font-weight:700;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:4px;padding:1px 5px;">📝 Déclaratif</span>'
+              )+
+              (doc.visible_medecin?'<span style="font-size:9px;color:var(--accent);">👨‍⚕️ Visible médecin</span>':'<span style="font-size:9px;color:var(--text3);">🔒 Privé</span>')+
+            '</div>'+
           '</div>'+
           '<div style="font-size:20px;color:var(--text3);">›</div>'+
         '</div>';
@@ -4028,7 +4037,7 @@ function ouvrirDocument(id,nom,url,isBase64,mime){
   if(isBase64==='base64'){
     toast('📄 Ouverture... (stockage local)');
     // Pour les docs base64, récupérer depuis Supabase et ouvrir
-    fetch(DB_URL+'?table=documents_patients&filter=id=eq.'+encodeURIComponent(id)+'&limit=1',{
+    fetch(DB_URL+'?table=dossier_medical&filter=id=eq.'+encodeURIComponent(id)+'&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     }).then(function(r){return r.json();}).then(function(data){
       var rows=Array.isArray(data)?data:(data.data||[]);
@@ -4070,6 +4079,9 @@ function ouvrirModalAjoutDoc(){
       '</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Nom / Description</div>'+
       '<input id="docNomInput" type="text" placeholder="Ex: Analyse sang 28/03/2026" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;margin-bottom:16px;">'+
+      '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text2);line-height:1.5;">'+
+        '⚠️ <strong style="color:var(--warn);">Responsabilité</strong> — En uploadant ce document, vous certifiez qu\'il vous appartient et qu\'il est authentique. Dokita ne peut être tenu responsable des informations déclarées par le patient.'+
+      '</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Fichier ou Photo</div>'+
       '<div style="display:flex;gap:10px;margin-bottom:16px;">'+
         '<label style="flex:1;padding:14px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
@@ -4151,8 +4163,18 @@ async function soumettrDoc(){
       method:'POST',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify({
-        table:'documents_patients',
-        data:{patient_id:p.patientId,nom:nom,type_document:type,contenu_base64:base64,mime_type:file.type,taille_octets:file.size,visible_medecin:visible}
+        table:'dossier_medical',
+        data:{
+          patient_id:p.patientId,
+          nom:nom,
+          type_document:type,
+          contenu_base64:base64,
+          mime_type:file.type,
+          taille_octets:file.size,
+          visible_medecin:visible,
+          source:'declaratif_patient',
+          statut:'actif'
+        }
       })
     });
     var data=await r.json();
