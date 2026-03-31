@@ -2224,9 +2224,136 @@ async function envoyerDossier(email,nomMed){
     if(saveOk)sauvegarderSession(resume);
   }catch(e){dbg('Save erreur: '+e.message);}
 
-  // ── ÉTAPE 4 : message patient ──
+  // ── ÉTAPE 4 : stocker déclaratifs dans dossier_medical ──
+  if(saveOk){
+    try{
+      var declarations=[];
+      // Médicaments déclarés dans la conversation
+      var traitsDecl=resume.traitements_en_cours||'';
+      if(traitsDecl){
+        traitsDecl.split('|').forEach(function(t){
+          t=t.trim();
+          if(!t)return;
+          var parts=t.split('—');
+          declarations.push({
+            type:'medicament_cours',
+            type_document:'autre',
+            nom:'Médicament déclaré — '+(parts[0]||t).trim(),
+            valeur:(parts[0]||t).trim(),
+            dose:(parts[1]||'').trim(),
+            posologie:(parts[2]||'').trim(),
+            source:'declaratif_patient'
+          });
+        });
+      }
+      // Allergies déclarées
+      var allergiesDecl=resume.allergies||'';
+      if(allergiesDecl&&!p.allergies){
+        declarations.push({
+          type:'allergie',
+          type_document:'autre',
+          nom:'Allergie déclarée — '+allergiesDecl,
+          valeur:allergiesDecl,
+          source:'declaratif_patient'
+        });
+      }
+      // Antécédents déclarés
+      var antecedentsDecl=resume.antecedents||'';
+      if(antecedentsDecl&&!p.antecedents){
+        declarations.push({
+          type:'antecedent',
+          type_document:'autre',
+          nom:'Antécédent déclaré — '+antecedentsDecl,
+          valeur:antecedentsDecl,
+          source:'declaratif_patient'
+        });
+      }
+      // INSERT toutes les déclarations en parallèle
+      if(declarations.length){
+        await Promise.all(declarations.map(function(decl){
+          return fetch(DB_URL,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+            body:JSON.stringify({
+              table:'dossier_medical',
+              data:Object.assign({patient_id:patId,visible_medecin:true,statut:'actif'},decl)
+            })
+          }).catch(function(e){dbgWarn('dossier_medical INSERT: '+e.message);});
+        }));
+        dbg('Déclaratifs insérés dans dossier_medical: '+declarations.length);
+      }
+    }catch(e){dbgWarn('Étape déclaratifs: '+e.message);}
+  }
+
+  // ── ÉTAPE 5 : message patient ──
   addMsg('ai','Votre dossier a bien été transmis au '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié dès validation.');
   toast(saveOk?'✅ Dossier envoyé':'⚠️ Erreur envoi — réessayez');
+
+  // ── ÉTAPE 6 : onboarding nouveau patient — proposer upload ordonnance ──
+  if(saveOk){
+    var estNouveauPatient=!p.traitements&&!traitsActifs.length;
+    if(estNouveauPatient){
+      setTimeout(function(){
+        var modal=document.createElement('div');
+        modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
+        modal.innerHTML=
+          '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;padding-bottom:calc(24px + var(--sb));">'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px;">📋 Avez-vous une ordonnance en cours ?</div>'+
+            '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:18px;">'+
+              'Ajoutez votre dernière ordonnance ou vos médicaments actuels.<br>Votre médecin Dokita pourra valider vos traitements.'+
+            '</div>'+
+            '<div style="display:flex;gap:10px;margin-bottom:10px;">'+
+              '<label style="flex:1;padding:13px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+                '📷 Prendre une photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadOrdonnanceOnboarding(this)">'+
+              '</label>'+
+              '<label style="flex:1;padding:13px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
+                '📂 Choisir un fichier<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="uploadOrdonnanceOnboarding(this)">'+
+              '</label>'+
+            '</div>'+
+            '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Je n\'en ai pas</button>'+
+          '</div>';
+        document.body.appendChild(modal);
+      },2500);
+    }
+  }
+}
+
+async function uploadOrdonnanceOnboarding(input){
+  var file=input.files[0];if(!file)return;
+  var modal=input.closest('div[style*=fixed]');
+  if(file.size>4*1024*1024){toast('⚠️ Fichier trop lourd (max 4 MB)');return;}
+  var p=CURRENT;
+  if(!p||!p.patientId){toast('⚠️ Profil non disponible');return;}
+  toast('⏳ Upload en cours...');
+  try{
+    var base64=await new Promise(function(res,rej){
+      var reader=new FileReader();
+      reader.onload=function(e){res(e.target.result.split(',')[1]);};
+      reader.onerror=rej;
+      reader.readAsDataURL(file);
+    });
+    await fetch(DB_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        table:'dossier_medical',
+        data:{
+          patient_id:p.patientId,
+          nom:'Ordonnance en cours — à valider',
+          type_document:'ordonnance',
+          contenu_base64:base64,
+          mime_type:file.type,
+          taille_octets:file.size,
+          visible_medecin:true,
+          source:'declaratif_patient',
+          statut:'actif',
+          note:'Uploadée lors de la première consultation — en attente de validation médecin'
+        }
+      })
+    });
+    if(modal)modal.remove();
+    toast('✅ Ordonnance envoyée — votre médecin la consultera');
+  }catch(e){toast('❌ '+e.message);}
 }
 
 // ══════════════════════════════
@@ -2415,7 +2542,17 @@ async function chargerDossierDokita(){
             (resultatLie.date?'<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+resultatLie.date+'</div>':'')+
           '</div>'
         :
-          (statut==='prescrit'?'<button onclick="ouvrirModalResultat(\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')" style="width:100%;margin-top:8px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">📝 Saisir le résultat</button>':'')
+          (statut==='prescrit'?
+            '<div style="display:flex;gap:6px;margin-top:8px;">'+
+              '<button onclick="ouvrirModalResultat(\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;">📝 Saisir</button>'+
+              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">'+
+                '📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')">'+
+              '</label>'+
+              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">'+
+                '📂 PDF<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')">'+
+              '</label>'+
+            '</div>'
+          :'')
         )+
       '</div>';
     }).join('');
@@ -2436,7 +2573,7 @@ async function chargerDossierDokita(){
   // Boutons upload résultat labo
   var uploadBtns=
     '<div style="margin-top:12px;">'+
-    '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">📤 Résultat exclusif du réseau Dokita</div>'+
+    '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">📤 Résultat reçu du labo</div>'+
     '<div style="display:flex;gap:10px;">'+
     '<label style="flex:1;padding:12px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
     '📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this)"></label>'+
@@ -2478,6 +2615,14 @@ function supprimerAnalyseLocale(i){
   items.splice(i,1);
   try{localStorage.setItem(key,JSON.stringify(items));}catch(e){}
   chargerDossierDokita();
+}
+
+// Alias — rebranché vers le nouvel écran dossierMedScreen
+function ouvrirModalResultat(examenId, nomExamen){
+  ajouterResultatAnalyse(examenId, nomExamen);
+}
+function ouvrirModalResultatManuel(){
+  ajouterResultatAnalyse();
 }
 
 function ajouterResultatAnalyse(examenId, nomExamen){
@@ -4098,7 +4243,7 @@ async function chargerDossierHorsReseau(){
 // Alias pour compatibilité
 function ouvrirDocuments(){ouvrirDossierMedical();}
 
-async function ajouterResultatReseau(input){
+async function ajouterResultatReseau(input, examenId, nomExamen){
   var file=input.files[0];if(!file)return;
   if(file.size>4*1024*1024){toast('⚠️ Fichier trop lourd (max 4 MB)');return;}
   var p=PROFILS[SEL];
@@ -4111,6 +4256,7 @@ async function ajouterResultatReseau(input){
       reader.onerror=rej;
       reader.readAsDataURL(file);
     });
+    var nom=nomExamen?('Résultat — '+nomExamen+' — '+new Date().toLocaleDateString('fr-FR')):('Résultat labo — '+new Date().toLocaleDateString('fr-FR'));
     var r=await fetch(DB_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
@@ -4118,19 +4264,33 @@ async function ajouterResultatReseau(input){
         table:'dossier_medical',
         data:{
           patient_id:p.patientId,
-          nom:'Résultat labo — '+new Date().toLocaleDateString('fr-FR'),
+          nom:nom,
           type_document:'analyse',
           contenu_base64:base64,
           mime_type:file.type,
           taille_octets:file.size,
           visible_medecin:true,
           source:'prescrit_dokita',
-          statut:'actif'
+          statut:'actif',
+          note:examenId||''
         }
       })
     });
     var data=await r.json();
     if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
+
+    // Si lié à un examen prescrit → PATCH statut resultat_recu
+    if(examenId){
+      try{
+        await fetch(DB_URL+'?table=examens&id='+examenId,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+          body:JSON.stringify({statut:'resultat_recu',date_realisation:new Date().toISOString()})
+        });
+        dbg('Examen '+examenId+' → resultat_recu');
+      }catch(e){dbgWarn('PATCH examen: '+e.message);}
+    }
+
     toast('✅ Résultat ajouté — votre médecin peut le consulter');
     chargerDossierDokita();
   }catch(e){toast('❌ '+e.message);}
@@ -5071,10 +5231,12 @@ async function voirOrdonnanceHisto(i){
   var btnMoinsCher='';
   if(aoStatut==='livre'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Retrait effectué</div>';
-  } else if(aoStatut==='accepte'){
+  } else if(aoStatut==='accepte'||aoStatut==='en_livraison'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
   } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:var(--accent);">Soumis ✅</div>';
+  } else if(aoStatut==='annule'){
+    btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Relancer</button>';
   } else {
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
   }
