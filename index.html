@@ -1,11 +1,20 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.5
-     DATE    : 2026-03-30
+     VERSION : V4.6
+     DATE    : 2026-04-01
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.6 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
+                           chargerEtablissements() au login — en mémoire toute la session
+                           RDV patient : tuile 📅, liste, nouveau RDV, créneaux, confirmation
+                           Fallback WhatsApp RDV désactivé (var whatsappDisabled=true)
+                           Corrections immédiates : AO annule/en_livraison, ouvrirModalResultat alias
+                           ajouterResultatReseau() lié à examen prescrit (PATCH statut=resultat_recu)
+                           Onboarding nouveau patient : upload ordonnance post-consultation
+                           Déclaratifs AfriBot → dossier_medical à l'envoi du dossier
+                           Dossier médical unifié : tuile 🗂️, onglets Réseau Dokita / Hors réseau
        V4.5 — 2026-03-30 : Dossier médical unifié (tuiles Analyses+Documents → Mon Dossier)
                            Deux onglets : 🔵 Réseau Dokita / 📝 Hors réseau
                            chargerDossierDokita() : ordonnances actives + examens prescrits
@@ -645,10 +654,11 @@ select.finput option{background:var(--bg3);}
     <div class="menu-section">
       <div class="sec-lbl">Dossier médical</div>
       <div class="doss-grid">
-        <div class="doss-tile" onclick="ouvrirDossier('rdv','📅','Rendez-vous','Mes RDV médicaux')">
+        <div class="doss-tile" onclick="ouvrirRDV()" id="rdvTile">
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📅</div>
           <div class="doss-tile-title">RDV</div>
-          <div class="doss-tile-sub">Rendez-vous</div>
+          <div class="doss-tile-sub" id="rdvTileSub">Mes rendez-vous</div>
+          <div id="rdvTileBadge" style="display:none;" class="doss-tile-badge"></div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossierMedical()" id="dossierMedTile">
           <div class="doss-tile-ico" style="background:rgba(99,102,241,.12);">🗂️</div>
@@ -699,6 +709,43 @@ select.finput option{background:var(--bg3);}
     <div id="tabHorsReseau" onclick="switchDossierTab('hors_reseau')" style="flex:1;padding:12px;text-align:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;">📝 Hors réseau</div>
   </div>
   <div class="sbody" id="dossierMedBody">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+<!-- ══ RDV LISTE ══ -->
+<div class="screen" id="rdvScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(217,48,37,.12);">📅</div>
+    <div style="flex:1"><div class="hdr-title">Mes Rendez-vous</div><div class="hdr-sub">Consultations & Examens</div></div>
+    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
+  </div>
+  <div class="sbody" id="rdvListBody">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+<!-- ══ RDV NOUVEAU ══ -->
+<div class="screen" id="rdvNouveauScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('rdvScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(217,48,37,.12);">📅</div>
+    <div style="flex:1"><div class="hdr-title">Prendre un RDV</div><div class="hdr-sub" id="rdvNouveauSub">Choisissez un praticien</div></div>
+  </div>
+  <div class="sbody" id="rdvNouveauBody">
+    <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
+  </div>
+</div>
+
+<!-- ══ RDV CRENEAUX ══ -->
+<div class="screen" id="rdvCreneauxScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('rdvNouveauScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(217,48,37,.12);">📅</div>
+    <div style="flex:1"><div class="hdr-title" id="rdvCreneauxTitre">Créneaux disponibles</div><div class="hdr-sub" id="rdvCreneauxSub"></div></div>
+  </div>
+  <div class="sbody" id="rdvCreneauxBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
   </div>
 </div>
@@ -4188,6 +4235,337 @@ function genAoId(){return 'AO-'+Date.now().toString(36).toUpperCase();}
 // OFFRES DOKITA
 // ══════════════════════════════
 var PRIX_KM=100; // FCFA/km TEST — à ajuster en prod
+
+// ══════════════════════════════
+// RDV — RENDEZ-VOUS
+// ══════════════════════════════
+var RDV_ETABLISSEMENT_SEL=null; // établissement sélectionné pour le RDV en cours
+
+async function ouvrirRDV(){
+  nav('rdvScreen');
+  var el=document.getElementById('rdvListBody');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Profil non disponible</div>';return;}
+
+  try{
+    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=created_at.desc&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+
+    var addBtn='<button onclick="ouvrirNouveauRDV()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(217,48,37,.8),rgba(239,68,68,.7));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:16px;">📅 Prendre un rendez-vous</button>';
+
+    if(!rows.length){
+      el.innerHTML=addBtn+
+        '<div style="text-align:center;padding:30px 20px;color:var(--text3);">'+
+          '<div style="font-size:40px;margin-bottom:12px;">📅</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">Aucun rendez-vous</div>'+
+          '<div style="font-size:12px;line-height:1.6;">Prenez rendez-vous avec un médecin,<br>un laboratoire ou une clinique.</div>'+
+        '</div>';
+      return;
+    }
+
+    var STATUT_RDV={
+      'demande':   {label:'⏳ En attente',  color:'#F59E0B', bg:'rgba(245,158,11,.1)'},
+      'propose':   {label:'📋 Proposé',     color:'#4a9eff', bg:'rgba(74,158,255,.1)'},
+      'confirme':  {label:'✅ Confirmé',    color:'#00C896', bg:'rgba(0,200,150,.1)'},
+      'annule_patient':   {label:'❌ Annulé', color:'#ef4444', bg:'rgba(239,68,68,.08)'},
+      'annule_praticien': {label:'❌ Annulé', color:'#ef4444', bg:'rgba(239,68,68,.08)'},
+      'effectue':  {label:'✅ Effectué',    color:'#00C896', bg:'rgba(0,200,150,.08)'}
+    };
+
+    var html=addBtn;
+    rows.forEach(function(rdv){
+      var st=STATUT_RDV[rdv.statut]||{label:rdv.statut,color:'var(--text3)',bg:'var(--card)'};
+      var dateAff=rdv.date_confirmee||rdv.date_souhaitee||'';
+      if(dateAff)dateAff=new Date(dateAff).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'});
+      var heureAff=rdv.heure_confirmee||rdv.heure_souhaitee||'';
+      html+=
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(rdv.etablissement_nom||'Praticien')+'</div>'+
+            '<span style="font-size:10px;font-weight:700;color:'+st.color+';background:'+st.bg+';border-radius:6px;padding:2px 8px;">'+st.label+'</span>'+
+          '</div>'+
+          (dateAff?'<div style="font-size:12px;color:var(--text2);">📆 '+dateAff+(heureAff?' à '+heureAff:'')+'</div>':'')+
+          (rdv.motif?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+escHtml(rdv.motif)+'</div>':'')+
+          (rdv.statut==='propose'?
+            '<div style="display:flex;gap:8px;margin-top:10px;">'+
+              '<button onclick="confirmerRDV(\''+rdv.id+'\')" style="flex:1;padding:9px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:8px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">✅ Confirmer</button>'+
+              '<button onclick="annulerRDV(\''+rdv.id+'\')" style="flex:1;padding:9px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;font-size:12px;font-weight:700;color:#ef4444;cursor:pointer;">❌ Refuser</button>'+
+            '</div>'
+          :rdv.statut==='demande'?
+            '<button onclick="annulerRDV(\''+rdv.id+'\')" style="width:100%;margin-top:8px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text3);cursor:pointer;">Annuler la demande</button>'
+          :'')+
+        '</div>';
+    });
+
+    // Badge tuile
+    var nbAttente=rows.filter(function(r){return r.statut==='demande'||r.statut==='propose';}).length;
+    var badge=document.getElementById('rdvTileBadge');
+    if(badge){
+      if(nbAttente>0){badge.style.display='inline-block';badge.textContent=nbAttente+' en attente';}
+      else badge.style.display='none';
+    }
+
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--danger);">❌ '+e.message+'</div>';
+  }
+}
+
+async function ouvrirNouveauRDV(){
+  nav('rdvNouveauScreen');
+  var el=document.getElementById('rdvNouveauBody');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>';
+
+  // Filtrer établissements qui acceptent les RDV
+  var etabs=ETABLISSEMENTS.filter(function(e){return e.accepte_rdv;});
+  if(!etabs.length){
+    // Recharger si vide
+    await chargerEtablissements();
+    etabs=ETABLISSEMENTS.filter(function(e){return e.accepte_rdv;});
+  }
+
+  var TYPES_ETAB={
+    'cabinet':  {ico:'👨‍⚕️', label:'Médecin'},
+    'labo':     {ico:'🧪', label:'Laboratoire'},
+    'clinique': {ico:'🏥', label:'Clinique'},
+    'hopital':  {ico:'🏨', label:'Hôpital'},
+    'autre':    {ico:'🏢', label:'Autre'}
+  };
+
+  // Grouper par type
+  var byType={};
+  etabs.forEach(function(e){
+    if(!byType[e.type])byType[e.type]=[];
+    byType[e.type].push(e);
+  });
+
+  var html='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Choisissez un praticien ou établissement</div>';
+
+  if(!etabs.length){
+    html='<div style="text-align:center;padding:30px;color:var(--text3);">'+
+      '<div style="font-size:36px;margin-bottom:12px;">🏥</div>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Aucun établissement disponible</div>'+
+      '<div style="font-size:12px;">Les établissements partenaires Dokita<br>apparaîtront ici.</div>'+
+    '</div>';
+    el.innerHTML=html;
+    return;
+  }
+
+  Object.keys(byType).forEach(function(type){
+    var tInfo=TYPES_ETAB[type]||TYPES_ETAB['autre'];
+    html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:14px 0 8px;">'+tInfo.ico+' '+tInfo.label+'s</div>';
+    byType[type].forEach(function(e){
+      html+=
+        '<div onclick="ouvrirCreneaux(\''+e.id+'\')" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;">'+
+          '<div style="width:44px;height:44px;border-radius:12px;background:rgba(217,48,37,.1);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">'+tInfo.ico+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(e.nom)+'</div>'+
+            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+escHtml(e.ville||'')+(e.partenaire?' · <span style="color:var(--accent);">⭐ Partenaire</span>':'')+'</div>'+
+            (e.google_rating?'<div style="font-size:10px;color:var(--warn);">⭐ '+e.google_rating+'/5</div>':'')+
+          '</div>'+
+          '<div style="font-size:20px;color:var(--text3);">›</div>'+
+        '</div>';
+    });
+  });
+
+  el.innerHTML=html;
+}
+
+async function ouvrirCreneaux(etablissementId){
+  RDV_ETABLISSEMENT_SEL=ETABLISSEMENTS.find(function(e){return e.id===etablissementId;})||null;
+  if(!RDV_ETABLISSEMENT_SEL){toast('Établissement introuvable');return;}
+
+  nav('rdvCreneauxScreen');
+  document.getElementById('rdvCreneauxTitre').textContent=RDV_ETABLISSEMENT_SEL.nom;
+  document.getElementById('rdvCreneauxSub').textContent=RDV_ETABLISSEMENT_SEL.ville||'';
+  var el=document.getElementById('rdvCreneauxBody');
+  el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement des créneaux...</div>';
+
+  try{
+    // Charger disponibilités à venir (7 jours)
+    var aujourd=new Date();
+    var dans7j=new Date(aujourd.getTime()+7*24*60*60*1000);
+    var r=await fetch(DB_URL+'?table=disponibilites&filter=etablissement_id=eq.'+encodeURIComponent(etablissementId)+
+      '&filter2=statut=eq.disponible&filter3=date_specifique=gte.'+aujourd.toISOString().split('T')[0]+
+      '&order=date_specifique.asc,heure_debut.asc&limit=50',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var dispos=Array.isArray(data)?data:(data.data||[]);
+
+    var JOURS=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+    var MOIS=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+
+    if(!dispos.length){
+      // ⚠️ FONCTIONNALITÉ DÉSACTIVÉE — fallback WhatsApp si pas de créneaux
+      // À réactiver quand le praticien n'a pas configuré son agenda
+      var whatsappDisabled=true; // passer à false pour activer le fallback
+      el.innerHTML=
+        '<div style="text-align:center;padding:30px 20px;color:var(--text3);">'+
+          '<div style="font-size:40px;margin-bottom:12px;">📅</div>'+
+          '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">Aucun créneau disponible</div>'+
+          '<div style="font-size:12px;line-height:1.6;margin-bottom:20px;">Ce praticien n\'a pas encore configuré<br>son agenda Dokita.</div>'+
+        '</div>'+
+        // Fallback WhatsApp — DÉSACTIVÉ
+        (whatsappDisabled?'':
+          RDV_ETABLISSEMENT_SEL.whatsapp?
+            '<a href="https://wa.me/'+RDV_ETABLISSEMENT_SEL.whatsapp.replace(/\D/g,'')+'" target="_blank" style="display:block;width:100%;padding:14px;background:#25D366;border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;text-align:center;text-decoration:none;">💬 Contacter sur WhatsApp</a>'
+          :''
+        );
+      return;
+    }
+
+    // Grouper par date
+    var byDate={};
+    dispos.forEach(function(d){
+      var date=d.date_specifique;
+      if(!byDate[date])byDate[date]=[];
+      byDate[date].push(d);
+    });
+
+    var html='<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">Sélectionnez un créneau</div>';
+
+    Object.keys(byDate).sort().forEach(function(date){
+      var d=new Date(date+'T00:00:00');
+      var jourLabel=JOURS[d.getDay()]+' '+d.getDate()+' '+MOIS[d.getMonth()];
+      html+='<div style="font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--text);margin:14px 0 8px;">'+jourLabel+'</div>';
+      html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:4px;">';
+      byDate[date].forEach(function(slot){
+        html+=
+          '<div onclick="selectionnerSlot(\''+slot.id+'\',\''+date+'\',\''+slot.heure_debut+'\')" '+
+          'style="padding:12px 8px;background:var(--card);border:1.5px solid var(--border);border-radius:10px;text-align:center;cursor:pointer;" '+
+          'onmouseover="this.style.borderColor=\'var(--accent)\';this.style.background=\'rgba(0,200,150,.08)\'" '+
+          'onmouseout="this.style.borderColor=\'var(--border)\';this.style.background=\'var(--card)\'">'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+slot.heure_debut+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);">30 min</div>'+
+          '</div>';
+      });
+      html+='</div>';
+    });
+
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--danger);">❌ '+e.message+'</div>';
+  }
+}
+
+async function selectionnerSlot(slotId, date, heure){
+  if(!RDV_ETABLISSEMENT_SEL){toast('Erreur — recommencez');return;}
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId){toast('Profil non disponible');return;}
+
+  // Modal motif
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
+  var dateAff=new Date(date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'});
+  modal.innerHTML=
+    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;padding-bottom:calc(24px + var(--sb));">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📅 Confirmer le RDV</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:16px;">'+escHtml(RDV_ETABLISSEMENT_SEL.nom)+' · '+dateAff+' à '+heure+'</div>'+
+
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Type de RDV</div>'+
+      '<select id="rdvTypeSelect" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:14px;">'+
+        '<option value="consultation">Consultation</option>'+
+        '<option value="examen">Examen / Analyse</option>'+
+        '<option value="renouvellement">Renouvellement ordonnance</option>'+
+        '<option value="urgence">Urgence</option>'+
+      '</select>'+
+
+      '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Motif (optionnel)</div>'+
+      '<textarea id="rdvMotifInput" rows="2" placeholder="Décrivez brièvement votre motif..." style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;resize:none;box-sizing:border-box;margin-bottom:16px;"></textarea>'+
+
+      '<button onclick="soumettreDemRDV(\''+slotId+'\',\''+date+'\',\''+heure+'\',this)" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(217,48,37,.9),rgba(239,68,68,.8));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">✅ Envoyer la demande</button>'+
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+async function soumettreDemRDV(slotId, date, heure, btn){
+  var type=document.getElementById('rdvTypeSelect').value||'consultation';
+  var motif=(document.getElementById('rdvMotifInput').value||'').trim();
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId){toast('Profil non disponible');return;}
+  btn.disabled=true;btn.textContent='⏳ Envoi...';
+
+  try{
+    // INSERT rendez_vous
+    await fetch(DB_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        table:'rendez_vous',
+        data:{
+          patient_id:p.patientId,
+          etablissement_id:RDV_ETABLISSEMENT_SEL.id,
+          etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,
+          disponibilite_id:slotId,
+          type_rdv:type,
+          motif:motif,
+          date_souhaitee:date,
+          heure_souhaitee:heure,
+          statut:'demande'
+        }
+      })
+    });
+
+    // PATCH slot disponibilite → reserve
+    await fetch(DB_URL+'?table=disponibilites&id='+slotId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({statut:'reserve'})
+    });
+
+    btn.closest('div[style*=fixed]').remove();
+    toast('✅ Demande envoyée — en attente de confirmation');
+    nav('rdvScreen');
+    ouvrirRDV();
+  }catch(e){
+    btn.disabled=false;btn.textContent='✅ Envoyer la demande';
+    toast('❌ '+e.message);
+  }
+}
+
+async function confirmerRDV(rdvId){
+  try{
+    await fetch(DB_URL+'?table=rendez_vous&id='+rdvId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({statut:'confirme'})
+    });
+    toast('✅ RDV confirmé');
+    ouvrirRDV();
+  }catch(e){toast('❌ '+e.message);}
+}
+
+async function annulerRDV(rdvId){
+  try{
+    // Récupérer le slot pour le libérer
+    var r=await fetch(DB_URL+'?table=rendez_vous&filter=id=eq.'+encodeURIComponent(rdvId)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length&&rows[0].disponibilite_id){
+      // Libérer le slot
+      await fetch(DB_URL+'?table=disponibilites&id='+rows[0].disponibilite_id,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({statut:'disponible'})
+      });
+    }
+    await fetch(DB_URL+'?table=rendez_vous&id='+rdvId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({statut:'annule_patient'})
+    });
+    toast('RDV annulé');
+    ouvrirRDV();
+  }catch(e){toast('❌ '+e.message);}
+}
 
 function ouvrirDossierVaccinsAllergies(){
   // Écran combiné vaccins + allergies
