@@ -1090,9 +1090,11 @@ async function seConnecter(){
     PROFILS=[profilPrincipal];SEL=0;
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
-    syncTraitementsDepuisNotion(profilPrincipal); // toujours appeler — efface les ALD si traitements vide
+    syncTraitementsDepuisNotion(profilPrincipal);
     nav('accueilScreen');
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
+    // Charger établissements en arrière-plan dès le login
+    chargerEtablissements();
     // Membres famille via compte_parent_id (UUID)
     fetch(DB_URL+'?table=patients&filter=compte_parent_id=eq.'+encodeURIComponent(p.id)+'&limit=10',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -1226,7 +1228,8 @@ window.addEventListener('DOMContentLoaded',function(){
     rechargerSessionNotion().then(function(ok){
       if(ok){
         document.getElementById('loginScreen').classList.remove('on');
-        // Si profil transféré → aller directement sur profilsScreen pour voir le message
+        // Charger établissements en arrière-plan dès la session restaurée
+        chargerEtablissements();
         if(PROFILS[0]&&PROFILS[0].transfere){
           nav('profilsScreen');
         } else {
@@ -4115,43 +4118,63 @@ var STATUT_AO_LABELS={
 };
 function labelAO(statut){return STATUT_AO_LABELS[statut]||statut;}
 
-var PHARMACIES=[]; // chargé depuis Supabase table pharmacies
+var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // chargé depuis Supabase table pharmacies
 
-async function chargerPharmaciess(){
+async function chargerEtablissements(){
+  // Chargement au login — stocké en mémoire pour toute la session
   try{
-    var r=await fetch(DB_URL+'?table=pharmacies&limit=50',{
+    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&limit=200',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
-      PHARMACIES=rows.map(function(p){
+      ETABLISSEMENTS=rows.map(function(e){
         return {
-          nom:p.nom||'',
-          tel:p.whatsapp||p.telephone||'',
-          lat:p.latitude||0,
-          lon:p.longitude||0
+          id:e.id||'',
+          nom:e.nom||'',
+          type:e.type||'autre',
+          tel:e.whatsapp||e.telephone||'',
+          whatsapp:e.whatsapp||'',
+          email:e.email||'',
+          adresse:e.adresse||'',
+          ville:e.ville||'',
+          pays:e.pays||'CI',
+          lat:e.latitude||0,
+          lon:e.longitude||0,
+          horaires:e.horaires||'',
+          services:e.services||[],
+          langues:e.langues||[],
+          mobile_money:e.mobile_money||[],
+          partenaire:e.partenaire||false,
+          accepte_rdv:e.accepte_rdv||false,
+          accepte_ao:e.accepte_ao||false,
+          google_place_id:e.google_place_id||'',
+          google_rating:e.google_rating||null
         };
       });
-      dbg('Pharmacies chargées depuis Supabase: '+PHARMACIES.length);
+      dbg('Etablissements chargés: '+ETABLISSEMENTS.length+' | pharmacies: '+ETABLISSEMENTS.filter(function(e){return e.type==='pharmacie';}).length);
     } else {
       // Fallback test si table vide
-      PHARMACIES=[
-        {nom:'Pharmacie du Plateau',  tel:'+33781787293',lat:5.3467,lon:-4.0167},
-        {nom:'Pharmacie Cocody',      tel:'+33781787293',lat:5.3567,lon:-3.9834},
-        {nom:'Pharmacie Marcory',     tel:'+33781787293',lat:5.3123,lon:-4.0034}
+      ETABLISSEMENTS=[
+        {nom:'Pharmacie du Plateau',type:'pharmacie',tel:'+33781787293',lat:5.3467,lon:-4.0167,accepte_ao:true},
+        {nom:'Pharmacie Cocody',    type:'pharmacie',tel:'+33781787293',lat:5.3567,lon:-3.9834,accepte_ao:true},
+        {nom:'Pharmacie Marcory',   type:'pharmacie',tel:'+33781787293',lat:5.3123,lon:-4.0034,accepte_ao:true}
       ];
-      dbgWarn('Table pharmacies vide — fallback test activé');
+      dbgWarn('Table etablissements vide — fallback test activé');
     }
   }catch(e){
-    PHARMACIES=[
-      {nom:'Pharmacie du Plateau',  tel:'+33781787293',lat:5.3467,lon:-4.0167},
-      {nom:'Pharmacie Cocody',      tel:'+33781787293',lat:5.3567,lon:-3.9834},
-      {nom:'Pharmacie Marcory',     tel:'+33781787293',lat:5.3123,lon:-4.0034}
+    ETABLISSEMENTS=[
+      {nom:'Pharmacie du Plateau',type:'pharmacie',tel:'+33781787293',lat:5.3467,lon:-4.0167,accepte_ao:true},
+      {nom:'Pharmacie Cocody',    type:'pharmacie',tel:'+33781787293',lat:5.3567,lon:-3.9834,accepte_ao:true},
+      {nom:'Pharmacie Marcory',   type:'pharmacie',tel:'+33781787293',lat:5.3123,lon:-4.0034,accepte_ao:true}
     ];
-    dbgWarn('Erreur chargement pharmacies: '+e.message+' — fallback activé');
+    dbgWarn('Erreur chargement etablissements: '+e.message+' — fallback activé');
   }
 }
+
+// Alias pour compatibilité appel d'offre
+async function chargerPharmaciess(){ await chargerEtablissements(); }
 
 function distKm(lat1,lon1,lat2,lon2){
   var R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
@@ -4478,7 +4501,7 @@ async function ouvrirOffres(){
         });
       }}catch(e){}
       var pharmNom=row.pharmacie_nom||'';
-      var pharmaInfo=PHARMACIES.find(function(ph){return ph.nom===pharmNom;})||null;
+      var pharmaInfo=ETABLISSEMENTS.find(function(ph){return ph.nom===pharmNom;})||null;
       return {
         supabaseId:row.id,
         aoId:row.ao_id||row.id.slice(0,8),
@@ -4871,15 +4894,19 @@ async function choisirOffre(supabaseId,pharmNom){
 async function lancerAppelOffre(i){
   var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return;
   var ord=s.ordonnance;
-  // Utiliser les données structurées si disponibles, sinon les strings formatées
   var medsStructures=(ord.medsRaw||[]).concat((ord.medsAldRaw||[]).map(function(m){return Object.assign({},m,{ald:true});}));
   var meds=medsStructures.length?medsStructures:ord.medicaments||[];
   if(!meds.length){toast('Aucun médicament dans l\'ordonnance');return;}
 
-  // Charger pharmacies depuis Supabase au moment du clic
-  toast('⏳ Chargement pharmacies...');
-  await chargerPharmaciess();
-  if(!PHARMACIES.length){toast('Aucune pharmacie disponible');return;}
+  // Etablissements déjà en mémoire depuis le login
+  // Si vide (session très rapide), recharger
+  if(!ETABLISSEMENTS.length){
+    toast('⏳ Chargement...');
+    await chargerEtablissements();
+  }
+  if(!ETABLISSEMENTS.filter(function(e){return e.type==='pharmacie'&&e.accepte_ao;}).length){
+    toast('Aucune pharmacie partenaire disponible');return;
+  }
 
   toast('📍 Géolocalisation en cours...');
   // TEST MODE — coords Abidjan Plateau
@@ -4900,7 +4927,7 @@ async function lancerAppelOffre(i){
 }
 
 async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
-  var proches=PHARMACIES.filter(function(p){return distKm(lat,lon,p.lat,p.lon)<=rayon;});
+  var proches=ETABLISSEMENTS.filter(function(p){return p.type==='pharmacie'&&p.accepte_ao&&distKm(lat,lon,p.lat,p.lon)<=rayon;});
   if(!proches.length){
     toast('Aucune pharmacie dans ce rayon de '+rayon+'km');
     if(rayon===5)await envoyerAux(s,meds,lat,lon,10,cacheIdx);
