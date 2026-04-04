@@ -3094,10 +3094,7 @@ function mettreAJourBadgeAnalyses(){
     var sub=document.getElementById('dossierMedTileSub');
     if(badge){
       if(rows.length>0){
-        badge.style.display='inline-block';
-        badge.style.background='rgba(239,68,68,.15)';
-        badge.style.color='#ef4444';
-        badge.style.border='1px solid rgba(239,68,68,.3)';
+        badge.style.cssText='display:inline-block;width:fit-content;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:700;margin-top:4px;';
         badge.textContent=rows.length+' à faire';
       } else {
         badge.style.display='none';
