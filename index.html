@@ -5505,8 +5505,9 @@ async function voirDetailConsultation(i){
       html+='<div style="font-size:13px;color:var(--text);line-height:1.6;">'+escHtml(row.diagnostic_ia).split('\n').join('<br>')+'</div></div>';
     }
 
-    // Diagnostic médecin + validation
-    if(row.diagnostic_medecin||row.validation_ia){
+    // Diagnostic médecin + validation — uniquement si dossier finalisé (pas en attente)
+    var statutFinalise=statut==='valide'||statut==='valide_override'||statut==='cloture';
+    if(statutFinalise&&(row.diagnostic_medecin||row.validation_ia)){
       html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;">';
       html+='<div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">🩺 DÉCISION MÉDECIN</div>';
       if(row.diagnostic_medecin)html+='<div style="font-size:13px;color:var(--text);margin-bottom:6px;">Diagnostic : '+escHtml(row.diagnostic_medecin)+'</div>';
