@@ -576,17 +576,26 @@ select.finput option{background:var(--bg3);}
   <div class="hdr"><div class="hdr-back" onclick="nav('profilsScreen')">←</div><div class="hdr-ico">⚡</div><div style="flex:1"><div class="hdr-title">Consultation éphémère</div><div class="hdr-sub">Sans enregistrement</div></div><div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div></div>
   <div class="form-body">
     <div class="form-intro" style="padding-top:0">
-      <div class="form-desc">Infos de base pour que l'IA vous aide. Ces données ne sont pas sauvegardées.</div>
+      <div class="form-desc">Ces données ne sont pas sauvegardées. Tous les champs marqués * sont requis.</div>
     </div>
-    <div class="field"><label class="flabel">Prénom *</label><input class="finput" id="ePrenom" placeholder="Votre prénom" autocomplete="off"/></div>
     <div class="two-col">
-      <div class="field"><label class="flabel">Âge *</label><input class="finput" id="eAge" type="number" placeholder="30" min="0" max="120"/></div>
-      <div class="field"><label class="flabel">Poids (kg)</label><input class="finput" id="ePoids" type="number" placeholder="70"/></div>
+      <div class="field"><label class="flabel">Prénom *</label><input class="finput" id="ePrenom" placeholder="Aminata" autocomplete="off"/></div>
+      <div class="field"><label class="flabel">Nom de famille *</label><input class="finput" id="eNom" placeholder="Koné" autocomplete="off"/></div>
     </div>
-    <div class="field"><label class="flabel">Sexe</label>
+    <div class="two-col">
+      <div class="field"><label class="flabel">Âge *</label><input class="finput" id="eAge" type="number" placeholder="35" min="0" max="120"/></div>
+      <div class="field"><label class="flabel">Poids (kg) *</label><input class="finput" id="ePoids" type="number" placeholder="70"/></div>
+    </div>
+    <div class="two-col">
+      <div class="field"><label class="flabel">Taille (cm)</label><input class="finput" id="eTaille" type="number" placeholder="165"/></div>
+      <div class="field"><label class="flabel">Ville</label><input class="finput" id="eVille" placeholder="Abidjan" autocomplete="off"/></div>
+    </div>
+    <div class="field"><label class="flabel">Sexe *</label>
       <div class="sex-row"><div class="sex-btn" id="esxH" onclick="setESx('H')">👨 Masculin</div><div class="sex-btn" id="esxF" onclick="setESx('F')">👩 Féminin</div></div>
     </div>
-    <div class="ferr" id="ephErr">Prénom et âge requis</div>
+    <div class="field"><label class="flabel">Allergies connues</label><input class="finput" id="eAllergies" placeholder="ex: Pénicilline, Aspirine..." autocomplete="off"/></div>
+    <div class="field"><label class="flabel">Antécédents médicaux</label><input class="finput" id="eAntecedents" placeholder="ex: Diabète, HTA, Asthme..." autocomplete="off"/></div>
+    <div class="ferr" id="ephErr">Prénom, nom, âge, poids et sexe sont requis</div>
     <button class="btn-p" onclick="lancerEph()">Démarrer →</button>
   </div>
 </div>
@@ -1873,11 +1882,21 @@ function lancerConsult(){
 
 function lancerEph(){
   var pr=(document.getElementById('ePrenom').value||'').trim();
+  var nm=(document.getElementById('eNom').value||'').trim();
   var a=document.getElementById('eAge').value||'';
-  if(!pr||!a){document.getElementById('ephErr').classList.add('on');return;}
-  CURRENT={prenom:pr,nom:'',naiss:'',sx:ESX,
-    poids:document.getElementById('ePoids').value||'',
-    taille:'',tel:'',lien:'ephemere',_age:a,_eph:true,_idx:-1};
+  var po=document.getElementById('ePoids').value||'';
+  var err=document.getElementById('ephErr');
+  if(!pr||!nm||!a||!po||!ESX){err.classList.add('on');err.textContent='Prénom, nom, âge, poids et sexe sont requis';return;}
+  err.classList.remove('on');
+  CURRENT={
+    prenom:pr, nom:nm, naiss:'', sx:ESX,
+    poids:po,
+    taille:document.getElementById('eTaille').value||'',
+    ville:(document.getElementById('eVille').value||'').trim(),
+    allergies:(document.getElementById('eAllergies').value||'').trim(),
+    antecedents:(document.getElementById('eAntecedents').value||'').trim(),
+    tel:'', lien:'ephemere', _age:a, _eph:true, _idx:-1
+  };
   startChat();
 }
 
@@ -2029,6 +2048,7 @@ async function sendMsg(){
     (a?', '+a+' ans':'')+
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+
+    (p.taille?', '+p.taille+'cm':'')+
     (p.ville?', '+p.ville:'')+
     (p.allergies?', Allergies: '+p.allergies:'')+
     (p.antecedents?', Antécédents: '+p.antecedents:'')+
@@ -2204,8 +2224,13 @@ async function envoyerDossier(email,nomMed){
   }
 
   // ── Toujours garantir les données patient (fallback sur CURRENT) ──
-  // Le RESUME peut avoir des clés variables selon la version du prompt
-  if(!resume.nom && !resume.patient_nom) resume.nom = nom;
+  // Pour les profils existants : toujours prendre prénom + nom du profil
+  // Le RAG extrait souvent seulement le prénom depuis la conversation
+  if(!p._eph && p.nom) {
+    resume.nom = (p.prenom||'') + ' ' + p.nom; // profil = source de vérité
+  } else if(!resume.nom && !resume.patient_nom) {
+    resume.nom = nom;
+  }
   if(!resume.age && !resume.patient_age) resume.age = String(a||'');
   if(!resume.poids && !resume.patient_poids) resume.poids = String(p.poids||'');
   if(!resume.ville) resume.ville = p.ville||'Non renseignée';
