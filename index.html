@@ -4891,7 +4891,7 @@ async function ouvrirOffres(){
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){
-      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.<br><br><span style="font-size:12px;">Les offres apparaissent après avoir utilisé<br>"💰 Moins cher" sur une ordonnance.</span></div>';
+      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.<br><br><span style="font-size:12px;">Les offres apparaissent après avoir utilisé<br>"💊 Vos médicaments au meilleur prix" sur une ordonnance.</span></div>';
       return;
     }
     var offres=rows.map(function(row){
@@ -5427,7 +5427,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
 
   toast('✅ '+proches.length+' pharmacie(s) contactée(s)');
 
-  // Mettre à jour le bouton "💰 Moins cher" → "Soumis ✅" dans la page ordonnance
+  // Mettre à jour le bouton "💊 Vos médicaments au meilleur prix" → "Soumis ✅" dans la page ordonnance
   var btnAO=document.querySelector('button[onclick*="lancerAppelOffre"]');
   if(btnAO){
     btnAO.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:var(--accent);">Soumis ✅</div>';
@@ -5669,7 +5669,7 @@ async function voirOrdonnanceHisto(i){
   } else if(aoStatut==='annule'){
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Relancer</button>';
   } else {
-    btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Moins cher</button>';
+    btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💊 Vos médicaments au meilleur prix</button>';
   }
 
   var usageKey='ord_used_'+s.supabaseId;
