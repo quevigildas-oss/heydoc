@@ -5429,7 +5429,13 @@ async function lancerAppelOffre(i){
 }
 
 async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
-  var proches=ETABLISSEMENTS.filter(function(p){return p.type==='pharmacie'&&p.accepte_ao&&distKm(lat,lon,p.lat,p.lon)<=rayon;});
+  var proches=ETABLISSEMENTS.filter(function(p){
+    if(!p.type==='pharmacie'||!p.accepte_ao)return false;
+    if(distKm(lat,lon,p.lat,p.lon)>rayon)return false;
+    // Vérifier numéro valide (au moins 8 chiffres)
+    var num=(p.tel||'').replace(/\D/g,'');
+    return num.length>=8;
+  });
   if(!proches.length){
     toast('Aucune pharmacie dans ce rayon de '+rayon+'km');
     if(rayon===5)await envoyerAux(s,meds,lat,lon,10,cacheIdx);
@@ -5499,12 +5505,16 @@ function renderAoModal(){
       '</div>'+
     '</div>';
 
-  document.getElementById('aoList').addEventListener('click',function(e){
+  document.getElementById('aoList').addEventListener('click',function aoListClick(e){
     var div=e.target.closest('[data-aoid]');
-    if(div)aoEnvoyer(div.dataset.aoid);
-  });
-  document.getElementById('aoBtnAnnuler').addEventListener('click',aoAnnuler);
-  document.getElementById('aoBtnTermine').addEventListener('click',aoTermine);
+    if(div){
+      e.stopImmediatePropagation();
+      aoEnvoyer(div.dataset.aoid);
+    }
+  },{once:false});
+  // Utiliser once:true sur les boutons pour éviter double déclenchement
+  document.getElementById('aoBtnAnnuler').addEventListener('click',aoAnnuler,{once:true});
+  document.getElementById('aoBtnTermine').addEventListener('click',aoTermine,{once:true});
 }
 
 function aoAnnuler(){
@@ -5516,16 +5526,21 @@ async function aoEnvoyer(aoId){
   var item=AO_ITEMS.find(function(a){return a.aoId===aoId;});
   if(!item||item.envoye)return;
   item.envoye=true;
-  renderAoModal();
+  // Mise à jour visuelle locale sans recréer tout le HTML
+  var div=document.querySelector('[data-aoid="'+aoId+'"]');
+  if(div){
+    div.style.borderColor='rgba(37,211,102,.5)';
+    div.querySelector('div:nth-child(2) div:nth-child(2)').textContent='✅ Envoyé';
+    div.querySelector('div:last-child').style.background='rgba(37,211,102,.3)';
+  }
   try{
     var r=await fetch(DB_URL+'?table=appels_offres',{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(item.data)});
     var d=await r.json();
-    if(!r.ok){toast('⚠️ '+JSON.stringify(d).slice(0,100));item.envoye=false;renderAoModal();return;}
+    if(!r.ok){toast('⚠️ '+JSON.stringify(d).slice(0,100));item.envoye=false;if(div){div.style.borderColor='var(--border)';div.querySelector('div:nth-child(2) div:nth-child(2)').textContent='Ouvrir WhatsApp →';}return;}
     var ins=Array.isArray(d)?d[0]:d;
     if(ins&&ins.id)item.supabaseId=ins.id;
-  }catch(e){toast('⚠️ Erreur réseau: '+e.message);item.envoye=false;renderAoModal();return;}
+  }catch(e){toast('⚠️ Erreur réseau: '+e.message);item.envoye=false;return;}
   window.open(item.url,'_blank');
-  renderAoModal();
 }
 
 function aoTermine(){
