@@ -2459,9 +2459,9 @@ function ouvrirEspaceProfil(i){
   CURRENT=Object.assign({},p,{_idx:i,_eph:false});
   nav('espaceProfilScreen');
   mettreAJourBadgeTuile();
+  mettreAJourBadgeAnalyses(); // ← appel immédiat pour badge examens
 
   // Rechargement silencieux depuis Supabase pour avoir les données fraîches
-  // (traitements_reguliers, allergies, antécédents peuvent avoir été mis à jour par le médecin)
   if(p.supabaseId){
     fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId+'&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -2480,6 +2480,8 @@ function ouvrirEspaceProfil(i){
       CURRENT=Object.assign({},PROFILS[i],{_idx:i,_eph:false});
       saveProfils();
       if(updated.traitements)syncTraitementsDepuisNotion(PROFILS[i]);
+      mettreAJourBadgeTuile(); // ← refresh badge traitements après fetch
+      mettreAJourBadgeAnalyses(); // ← refresh badge examens après fetch
       dbg('espaceProfilScreen — profil rechargé depuis Supabase ✅ traitements="'+updated.traitements.slice(0,60)+'"');
     }).catch(function(e){
       dbgWarn('espaceProfilScreen — rechargement Supabase échoué: '+e.message);
