@@ -5573,8 +5573,14 @@ async function aoCliquerPharmacie(aoId){
     if(sub){sub.textContent='✅ Envoyé — WhatsApp ouvert';sub.style.color='#25D366';}
   }
 
-  // Ouvrir WhatsApp
-  window.open(item.url,'_blank');
+  // Ouvrir WhatsApp sans perdre le focus sur la liste
+  var a=document.createElement('a');
+  a.href=item.url;
+  a.target='_blank';
+  a.rel='noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){a.remove();},100);
 }
 
 function aoAnnuler(){
