@@ -5448,7 +5448,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   var now=new Date().toISOString();
   var aoItems=proches.map(function(ph){
     var aoId=genAoId();
-    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nMerci de répondre dans 30 min.';
+    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien de réponse :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
     return {
       aoId:aoId,
       nom:ph.nom,
