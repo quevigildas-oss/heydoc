@@ -3088,21 +3088,24 @@ function mettreAJourBadgeOffres(){
 function mettreAJourBadgeAnalyses(){
   var p=PROFILS[SEL];
   if(!p||!p.patientId)return;
-  fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=statut=eq.prescrit&limit=20',{
+  // Chercher tous les examens prescrits pour ce patient (statut=prescrit, obligatoire=true)
+  fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=statut=eq.prescrit&limit=50',{
     headers:{'x-dokita-key':DOKITA_KEY}
   }).then(function(r){return r.json();}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
+    // Ne compter que les examens obligatoires non reçus
+    var aFaire=rows.filter(function(ex){return ex.obligatoire;});
     var badge=document.getElementById('dossierMedTileBadge');
     var sub=document.getElementById('dossierMedTileSub');
-    if(badge){
-      if(rows.length>0){
-        badge.style.cssText='display:inline-block;width:fit-content;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:700;margin:4px auto 0;';
-        badge.textContent=rows.length+' à faire';
-      } else {
-        badge.style.display='none';
-      }
+    if(!badge)return; // écran pas visible, ignorer
+    if(aFaire.length>0){
+      badge.style.cssText='display:inline-block;width:fit-content;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:1px 7px;font-size:9px;font-weight:700;margin:4px auto 0;';
+      badge.textContent=aFaire.length+' à faire';
+      if(sub)sub.textContent='Examens en attente';
+    } else {
+      badge.style.display='none';
+      if(sub)sub.textContent='Examens & Documents';
     }
-    if(sub&&rows.length>0)sub.textContent='Examens en attente';
   }).catch(function(){});
 }
 
