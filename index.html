@@ -5448,12 +5448,10 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     var ph=proches[k];
     var aoId=genAoId();
     try{
-      var aoRes=await fetch(DB_URL,{
+      var aoRes=await fetch(DB_URL+'?table=appels_offres',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
         body:JSON.stringify({
-          table:'appels_offres',
-          data:{
             ao_id:aoId,
             consultation_id:s.supabaseId||s.id||'',
             patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
@@ -5465,7 +5463,6 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
             patient_lat:lat,
             patient_lng:lon,
             date_envoi:now
-          }
         })
       });
       var aoData=await aoRes.json();
