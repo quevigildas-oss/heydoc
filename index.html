@@ -4292,7 +4292,7 @@ var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // cha
 async function chargerEtablissements(){
   // Chargement au login — stocké en mémoire pour toute la session
   try{
-    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&limit=200',{
+    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&filter2=accepte_ao=eq.true&limit=500',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
