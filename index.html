@@ -5513,11 +5513,15 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     item.envoye=true;
     // INSERT Supabase maintenant que le patient a cliqué
     try{
-      await fetch(DB_URL+'?table=appels_offres',{
+      var aoRes=await fetch(DB_URL+'?table=appels_offres',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
         body:JSON.stringify(item.data)
       });
+      var aoData=await aoRes.json();
+      // Stocker l'id Supabase pour le PATCH ultérieur
+      var inserted=Array.isArray(aoData)?aoData[0]:aoData;
+      if(inserted&&inserted.id)item.supabaseId=inserted.id;
     }catch(e){dbgWarn('AO INSERT: '+e.message);}
     renderModal();
   };
@@ -5528,7 +5532,8 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     if(envoyes.length>0){
       // PATCH statut brouillon → en_attente pour tous les AO envoyés
       await Promise.all(envoyes.map(function(a){
-        return fetch(DB_URL+'?table=appels_offres&filter=ao_id=eq.'+encodeURIComponent(a.aoId),{
+        if(!a.supabaseId)return Promise.resolve();
+        return fetch(DB_URL+'?table=appels_offres&id='+encodeURIComponent(a.supabaseId),{
           method:'PATCH',
           headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
           body:JSON.stringify({statut:'en_attente'})
