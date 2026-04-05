@@ -5463,7 +5463,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         pharmacie_nom:ph.nom,
         pharmacie_tel:ph.tel,
         medicaments:medsObj,
-        statut:'brouillon',
+        statut:'en_attente',
         rayon_km:rayon,
         patient_lat:lat,
         patient_lng:lon,
@@ -5540,19 +5540,10 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     renderModal();
   };
 
-  window.aoTermine=async function(){
+  window.aoTermine=function(){
     var envoyes=aoItems.filter(function(a){return a.envoye;});
     modal.remove();
     if(envoyes.length>0){
-      // PATCH statut brouillon → en_attente pour tous les AO envoyés
-      await Promise.all(envoyes.map(function(a){
-        if(!a.supabaseId)return Promise.resolve();
-        return fetch(DB_URL+'?table=appels_offres&id='+encodeURIComponent(a.supabaseId),{
-          method:'PATCH',
-          headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-          body:JSON.stringify({statut:'en_attente'})
-        }).catch(function(e){dbgWarn('AO PATCH: '+e.message);});
-      }));
       toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
       var btnAO=document.querySelector('button[onclick*="lancerAppelOffre"]');
       if(btnAO)btnAO.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
