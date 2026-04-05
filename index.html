@@ -5479,25 +5479,32 @@ var AO_SESSION_S=null;
 function renderAoModal(){
   var modal=document.getElementById('aoModal');
   if(!modal)return;
+  var itemsHtml=AO_ITEMS.map(function(w,k){
+    return '<div data-aoid="'+w.aoId+'" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1.5px solid '+(w.envoye?'rgba(37,211,102,.5)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
+      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
+      '<div style="flex:1;min-width:0;"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
+      '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div></div>'+
+      '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+AO_ITEMS.length+'</div>'+
+    '</div>';
+  }).join('');
+
   modal.innerHTML=
     '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px 20px 0;width:100%;max-height:85vh;display:flex;flex-direction:column;">'+
       '<div style="flex-shrink:0;"><div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
       '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div></div>'+
-      '<div style="overflow-y:auto;flex:1;padding-bottom:8px;">'+
-        AO_ITEMS.map(function(w,k){
-          return '<div onclick="aoEnvoyer(\''+w.aoId+'\')" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1.5px solid '+(w.envoye?'rgba(37,211,102,.5)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
-            '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
-            '<div style="flex:1;min-width:0;"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
-            '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div></div>'+
-            '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+AO_ITEMS.length+'</div>'+
-          '</div>';
-        }).join('')+
-      '</div>'+
+      '<div id="aoList" style="overflow-y:auto;flex:1;padding-bottom:8px;">'+itemsHtml+'</div>'+
       '<div style="flex-shrink:0;padding:12px 0 calc(12px + var(--sb,0px));display:flex;gap:10px;">'+
-        '<button onclick="aoAnnuler()" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
-        '<button onclick="aoTermine()" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✅ Terminé</button>'+
+        '<button id="aoBtnAnnuler" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+        '<button id="aoBtnTermine" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✅ Terminé</button>'+
       '</div>'+
     '</div>';
+
+  document.getElementById('aoList').addEventListener('click',function(e){
+    var div=e.target.closest('[data-aoid]');
+    if(div)aoEnvoyer(div.dataset.aoid);
+  });
+  document.getElementById('aoBtnAnnuler').addEventListener('click',aoAnnuler);
+  document.getElementById('aoBtnTermine').addEventListener('click',aoTermine);
 }
 
 function aoAnnuler(){
