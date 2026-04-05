@@ -4275,6 +4275,8 @@ async function chargerHistoriqueNotion(){
 var HISTO_CACHE=[];
 var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
 var PHARMA_URL='https://heydoc-mu.vercel.app/pharmacie';
+var AO_ITEMS=[]; // état global du modal AO en cours
+var AO_SESSION_ID=''; // consultation_id de la session AO en cours
 
 // Labels affichage pour statuts AO (valeurs Supabase sans accents → labels UI)
 var STATUT_AO_LABELS={
@@ -5434,7 +5436,6 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     return;
   }
 
-  // Normaliser meds
   var medsObj=meds.map(function(m){return typeof m==='string'?{nom:m}:m;});
   var medsStr=medsObj.map(function(m,idx){
     var l=(idx+1)+'. '+(m.nom||'');
@@ -5444,127 +5445,92 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     return l;
   }).join('\n');
 
-  // Préparer les AO en mémoire (pas encore en Supabase)
   var now=new Date().toISOString();
-  var aoItems=proches.map(function(ph){
+  AO_SESSION_ID=s.supabaseId||s.id||'';
+  AO_SESSION_S=s;
+  AO_ITEMS=proches.map(function(ph){
     var aoId=genAoId();
-    var msgPh='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien de réponse :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
+    var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien de réponse :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
     return {
-      aoId:aoId,
-      nom:ph.nom,
-      tel:ph.tel,
-      ph:ph,
-      url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msgPh),
-      envoye:false,
-      data:{
-        ao_id:aoId,
-        consultation_id:s.supabaseId||s.id||'',
-        patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
-        pharmacie_nom:ph.nom,
-        pharmacie_tel:ph.tel,
-        medicaments:medsObj,
-        statut:'en_attente',
-        rayon_km:rayon,
-        patient_lat:lat,
-        patient_lng:lon,
-        date_envoi:now
-      }
+      aoId:aoId,nom:ph.nom,tel:ph.tel,supabaseId:null,envoye:false,
+      url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg),
+      data:{ao_id:aoId,consultation_id:AO_SESSION_ID,patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',pharmacie_nom:ph.nom,pharmacie_tel:ph.tel,medicaments:medsObj,statut:'en_attente',rayon_km:rayon,patient_lat:lat,patient_lng:lon,date_envoi:now}
     };
   });
 
-  // Modal
+  var old=document.getElementById('aoModal');
+  if(old)old.remove();
   var modal=document.createElement('div');
+  modal.id='aoModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
-
-  function renderModal(){
-    modal.innerHTML=
-      '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px 20px 0;width:100%;max-height:85vh;display:flex;flex-direction:column;">'+
-        '<div style="flex-shrink:0;">'+
-          '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
-          '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div>'+
-        '</div>'+
-        '<div style="overflow-y:auto;flex:1;padding-bottom:8px;">'+
-          aoItems.map(function(w,k){
-          return '<div onclick="aoEnvoyer(\''+w.aoId+'\')" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid '+(w.envoye?'rgba(37,211,102,.4)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
-              '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
-              '<div style="flex:1;min-width:0;">'+
-                '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
-                '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div>'+
-              '</div>'+
-              '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+aoItems.length+'</div>'+
-            '</div>';
-          }).join('')+
-        '</div>'+
-        '<div style="flex-shrink:0;padding:12px 0 calc(12px + var(--sb,0px));display:flex;gap:10px;">'+
-          '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
-          '<button onclick="aoTermine()" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✅ Terminé</button>'+
-        '</div>'+
-      '</div>';
-  }
-
-  // Exposer les fonctions globalement pour les onclick inline
-  window._aoItems=aoItems;
-  window._aoModal=modal;
-  window._aoCacheIdx=cacheIdx;
-
-  window.aoEnvoyer=async function(aoId){
-    var item=aoItems.find(function(a){return a.aoId===aoId;});
-    if(!item||item.envoye)return;
-    item.envoye=true;
-    renderModal(); // feedback visuel immédiat
-    // INSERT Supabase
-    try{
-      var aoRes=await fetch(DB_URL+'?table=appels_offres',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-        body:JSON.stringify(item.data)
-      });
-      var aoData=await aoRes.json();
-      if(!aoRes.ok){
-        toast('⚠️ Erreur: '+JSON.stringify(aoData).slice(0,100));
-        item.envoye=false;
-        renderModal();
-        return;
-      }
-      var inserted=Array.isArray(aoData)?aoData[0]:aoData;
-      if(inserted&&inserted.id)item.supabaseId=inserted.id;
-      dbg('AO INSERT OK — id:'+item.supabaseId);
-    }catch(e){
-      toast('⚠️ Erreur réseau: '+e.message);
-      item.envoye=false;
-      renderModal();
-      return;
-    }
-    // Ouvrir WhatsApp après INSERT réussi
-    window.open(item.url,'_blank');
-    renderModal();
-  };
-
-  window.aoTermine=function(){
-    var envoyes=aoItems.filter(function(a){return a.envoye;});
-    modal.remove();
-    if(envoyes.length>0){
-      // Marquer comme soumis en localStorage
-      var aoLocalKey='ao_soumis_'+( s.supabaseId||s.id||'');
-      try{localStorage.setItem(aoLocalKey,'1');}catch(e){}
-      toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
-      var btnAO=document.querySelector('button[onclick*="lancerAppelOffre"]');
-      if(btnAO)btnAO.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
-      mettreAJourBadgeOffres();
-    }
-  };
-
-  renderModal();
   document.body.appendChild(modal);
+  renderAoModal();
 
   if(rayon===5){
     setTimeout(async function(){
       var reps=await compterReponses(s.supabaseId);
-      if(reps===0){
-        toast('⏰ Aucune réponse — relance à 10km...');
-        await envoyerAux(s,meds,lat,lon,10,cacheIdx);
-      }
+      if(reps===0){toast('⏰ Aucune réponse — relance à 10km...');await envoyerAux(s,meds,lat,lon,10,cacheIdx);}
     },30*60*1000);
+  }
+}
+
+var AO_SESSION_S=null;
+
+function renderAoModal(){
+  var modal=document.getElementById('aoModal');
+  if(!modal)return;
+  modal.innerHTML=
+    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px 20px 0;width:100%;max-height:85vh;display:flex;flex-direction:column;">'+
+      '<div style="flex-shrink:0;"><div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div></div>'+
+      '<div style="overflow-y:auto;flex:1;padding-bottom:8px;">'+
+        AO_ITEMS.map(function(w,k){
+          return '<div onclick="aoEnvoyer(\''+w.aoId+'\')" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1.5px solid '+(w.envoye?'rgba(37,211,102,.5)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
+            '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
+            '<div style="flex:1;min-width:0;"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
+            '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div></div>'+
+            '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+AO_ITEMS.length+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>'+
+      '<div style="flex-shrink:0;padding:12px 0 calc(12px + var(--sb,0px));display:flex;gap:10px;">'+
+        '<button onclick="aoAnnuler()" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
+        '<button onclick="aoTermine()" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✅ Terminé</button>'+
+      '</div>'+
+    '</div>';
+}
+
+function aoAnnuler(){
+  var m=document.getElementById('aoModal');if(m)m.remove();
+  AO_ITEMS=[];
+}
+
+async function aoEnvoyer(aoId){
+  var item=AO_ITEMS.find(function(a){return a.aoId===aoId;});
+  if(!item||item.envoye)return;
+  item.envoye=true;
+  renderAoModal();
+  try{
+    var r=await fetch(DB_URL+'?table=appels_offres',{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(item.data)});
+    var d=await r.json();
+    if(!r.ok){toast('⚠️ '+JSON.stringify(d).slice(0,100));item.envoye=false;renderAoModal();return;}
+    var ins=Array.isArray(d)?d[0]:d;
+    if(ins&&ins.id)item.supabaseId=ins.id;
+  }catch(e){toast('⚠️ Erreur réseau: '+e.message);item.envoye=false;renderAoModal();return;}
+  window.open(item.url,'_blank');
+  renderAoModal();
+}
+
+function aoTermine(){
+  var m=document.getElementById('aoModal');if(m)m.remove();
+  var envoyes=AO_ITEMS.filter(function(a){return a.envoye;});
+  AO_ITEMS=[];
+  if(envoyes.length>0){
+    try{localStorage.setItem('ao_soumis_'+AO_SESSION_ID,'1');}catch(e){}
+    toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
+    var btn=document.querySelector('button[onclick*="lancerAppelOffre"]');
+    if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
+    mettreAJourBadgeOffres();
   }
 }
 
