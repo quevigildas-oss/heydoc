@@ -5430,9 +5430,8 @@ async function lancerAppelOffre(i){
 
 async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   var proches=ETABLISSEMENTS.filter(function(p){
-    if(!p.type==='pharmacie'||!p.accepte_ao)return false;
+    if(p.type!=='pharmacie'||!p.accepte_ao)return false;
     if(distKm(lat,lon,p.lat,p.lon)>rayon)return false;
-    // Vérifier numéro valide (au moins 8 chiffres)
     var num=(p.tel||'').replace(/\D/g,'');
     return num.length>=8;
   });
@@ -5442,111 +5441,156 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     return;
   }
 
+  // Préparer le texte des médicaments
   var medsObj=meds.map(function(m){return typeof m==='string'?{nom:m}:m;});
   var medsStr=medsObj.map(function(m,idx){
     var l=(idx+1)+'. '+(m.nom||'');
     if(m.dose)l+=' '+m.dose;
     if(m.poso)l+=' — '+m.poso;
-    if(m.duree)l+=' — '+m.duree;
     return l;
   }).join('\n');
 
-  var now=new Date().toISOString();
+  // Initialiser état global AO — RIEN dans Supabase à ce stade
   AO_SESSION_ID=s.supabaseId||s.id||'';
-  AO_SESSION_S=s;
   AO_ITEMS=proches.map(function(ph){
     var aoId=genAoId();
-    var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien de réponse :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
+    var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
     return {
-      aoId:aoId,nom:ph.nom,tel:ph.tel,supabaseId:null,envoye:false,
+      aoId:aoId,
+      nom:ph.nom,
+      tel:ph.tel,
       url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg),
-      data:{ao_id:aoId,consultation_id:AO_SESSION_ID,patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',pharmacie_nom:ph.nom,pharmacie_tel:ph.tel,medicaments:medsObj,statut:'en_attente',rayon_km:rayon,patient_lat:lat,patient_lng:lon,date_envoi:now}
+      statut:'attente', // attente | envoye | ignore
+      supabaseId:null,
+      data:{
+        ao_id:aoId,
+        consultation_id:AO_SESSION_ID,
+        patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
+        pharmacie_nom:ph.nom,
+        pharmacie_tel:ph.tel,
+        medicaments:medsObj,
+        statut:'en_attente',
+        rayon_km:rayon,
+        patient_lat:lat,
+        patient_lng:lon,
+        date_envoi:new Date().toISOString()
+      }
     };
   });
 
+  // Afficher modal
   var old=document.getElementById('aoModal');
   if(old)old.remove();
   var modal=document.createElement('div');
   modal.id='aoModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
   document.body.appendChild(modal);
-  renderAoModal();
-
-  if(rayon===5){
-    setTimeout(async function(){
-      var reps=await compterReponses(s.supabaseId);
-      if(reps===0){toast('⏰ Aucune réponse — relance à 10km...');await envoyerAux(s,meds,lat,lon,10,cacheIdx);}
-    },30*60*1000);
-  }
+  aoRenderModal();
 }
 
 var AO_SESSION_S=null;
 
-function renderAoModal(){
+function aoRenderModal(){
   var modal=document.getElementById('aoModal');
   if(!modal)return;
-  var itemsHtml=AO_ITEMS.map(function(w,k){
-    return '<div data-aoid="'+w.aoId+'" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1.5px solid '+(w.envoye?'rgba(37,211,102,.5)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
-      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
-      '<div style="flex:1;min-width:0;"><div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
-      '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div></div>'+
-      '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+AO_ITEMS.length+'</div>'+
+
+  var listHtml=AO_ITEMS.map(function(w,k){
+    var envoye=w.statut==='envoye';
+    var ignore=w.statut==='ignore';
+    return '<div data-aoid="'+w.aoId+'" class="ao-item" style="display:flex;align-items:center;gap:12px;padding:13px 14px;margin-bottom:8px;border-radius:14px;cursor:pointer;'+
+      'background:var(--card);border:1.5px solid '+(envoye?'#25D366':ignore?'var(--border)':'var(--border)')+';'+
+      'opacity:'+(ignore?'0.35':'1')+';">'+
+      '<div style="width:34px;height:34px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">💬</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
+        '<div style="font-size:11px;color:'+(envoye?'#25D366':ignore?'var(--text3)':'#25D366')+';margin-top:1px;">'+(envoye?'✅ Envoyé — WhatsApp ouvert':ignore?'Non envoyé':'Ouvrir WhatsApp →')+'</div>'+
+      '</div>'+
+      '<span style="font-size:10px;font-weight:700;background:'+(envoye?'rgba(37,211,102,.2)':'rgba(37,211,102,.1)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;flex-shrink:0;">'+(k+1)+'/'+AO_ITEMS.length+'</span>'+
     '</div>';
   }).join('');
 
   modal.innerHTML=
-    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px 20px 0;width:100%;max-height:85vh;display:flex;flex-direction:column;">'+
-      '<div style="flex-shrink:0;"><div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div></div>'+
-      '<div id="aoList" style="overflow-y:auto;flex:1;padding-bottom:8px;">'+itemsHtml+'</div>'+
-      '<div style="flex-shrink:0;padding:12px 0 calc(12px + var(--sb,0px));display:flex;gap:10px;">'+
-        '<button id="aoBtnAnnuler" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
-        '<button id="aoBtnTermine" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">✅ Terminé</button>'+
+    '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-sizing:border-box;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📤 Envoyer aux pharmacies</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:14px;">Appuyez sur chaque pharmacie pour envoyer le message WhatsApp</div>'+
+      '<div id="aoList" style="overflow-y:auto;flex:1;margin-bottom:12px;">'+listHtml+'</div>'+
+      '<div style="display:flex;gap:10px;padding-bottom:calc(var(--sb,0px));">'+
+        '<button id="aoBtnCancel" style="flex:1;padding:13px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;font-family:\'DM Sans\',sans-serif;">Annuler</button>'+
+        '<button id="aoBtnDone" style="flex:2;padding:13px;background:var(--grad);border:none;border-radius:12px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:\'Syne\',sans-serif;">✅ Terminé</button>'+
       '</div>'+
     '</div>';
 
-  document.getElementById('aoList').addEventListener('click',function aoListClick(e){
-    var div=e.target.closest('[data-aoid]');
-    if(div){
-      e.stopImmediatePropagation();
-      aoEnvoyer(div.dataset.aoid);
-    }
-  },{once:false});
-  // Utiliser once:true sur les boutons pour éviter double déclenchement
-  document.getElementById('aoBtnAnnuler').addEventListener('click',aoAnnuler,{once:true});
-  document.getElementById('aoBtnTermine').addEventListener('click',aoTermine,{once:true});
+  // Event listeners directs — une seule fois
+  document.getElementById('aoList').addEventListener('click',function(e){
+    var item=e.target.closest('.ao-item');
+    if(item&&item.dataset.aoid)aoCliquerPharmacie(item.dataset.aoid);
+  });
+  document.getElementById('aoBtnCancel').addEventListener('click',aoAnnuler);
+  document.getElementById('aoBtnDone').addEventListener('click',aoTermine);
 }
 
-function aoAnnuler(){
-  var m=document.getElementById('aoModal');if(m)m.remove();
-  AO_ITEMS=[];
-}
-
-async function aoEnvoyer(aoId){
+// Clic sur une pharmacie → INSERT Supabase + ouvrir WhatsApp
+async function aoCliquerPharmacie(aoId){
   var item=AO_ITEMS.find(function(a){return a.aoId===aoId;});
-  if(!item||item.envoye)return;
-  item.envoye=true;
-  // Mise à jour visuelle locale sans recréer tout le HTML
-  var div=document.querySelector('[data-aoid="'+aoId+'"]');
+  if(!item||item.statut==='envoye')return;
+  if(item.statut==='ignore')return;
+
+  // Feedback visuel immédiat
+  var div=document.querySelector('.ao-item[data-aoid="'+aoId+'"]');
   if(div){
-    div.style.borderColor='rgba(37,211,102,.5)';
-    div.querySelector('div:nth-child(2) div:nth-child(2)').textContent='✅ Envoyé';
-    div.querySelector('div:last-child').style.background='rgba(37,211,102,.3)';
+    div.style.opacity='0.6';
+    var sub=div.querySelector('div:nth-child(2) div:nth-child(2)');
+    if(sub)sub.textContent='⏳ Envoi en cours...';
   }
+
+  // INSERT Supabase
   try{
-    var r=await fetch(DB_URL+'?table=appels_offres',{method:'POST',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},body:JSON.stringify(item.data)});
-    var d=await r.json();
-    if(!r.ok){toast('⚠️ '+JSON.stringify(d).slice(0,100));item.envoye=false;if(div){div.style.borderColor='var(--border)';div.querySelector('div:nth-child(2) div:nth-child(2)').textContent='Ouvrir WhatsApp →';}return;}
-    var ins=Array.isArray(d)?d[0]:d;
+    var res=await fetch(DB_URL+'?table=appels_offres',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify(item.data)
+    });
+    var data=await res.json();
+    if(!res.ok){
+      toast('⚠️ Erreur: '+JSON.stringify(data).slice(0,80));
+      if(div)div.style.opacity='1';
+      return;
+    }
+    var ins=Array.isArray(data)?data[0]:data;
     if(ins&&ins.id)item.supabaseId=ins.id;
-  }catch(e){toast('⚠️ Erreur réseau: '+e.message);item.envoye=false;return;}
+    item.statut='envoye';
+  }catch(e){
+    toast('⚠️ Réseau: '+e.message);
+    if(div)div.style.opacity='1';
+    return;
+  }
+
+  // Mise à jour visuelle finale
+  if(div){
+    div.style.opacity='1';
+    div.style.borderColor='#25D366';
+    var sub=div.querySelector('div:nth-child(2) div:nth-child(2)');
+    if(sub){sub.textContent='✅ Envoyé — WhatsApp ouvert';sub.style.color='#25D366';}
+  }
+
+  // Ouvrir WhatsApp
   window.open(item.url,'_blank');
 }
 
-function aoTermine(){
-  var m=document.getElementById('aoModal');if(m)m.remove();
-  var envoyes=AO_ITEMS.filter(function(a){return a.envoye;});
+function aoAnnuler(){
+  var m=document.getElementById('aoModal');
+  if(m)m.remove();
   AO_ITEMS=[];
+}
+
+function aoTermine(){
+  var m=document.getElementById('aoModal');
+  if(m)m.remove();
+
+  var envoyes=AO_ITEMS.filter(function(a){return a.statut==='envoye';});
+  // Marquer les non-envoyés comme ignorés (griser dans un futur affichage)
+  AO_ITEMS.forEach(function(a){if(a.statut==='attente')a.statut='ignore';});
+
   if(envoyes.length>0){
     try{localStorage.setItem('ao_soumis_'+AO_SESSION_ID,'1');}catch(e){}
     toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
@@ -5554,6 +5598,8 @@ function aoTermine(){
     if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
     mettreAJourBadgeOffres();
   }
+
+  AO_ITEMS=[];
 }
 
 async function compterReponses(consultId){
