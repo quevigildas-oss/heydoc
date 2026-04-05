@@ -5743,16 +5743,21 @@ async function voirOrdonnanceHisto(i){
   }
   if(!s.ordonnance){toast('Ordonnance non disponible');return;}
 
-  // Vérifier AO depuis Supabase
+  // Vérifier AO depuis Supabase — prendre le statut le plus avancé
   var aoStatut='';
   try{
-    var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&order=created_at.desc&limit=1',{
+    var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&limit=50',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
-    if(aoRows.length)aoStatut=aoRows[0].statut||'';
-    dbg('aoStatut: '+aoStatut+' → '+labelAO(aoStatut));
+    if(aoRows.length){
+      // Priorité des statuts : livre > accepte > en_livraison > offres_recues > en_attente > annule
+      var priorite=['livre','accepte','en_livraison','offres_recues','en_attente','annule'];
+      var statuts=aoRows.map(function(r){return r.statut||'';});
+      aoStatut=priorite.find(function(s){return statuts.includes(s);})||statuts[0]||'';
+    }
+    dbg('aoStatut: '+aoStatut+' ('+aoRows.length+' AO)');
   }catch(e){}
 
   var ord=s.ordonnance;
