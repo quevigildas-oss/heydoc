@@ -2531,140 +2531,231 @@ async function chargerDossierDokita(){
   var p=PROFILS[SEL];
   if(!p){el.innerHTML='<div class="detail-empty">Sélectionnez un profil</div>';return;}
   var patId=p.patientId||'';
-  var examensSupabase=[];
-  var examensLocaux=[];
 
-  // Charger examens prescrits depuis Supabase
+  // Charger examens + ordonnances en parallèle
+  var examensSupabase=[], ordos=[];
   try{
-    var r=await fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=50',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var data=await r.json();
-    examensSupabase=Array.isArray(data)?data:(data.data||[]);
-  }catch(e){dbgWarn('Examens Supabase: '+e.message);}
+    var [rEx,rOrd]=await Promise.all([
+      fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=50',{headers:{'x-dokita-key':DOKITA_KEY}}),
+      fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.envoyee_patient&order=created_at.desc&limit=10',{headers:{'x-dokita-key':DOKITA_KEY}})
+    ]);
+    var dEx=await rEx.json(); examensSupabase=Array.isArray(dEx)?dEx:(dEx.data||[]);
+    var dOrd=await rOrd.json(); ordos=Array.isArray(dOrd)?dOrd:(dOrd.data||[]);
+  }catch(e){dbgWarn('Dossier Dokita: '+e.message);}
 
-  // Charger saisies manuelles localStorage
-  try{
-    var key='dossier_ordonnances_bio_'+(patId||SEL);
-    var s=localStorage.getItem(key);
-    if(s)examensLocaux=JSON.parse(s);
-  }catch(e){}
+  var today=new Date();today.setHours(0,0,0,0);
 
-  // Mettre à jour badge tuile
-  var nbPrescrit=examensSupabase.filter(function(e){return e.statut==='prescrit'||e.statut==='en_attente_patient';}).length;
-  var badge=document.getElementById('dossierMedTileBadge');
-  var sub=document.getElementById('dossierMedTileSub');
-  if(badge){
-    if(nbPrescrit>0){badge.style.display='block';badge.textContent=nbPrescrit+' à faire';}
-    else badge.style.display='none';
+  // Compter examens obligatoires à faire
+  var examAFaire=examensSupabase.filter(function(e){return e.statut==='prescrit'&&e.obligatoire;}).length;
+  var examFaits=examensSupabase.filter(function(e){return e.statut==='resultat_recu';}).length;
+  var examAnnules=examensSupabase.filter(function(e){return e.statut==='annule';}).length;
+
+  // Ordonnances avec médicaments encore actifs
+  var ordosActives=ordos.filter(function(o){
+    var pf=o.prescription_finale||o.prescription_medecin||{};
+    return (pf.meds||[]).some(function(m){return !m.date_fin||new Date(m.date_fin)>=today;});
+  });
+
+  // Antécédents depuis profil
+  var antecedents=(p.antecedents||'').trim();
+
+  // Rendu tuiles
+  var html=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;">'+
+
+    // Tuile Examens
+    '<div onclick="ouvrirDossierExamens()" style="background:var(--card);border:1px solid '+(examAFaire>0?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">🧪</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Examens</div>'+
+      (examAFaire>0?
+        '<div style="display:inline-block;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;">'+examAFaire+' à faire</div>'
+      :examFaits>0?
+        '<div style="font-size:11px;color:var(--accent);margin-top:4px;">'+examFaits+' reçu'+(examFaits>1?'s':'')+'</div>'
+      :
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun prescrit</div>'
+      )+
+    '</div>'+
+
+    // Tuile Ordonnances actives
+    '<div onclick="ouvrirDossierOrdos()" style="background:var(--card);border:1px solid '+(ordosActives.length>0?'rgba(99,102,241,.3)':'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">💊</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Ordonnances</div>'+
+      (ordosActives.length>0?
+        '<div style="display:inline-block;background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.3);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;">'+ordosActives.length+' active'+(ordosActives.length>1?'s':'')+'</div>'
+      :
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Aucune active</div>'
+      )+
+    '</div>'+
+
+    // Tuile Antécédents
+    '<div onclick="ouvrirDossierAntecedents()" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">📋</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Antécédents médicaux</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+(antecedents?antecedents.slice(0,60)+(antecedents.length>60?'...':''):'Aucun renseigné — confirmé par votre médecin')+'</div>'+
+    '</div>'+
+
+    '</div>';
+
+  el.innerHTML=html;
+
+  // Sauvegarder données pour les sous-écrans
+  el._examens=examensSupabase;
+  el._ordos=ordos;
+}
+
+function ouvrirDossierExamens(){
+  var el=document.getElementById('dossierMedBody');
+  var examens=el._examens||[];
+  var today=new Date();today.setHours(0,0,0,0);
+  var patId=(PROFILS[SEL]&&PROFILS[SEL].patientId)||'';
+
+  // Grouper par consultation_id
+  var byConsult={};
+  examens.forEach(function(ex){
+    var cid=ex.consultation_id||'sans_consultation';
+    if(!byConsult[cid])byConsult[cid]=[];
+    byConsult[cid].push(ex);
+  });
+
+  var html=
+    '<button onclick="chargerDossierDokita()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px;">🧪 Mes examens</div>';
+
+  if(!examens.length){
+    html+='<div style="text-align:center;padding:30px;color:var(--text3);">Aucun examen prescrit</div>';
+    el.innerHTML=html;
+    return;
   }
 
-  var html='';
-
-  // Ordonnances actives depuis Supabase
-  try{
-    var ro=await fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.envoyee_patient&order=created_at.desc&limit=5',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var dro=await ro.json();
-    var ordos=Array.isArray(dro)?dro:(dro.data||[]);
-    var today=new Date();today.setHours(0,0,0,0);
-    var ordosActives=ordos.filter(function(o){
-      var pf=o.prescription_finale||o.prescription_medecin||{};
-      var meds=pf.meds||[];
-      return meds.some(function(m){return m.date_fin&&new Date(m.date_fin)>=today;});
-    });
-    if(ordosActives.length){
-      html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">💊 Ordonnances actives</div>';
-      html+=ordosActives.map(function(o){
-        var pf=o.prescription_finale||o.prescription_medecin||{};
-        var meds=(pf.meds||[]).filter(function(m){return m.date_fin&&new Date(m.date_fin)>=today;});
-        var dateAff=o.created_at?new Date(o.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
-        return '<div style="background:var(--card);border:1px solid rgba(99,102,241,.3);border-radius:14px;padding:14px;margin-bottom:10px;">'+
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'+
-            '<div style="font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--text);">📋 Ordonnance du '+dateAff+'</div>'+
-            '<span style="font-size:10px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:2px 7px;">✅ Active</span>'+
-          '</div>'+
-          meds.map(function(m){
-            return '<div style="font-size:12px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(m.nom+(m.dose?' '+m.dose:''))+'<span style="color:var(--text3);font-size:10px;"> — jusqu\'au '+m.date_fin+'</span></div>';
-          }).join('')+
-        '</div>';
-      }).join('');
-    }
-  }catch(e){}
-
-  // Examens prescrits
-  if(examensSupabase.length){
-    html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 10px;">🧪 Examens prescrits</div>';
-    html+=examensSupabase.map(function(ex){
+  Object.keys(byConsult).forEach(function(cid){
+    var exs=byConsult[cid];
+    var dateConsult=exs[0].created_at?new Date(exs[0].created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'';
+    html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px;">Prescrit le '+dateConsult+'</div>';
+    exs.forEach(function(ex){
       var statut=ex.statut||'prescrit';
-      var obligatoire=ex.obligatoire;
-      var statutColor=statut==='prescrit'?'#F59E0B':statut==='resultat_recu'?'#00C896':'#8B9EC7';
-      var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='resultat_recu'?'✅ Fait':'📋 '+statut;
-      var dateStr=ex.created_at?(new Date(ex.created_at)).toLocaleDateString('fr-FR'):'';
-      var resultatLie=ex.resultat?{valeur:ex.resultat,date:ex.date_realisation?(new Date(ex.date_realisation)).toLocaleDateString('fr-FR'):''}:examensLocaux.find(function(it){return it.examenId===ex.id;});
-      return '<div style="background:var(--card);border:1px solid '+(statut==='resultat_recu'?'rgba(0,200,150,.3)':obligatoire?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
-          '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(ex.type_examen)+'</div>'+
-          '<span style="font-size:10px;font-weight:700;color:'+statutColor+';">'+statutLabel+'</span>'+
-        '</div>'+
-        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'+
-          (obligatoire?'<span style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;color:#ef4444;">OBLIGATOIRE</span>':'<span style="background:rgba(139,156,199,.1);border:1px solid rgba(139,156,199,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--text3);">Recommandé</span>')+
-          (dateStr?'<span style="font-size:10px;color:var(--text3);">Prescrit le '+dateStr+'</span>':'')+
-        '</div>'+
-        (resultatLie?
-          '<div style="margin-top:8px;background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.2);border-radius:8px;padding:8px 10px;">'+
-            '<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:3px;">RÉSULTAT</div>'+
-            '<div style="font-size:12px;color:var(--text2);">'+escHtml(resultatLie.valeur)+'</div>'+
-            (resultatLie.date?'<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+resultatLie.date+'</div>':'')+
-          '</div>'
-        :
-          (statut==='prescrit'?
-            '<div style="display:flex;gap:6px;margin-top:8px;">'+
-              '<button onclick="ouvrirModalResultat(\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;">📝 Saisir</button>'+
-              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">'+
-                '📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')">'+
-              '</label>'+
-              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">'+
-                '📂 PDF<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')">'+
-              '</label>'+
+      var obl=ex.obligatoire;
+      var statutColor=statut==='prescrit'?'#F59E0B':statut==='resultat_recu'?'#00C896':'#6B7280';
+      var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='resultat_recu'?'✅ Reçu':'❌ Annulé';
+      var examensLocaux=[];
+      try{var s=localStorage.getItem('dossier_ordonnances_bio_'+(patId||SEL));if(s)examensLocaux=JSON.parse(s);}catch(e){}
+      var resultatLie=ex.resultat?{valeur:ex.resultat,date:ex.date_realisation?new Date(ex.date_realisation).toLocaleDateString('fr-FR'):''}:examensLocaux.find(function(it){return it.examenId===ex.id;});
+      html+=
+        '<div style="background:var(--card);border:1px solid '+(statut==='resultat_recu'?'rgba(0,200,150,.3)':obl&&statut==='prescrit'?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+            '<div style="display:flex;align-items:center;gap:6px;">'+
+              (obl?'<span style="font-size:9px;font-weight:700;color:#ef4444;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:1px 5px;">OBL</span>':'<span style="font-size:9px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 5px;">REC</span>')+
+              '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(ex.type_examen)+'</div>'+
+            '</div>'+
+            '<span style="font-size:10px;font-weight:700;color:'+statutColor+';">'+statutLabel+'</span>'+
+          '</div>'+
+          (resultatLie?
+            '<div style="background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.2);border-radius:8px;padding:8px 10px;margin-top:4px;">'+
+              '<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:3px;">RÉSULTAT</div>'+
+              '<div style="font-size:12px;color:var(--text2);">'+escHtml(resultatLie.valeur)+'</div>'+
+              (resultatLie.date?'<div style="font-size:10px;color:var(--text3);margin-top:2px;">'+resultatLie.date+'</div>':'')+
             '</div>'
-          :'')
-        )+
-      '</div>';
-    }).join('');
+          :statut==='prescrit'?
+            '<div style="display:flex;gap:6px;margin-top:8px;">'+
+              '<button onclick="ouvrirModalResultat(\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;font-family:\'DM Sans\',sans-serif;">📝 Saisir</button>'+
+              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')"></label>'+
+              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">📂 PDF<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')"></label>'+
+            '</div>'
+          :'')+
+        '</div>';
+    });
+  });
+
+  el.innerHTML=html;
+}
+
+function ouvrirDossierOrdos(){
+  var el=document.getElementById('dossierMedBody');
+  var ordos=el._ordos||[];
+  var today=new Date();today.setHours(0,0,0,0);
+
+  var html=
+    '<button onclick="chargerDossierDokita()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px;">💊 Mes ordonnances</div>';
+
+  if(!ordos.length){
+    html+='<div style="text-align:center;padding:30px;color:var(--text3);">Aucune ordonnance</div>';
+    el.innerHTML=html;
+    return;
   }
 
-  // Saisies manuelles localStorage
-  if(examensLocaux.length){
-    html+='<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 10px;">📝 Mes résultats saisis</div>';
-    html+=examensLocaux.map(function(it){
-      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">'+
-        '<div style="font-size:12px;font-weight:700;color:var(--text);">'+escHtml(it.titre||'Résultat')+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);margin-top:4px;">'+escHtml(it.valeur||'')+'</div>'+
-        (it.date?'<div style="font-size:10px;color:var(--text3);margin-top:3px;">'+it.date+'</div>':'')+
-      '</div>';
-    }).join('');
+  ordos.forEach(function(o){
+    var pf=o.prescription_finale||o.prescription_medecin||{};
+    var meds=pf.meds||[];
+    var medsAld=pf.medsAld||[];
+    var tous=meds.concat(medsAld.map(function(m){return Object.assign({},m,{ald:true});}));
+    var dateAff=o.created_at?new Date(o.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'';
+    var medsActifs=tous.filter(function(m){return !m.date_fin||new Date(m.date_fin)>=today;});
+    var medsTermines=tous.filter(function(m){return m.date_fin&&new Date(m.date_fin)<today;});
+    var isActive=medsActifs.length>0;
+
+    html+=
+      '<div style="background:var(--card);border:1px solid '+(isActive?'rgba(99,102,241,.3)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:10px;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+          '<div style="font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--text);">Ordonnance du '+dateAff+'</div>'+
+          '<span style="font-size:10px;font-weight:700;color:'+(isActive?'var(--accent)':'var(--text3)')+';background:'+(isActive?'rgba(0,200,150,.1)':'var(--bg3)')+';border:1px solid '+(isActive?'rgba(0,200,150,.3)':'var(--border)')+';border-radius:6px;padding:2px 7px;">'+(isActive?'✅ Active':'📁 Terminée')+'</span>'+
+        '</div>';
+
+    if(medsActifs.length){
+      html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">En cours</div>';
+      medsActifs.forEach(function(m){
+        html+='<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">'+
+          '<div>'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(m.nom+(m.dose?' '+m.dose:''))+(m.ald?' <span style="font-size:9px;color:#F59E0B;font-weight:700;">ALD</span>':'')+'</div>'+
+            (m.poso?'<div style="font-size:11px;color:var(--text3);">'+escHtml(m.poso)+'</div>':'')+
+          '</div>'+
+          (m.date_fin?'<div style="font-size:10px;color:var(--text3);">jusqu\'au<br>'+m.date_fin+'</div>':'')+
+        '</div>';
+      });
+    }
+    if(medsTermines.length){
+      html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:10px 0 6px;">Terminés</div>';
+      medsTermines.forEach(function(m){
+        html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);opacity:.5;">'+
+          '<div style="font-size:12px;color:var(--text2);">'+escHtml(m.nom+(m.dose?' '+m.dose:''))+'</div>'+
+          (m.date_fin?'<div style="font-size:10px;color:var(--text3);">Terminé le '+m.date_fin+'</div>':'')+
+        '</div>';
+      });
+    }
+    html+='</div>';
+  });
+
+  el.innerHTML=html;
+}
+
+function ouvrirDossierAntecedents(){
+  var el=document.getElementById('dossierMedBody');
+  var p=PROFILS[SEL];
+  var antecedents=(p&&p.antecedents||'').trim();
+  var allergies=(p&&p.allergies||'').trim();
+
+  var html=
+    '<button onclick="chargerDossierDokita()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">📋 Antécédents médicaux</div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Lecture seule — confirmé par votre médecin</div>';
+
+  if(antecedents){
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Antécédents</div>';
+    antecedents.split('\n').filter(function(l){return l.trim();}).forEach(function(l){
+      html+='<div style="font-size:13px;color:var(--text);padding:6px 0;border-bottom:1px solid var(--border);">'+escHtml(l.trim())+'</div>';
+    });
+    html+='</div>';
+  } else {
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;color:var(--text3);margin-bottom:10px;">Aucun antécédent renseigné</div>';
   }
 
-  // Boutons upload résultat labo
-  var uploadBtns=
-    '<div style="margin-top:12px;">'+
-    '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">📤 Résultat reçu du labo</div>'+
-    '<div style="display:flex;gap:10px;">'+
-    '<label style="flex:1;padding:12px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
-    '📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this)"></label>'+
-    '<label style="flex:1;padding:12px;background:var(--card);border:1.5px dashed var(--border);border-radius:12px;text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);">'+
-    '📂 Fichier<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this)"></label>'+
-    '</div></div>';
-  html+=uploadBtns;
-
-  if(!examensSupabase.length&&!examensLocaux.length){
-    html='<div style="text-align:center;padding:30px 20px;color:var(--text3);">'+
-      '<div style="font-size:36px;margin-bottom:12px;">🧪</div>'+
-      '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Aucun examen prescrit</div>'+
-      '<div style="font-size:12px;line-height:1.6;">Vos examens prescrits par votre médecin<br>apparaîtront ici.</div>'+
-    '</div>'+uploadBtns;
+  if(allergies){
+    html+='<div style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);border-radius:14px;padding:14px;">'+
+      '<div style="font-size:11px;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">⚠️ Allergies</div>';
+    allergies.split('\n').filter(function(l){return l.trim();}).forEach(function(l){
+      html+='<div style="font-size:13px;color:var(--text);padding:6px 0;border-bottom:1px solid rgba(239,68,68,.1);">'+escHtml(l.trim())+'</div>';
+    });
+    html+='</div>';
   }
 
   el.innerHTML=html;
