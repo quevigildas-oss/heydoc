@@ -2553,7 +2553,8 @@ async function chargerDossierDokita(){
   // Ordonnances avec médicaments encore actifs
   var ordosActives=ordos.filter(function(o){
     var pf=o.prescription_finale||o.prescription_medecin||{};
-    return (pf.meds||[]).some(function(m){return !m.date_fin||new Date(m.date_fin)>=today;});
+    var tous=(pf.meds||[]).concat(pf.medsAld||[]);
+    return tous.some(function(m){return !m.date_fin||new Date(m.date_fin)>=today;});
   });
 
   // Antécédents depuis profil
