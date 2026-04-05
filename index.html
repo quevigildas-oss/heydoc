@@ -5519,10 +5519,21 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         body:JSON.stringify(item.data)
       });
       var aoData=await aoRes.json();
+      if(!aoRes.ok){
+        toast('⚠️ Erreur INSERT AO: '+JSON.stringify(aoData).slice(0,100));
+        item.envoye=false;
+        renderModal();
+        return;
+      }
       // Stocker l'id Supabase pour le PATCH ultérieur
       var inserted=Array.isArray(aoData)?aoData[0]:aoData;
       if(inserted&&inserted.id)item.supabaseId=inserted.id;
-    }catch(e){dbgWarn('AO INSERT: '+e.message);}
+      dbg('AO INSERT OK — supabaseId:'+item.supabaseId+' ao_id:'+item.aoId);
+    }catch(e){
+      toast('⚠️ Erreur réseau AO: '+e.message);
+      item.envoye=false;
+      renderModal();
+    }
     renderModal();
   };
 
