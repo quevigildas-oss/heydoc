@@ -4353,7 +4353,8 @@ function distKm(lat1,lon1,lat2,lon2){
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-function genAoId(){return 'AO-'+Date.now().toString(36).toUpperCase();}
+var _aoIdCounter=0;
+function genAoId(){return 'AO-'+Date.now().toString(36).toUpperCase()+'-'+(++_aoIdCounter);}
 
 // ══════════════════════════════
 // OFFRES DOKITA
@@ -5453,14 +5454,15 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   // Initialiser état global AO — RIEN dans Supabase à ce stade
   AO_SESSION_ID=s.supabaseId||s.id||'';
   AO_ITEMS=proches.map(function(ph){
-    var aoId=genAoId();
+    // UUID établissement + consultation_id = unicité garantie
+    var aoId=ph.id+'-'+AO_SESSION_ID.slice(0,8);
     var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 30 min.';
     return {
       aoId:aoId,
       nom:ph.nom,
       tel:ph.tel,
       url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg),
-      statut:'attente', // attente | envoye | ignore
+      statut:'attente',
       supabaseId:null,
       data:{
         ao_id:aoId,
@@ -5522,8 +5524,15 @@ function aoRenderModal(){
 
   // Event listeners directs — une seule fois
   document.getElementById('aoList').addEventListener('click',function(e){
-    var item=e.target.closest('.ao-item');
-    if(item&&item.dataset.aoid)aoCliquerPharmacie(item.dataset.aoid);
+    var el=e.target;
+    // Remonter jusqu'à trouver le data-aoid
+    while(el&&el.id!=='aoList'){
+      if(el.dataset&&el.dataset.aoid){
+        aoCliquerPharmacie(el.dataset.aoid);
+        return;
+      }
+      el=el.parentElement;
+    }
   });
   document.getElementById('aoBtnCancel').addEventListener('click',aoAnnuler);
   document.getElementById('aoBtnDone').addEventListener('click',aoTermine);
