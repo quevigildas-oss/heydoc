@@ -5485,14 +5485,14 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
         '</div>'+
         '<div style="overflow-y:auto;flex:1;padding-bottom:8px;">'+
           aoItems.map(function(w,k){
-            return '<a href="'+w.url+'" target="_blank" onclick="aoEnvoyer(\''+w.aoId+'\')" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid '+(w.envoye?'rgba(37,211,102,.4)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;text-decoration:none;">'+
+          return '<div onclick="aoEnvoyer(\''+w.aoId+'\')" style="display:flex;align-items:center;gap:14px;background:var(--card);border:1px solid '+(w.envoye?'rgba(37,211,102,.4)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;">'+
               '<div style="width:36px;height:36px;border-radius:10px;background:rgba(37,211,102,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💬</div>'+
               '<div style="flex:1;min-width:0;">'+
                 '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(w.nom)+'</div>'+
                 '<div style="font-size:11px;color:#25D366;margin-top:1px;">'+(w.envoye?'✅ Envoyé':'Ouvrir WhatsApp →')+'</div>'+
               '</div>'+
               '<div style="font-size:10px;background:'+(w.envoye?'rgba(37,211,102,.3)':'rgba(37,211,102,.15)')+';border:1px solid rgba(37,211,102,.3);border-radius:6px;padding:2px 7px;color:#25D366;font-weight:700;flex-shrink:0;">'+(k+1)+'/'+aoItems.length+'</div>'+
-            '</a>';
+            '</div>';
           }).join('')+
         '</div>'+
         '<div style="flex-shrink:0;padding:12px 0 calc(12px + var(--sb,0px));display:flex;gap:10px;">'+
@@ -5511,7 +5511,8 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     var item=aoItems.find(function(a){return a.aoId===aoId;});
     if(!item||item.envoye)return;
     item.envoye=true;
-    // INSERT Supabase maintenant que le patient a cliqué
+    renderModal(); // feedback visuel immédiat
+    // INSERT Supabase
     try{
       var aoRes=await fetch(DB_URL+'?table=appels_offres',{
         method:'POST',
@@ -5520,20 +5521,22 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
       });
       var aoData=await aoRes.json();
       if(!aoRes.ok){
-        toast('⚠️ Erreur INSERT AO: '+JSON.stringify(aoData).slice(0,100));
+        toast('⚠️ Erreur: '+JSON.stringify(aoData).slice(0,100));
         item.envoye=false;
         renderModal();
         return;
       }
-      // Stocker l'id Supabase pour le PATCH ultérieur
       var inserted=Array.isArray(aoData)?aoData[0]:aoData;
       if(inserted&&inserted.id)item.supabaseId=inserted.id;
-      dbg('AO INSERT OK — supabaseId:'+item.supabaseId+' ao_id:'+item.aoId);
+      dbg('AO INSERT OK — id:'+item.supabaseId);
     }catch(e){
-      toast('⚠️ Erreur réseau AO: '+e.message);
+      toast('⚠️ Erreur réseau: '+e.message);
       item.envoye=false;
       renderModal();
+      return;
     }
+    // Ouvrir WhatsApp après INSERT réussi
+    window.open(item.url,'_blank');
     renderModal();
   };
 
