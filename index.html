@@ -5544,6 +5544,9 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
     var envoyes=aoItems.filter(function(a){return a.envoye;});
     modal.remove();
     if(envoyes.length>0){
+      // Marquer comme soumis en localStorage
+      var aoLocalKey='ao_soumis_'+( s.supabaseId||s.id||'');
+      try{localStorage.setItem(aoLocalKey,'1');}catch(e){}
       toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
       var btnAO=document.querySelector('button[onclick*="lancerAppelOffre"]');
       if(btnAO)btnAO.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
@@ -5763,6 +5766,8 @@ async function voirOrdonnanceHisto(i){
 
   // Vérifier AO depuis Supabase — prendre le statut le plus avancé
   var aoStatut='';
+  var aoLocalKey='ao_soumis_'+s.supabaseId;
+  var aoSoumisLocal=localStorage.getItem(aoLocalKey);
   try{
     var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&limit=50',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -5770,12 +5775,14 @@ async function voirOrdonnanceHisto(i){
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length){
-      // Priorité des statuts : livre > accepte > en_livraison > offres_recues > en_attente > annule
-      var priorite=['livre','accepte','en_livraison','offres_recues','en_attente','annule'];
+      // Priorité : livre > accepte > en_livraison > offres_recues > en_attente > annule
+      // en_attente n'est affiché que si le patient a cliqué Terminé (localStorage)
+      var priorite=['livre','accepte','en_livraison','offres_recues','annule'];
+      if(aoSoumisLocal)priorite.splice(4,0,'en_attente'); // ajouter en_attente seulement si session confirmée
       var statuts=aoRows.map(function(r){return r.statut||'';});
-      aoStatut=priorite.find(function(s){return statuts.includes(s);})||statuts[0]||'';
+      aoStatut=priorite.find(function(p){return statuts.includes(p);})||'';
     }
-    dbg('aoStatut: '+aoStatut+' ('+aoRows.length+' AO)');
+    dbg('aoStatut: '+aoStatut+' local:'+aoSoumisLocal);
   }catch(e){}
 
   var ord=s.ordonnance;
