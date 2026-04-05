@@ -5531,6 +5531,8 @@ function aoRenderModal(){
 
 // Clic sur une pharmacie → INSERT Supabase + ouvrir WhatsApp
 async function aoCliquerPharmacie(aoId){
+  dbg('aoCliquerPharmacie appelé avec aoId='+aoId);
+  dbg('AO_ITEMS actuels: '+AO_ITEMS.map(function(a){return a.aoId+':'+a.nom+':'+a.statut;}).join(' | '));
   var item=AO_ITEMS.find(function(a){return a.aoId===aoId;});
   if(!item||item.statut==='envoye')return;
   if(item.statut==='ignore')return;
