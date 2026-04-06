@@ -3536,7 +3536,7 @@ async function validerRecupModal(){
 
   try{
     // Chercher dans Supabase par code_transfert (format "CODE|EXPIRE")
-    var r=await fetch(DB_URL+'?table=patients&filter=code_transfert=ilike.'+encodeURIComponent(code+'|%')+'&limit=1',{
+    var r=await fetch(DB_URL+'?table=patients&filter=code_transfert=ilike.'+code+'|%25&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
@@ -3842,7 +3842,7 @@ async function recupererProfil(){
   btn.textContent='🔍 Recherche en cours...';btn.disabled=true;
 
   try{
-    var r=await fetch(DB_URL+'?table=patients&filter=code_transfert=ilike.'+encodeURIComponent(code+'|%')+'&limit=1',{
+    var r=await fetch(DB_URL+'?table=patients&filter=code_transfert=ilike.'+code+'|%25&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
