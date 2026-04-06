@@ -5347,60 +5347,50 @@ function renderCarteCode(code,pharmNom,meds,num){
 async function choisirOffre(supabaseId,pharmNom){
   toast('⏳ Confirmation en cours...');
   try{
-    // Vérifier si un code existe déjà dans Supabase
+    // Vérifier si un code existe déjà
     var existR=await fetch(DB_URL+'?table=appels_offres&filter=id=eq.'+supabaseId+'&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var existData=await existR.json();
     var existRows=Array.isArray(existData)?existData:(existData.data||[]);
     var existingCode=existRows.length&&existRows[0].code_retrait?existRows[0].code_retrait:'';
-
-    // Générer un code uniquement si pas encore de code
     var code=existingCode||String(Math.floor(100000+Math.random()*900000));
 
-    // 1. PATCH l'AO choisi → accepte + code (idempotent)
-    await fetch(DB_URL,{
+    // 1. PATCH l'AO choisi → accepte + code
+    await fetch(DB_URL+'?table=appels_offres&id='+encodeURIComponent(supabaseId),{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-      body:JSON.stringify({table:'appels_offres',id:supabaseId,data:{statut:'accepte',code_retrait:code}})
+      body:JSON.stringify({statut:'accepte',code_retrait:code})
     });
 
-    // 2. Annuler les autres AO en attente pour la même consultation
+    // 2. Annuler les autres AO de la même consultation
     try{
-      var consultId='';
-      // Récupérer consultation_id depuis l'AO sélectionné
-      var aoR=await fetch(DB_URL+'?table=appels_offres&filter=id=eq.'+supabaseId+'&limit=1',{
-        headers:{'x-dokita-key':DOKITA_KEY}
-      });
-      var aoData=await aoR.json();
-      var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
-      if(aoRows.length)consultId=aoRows[0].consultation_id||'';
-
+      var consultId=existRows.length?existRows[0].consultation_id||'':'';
       if(consultId){
-        var autresR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&limit=20',{
+        var autresR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&limit=50',{
           headers:{'x-dokita-key':DOKITA_KEY}
         });
         var autresData=await autresR.json();
         var autres=Array.isArray(autresData)?autresData:(autresData.data||[]);
         var aAnnuler=autres.filter(function(r){return r.id!==supabaseId&&r.statut!=='annule'&&r.statut!=='livre';});
         await Promise.all(aAnnuler.map(function(r){
-          return fetch(DB_URL,{
+          return fetch(DB_URL+'?table=appels_offres&id='+encodeURIComponent(r.id),{
             method:'PATCH',
             headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-            body:JSON.stringify({table:'appels_offres',id:r.id,data:{statut:'annule'}})
+            body:JSON.stringify({statut:'annule'})
           }).catch(function(){});
         }));
         dbg('AO annulés: '+aAnnuler.length);
       }
     }catch(e){dbgWarn('Annulation autres AO: '+e.message);}
 
-    // 3. Afficher confirmation + code retrait
+    // 3. Afficher confirmation + code retrait + message poli pour les autres
     var el=document.getElementById('offresBody');
     var shareMsg='Mon code de retrait Dokita : '+code+'\nPharmacie : '+pharmNom;
     var shareKey='single_'+code;
     SHARE_MSGS[shareKey]=shareMsg;
     el.innerHTML=
-      '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:20px;margin-bottom:16px;">'+
+      '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:20px;margin-bottom:12px;">'+
         '<div style="font-size:32px;text-align:center;margin-bottom:12px;">✅</div>'+
         '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);text-align:center;margin-bottom:4px;">Pharmacie choisie</div>'+
         '<div style="font-size:13px;color:var(--text2);text-align:center;margin-bottom:20px;">'+escHtml(pharmNom)+'</div>'+
@@ -5410,7 +5400,13 @@ async function choisirOffre(supabaseId,pharmNom){
           '<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.5;">Communiquez ce code au pharmacien<br>pour récupérer votre commande</div>'+
         '</div>'+
         '<button onclick="partagerCodeStop(\''+shareKey+'\')" style="width:100%;padding:12px;background:rgba(0,200,150,.15);border:1px solid var(--accent);border-radius:10px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">📤 Partager le code</button>'+
-      '</div><div style="height:30px;"></div>';
+      '</div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">📬 Autres pharmacies contactées</div>'+
+        '<div style="font-size:12px;color:var(--text2);line-height:1.6;">Merci à toutes les pharmacies ayant répondu à votre demande. Nous avons retenu la pharmacie <strong>'+escHtml(pharmNom)+'</strong> pour votre commande. Les autres offres ont été annulées automatiquement.</div>'+
+      '</div>'+
+      '<div style="height:30px;"></div>';
+
   }catch(e){
     toast('❌ Erreur : '+e.message);
   }
