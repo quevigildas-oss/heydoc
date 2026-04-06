@@ -5401,10 +5401,6 @@ async function choisirOffre(supabaseId,pharmNom){
         '</div>'+
         '<button onclick="partagerCodeStop(\''+shareKey+'\')" style="width:100%;padding:12px;background:rgba(0,200,150,.15);border:1px solid var(--accent);border-radius:10px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">📤 Partager le code</button>'+
       '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;">'+
-        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">📬 Autres pharmacies contactées</div>'+
-        '<div style="font-size:12px;color:var(--text2);line-height:1.6;">Merci à toutes les pharmacies ayant répondu à votre demande. Nous avons retenu la pharmacie <strong>'+escHtml(pharmNom)+'</strong> pour votre commande. Les autres offres ont été annulées automatiquement.</div>'+
-      '</div>'+
       '<div style="height:30px;"></div>';
 
   }catch(e){
