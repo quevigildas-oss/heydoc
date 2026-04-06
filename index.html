@@ -5260,11 +5260,12 @@ function renderOffres(complete,stops2,toutes){
             '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(o.pharmNom)+'</div>'+
             '<span style="font-size:10px;font-weight:700;color:'+(o.complete?'var(--accent)':'var(--warn)')+';">'+o.nbDispo+'/'+o.nbTotal+' méd.</span>'+
           '</div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-top:6px;">'+
+          '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:10px;">'+
             '<span>💊 '+o.prixMeds.toLocaleString('fr-FR')+' FCFA</span>'+
             '<span>🚗 '+o.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
             '<span>Total : <strong style="color:var(--text);">'+o.prixTotal.toLocaleString('fr-FR')+' FCFA</strong></span>'+
           '</div>'+
+          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom)+'\')" style="width:100%;padding:10px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:10px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
         '</div>';
     });
   }
