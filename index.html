@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.6
+     VERSION : V4.7
      DATE    : 2026-04-01
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
-       V4.6 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
+       V4.7 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
                            chargerEtablissements() au login — en mémoire toute la session
                            RDV patient : tuile 📅, liste, nouveau RDV, créneaux, confirmation
                            Fallback WhatsApp RDV désactivé (var whatsappDisabled=true)
@@ -15,12 +15,12 @@
                            Onboarding nouveau patient : upload ordonnance post-consultation
                            Déclaratifs AfriBot → dossier_medical à l'envoi du dossier
                            Dossier médical unifié : tuile 🗂️, onglets Réseau Dokita / Hors réseau
-       V4.5 — 2026-03-30 : Dossier médical unifié (tuiles Analyses+Documents → Mon Dossier)
+       V4.6 — 2026-03-30 : Dossier médical unifié (tuiles Analyses+Documents → Mon Dossier)
                            Deux onglets : 🔵 Réseau Dokita / 📝 Hors réseau
                            chargerDossierDokita() : ordonnances actives + examens prescrits
                            chargerDossierHorsReseau() : upload patient + disclaimer juridique
                            dossier_medical : source/statut/badge confirmé/déclaratif
-                           [ANCIEN V4.5] : Documents médicaux + transfert profil finalisé
+                           [ANCIEN V4.6] : Documents médicaux + transfert profil finalisé
                            Tuile 📁 Documents : upload photo/fichier, types, visible_medecin
                            ouvrirDocuments() + ouvrirModalAjoutDoc() + soumettrDoc()
                            Stockage base64 Supabase (table dossier_medical)
@@ -5248,7 +5248,28 @@ function renderOffres(complete,stops2,toutes){
 
   html+='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">'+
     '💡 Trajet calculé à '+PRIX_KM+' FCFA/km (aller-retour)'+
-  '</div><div style="height:30px;"></div>';
+  '</div>';
+
+  // ── Toutes les offres reçues ──
+  if(toutes&&toutes.length>1){
+    html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;">Toutes les offres ('+toutes.length+')</div>';
+    toutes.forEach(function(o){
+      html+=
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+            '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(o.pharmNom)+'</div>'+
+            '<span style="font-size:10px;font-weight:700;color:'+(o.complete?'var(--accent)':'var(--warn)')+';">'+o.nbDispo+'/'+o.nbTotal+' méd.</span>'+
+          '</div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);">'+
+            '<span>📍 '+o.dist+'km</span>'+
+            '<span>💊 '+o.prixMeds.toLocaleString('fr-FR')+' FCFA</span>'+
+            '<span>Total : <strong style="color:var(--text);">'+o.prixTotal.toLocaleString('fr-FR')+' FCFA</strong></span>'+
+          '</div>'+
+        '</div>';
+    });
+  }
+
+  html+='<div style="height:30px;"></div>';
 
   el.innerHTML=html;
   var btn2=document.getElementById('btn2stops');
@@ -5752,6 +5773,69 @@ function buildOrdHtml(i){
   '</div>';
 }
 
+function buildOrdBioHtml(i,examens){
+  if(!examens||!examens.length)return '<div id="ordBioSection"></div>';
+  var s=HISTO_CACHE[i]||{};
+  var ord=(s.ordonnance)||{};
+  var p=PROFILS[SEL]||{};
+  var patNom=((p.prenom||'')+' '+(p.nom||'')).trim()||'-';
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+  function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  // Texte médical formaté
+  var examObl=examens.filter(function(e){return e.obligatoire;});
+  var examRec=examens.filter(function(e){return !e.obligatoire;});
+  var texte='Veuillez faire pratiquer les examens complémentaires suivants :\n\n';
+  if(examObl.length){
+    texte+='Examens obligatoires :\n';
+    examObl.forEach(function(e,idx){texte+='- '+e.type_examen+'\n';});
+  }
+  if(examRec.length){
+    texte+='\nExamens recommandés :\n';
+    examRec.forEach(function(e){texte+='- '+e.type_examen+'\n';});
+  }
+  texte+='\nRésultats à apporter lors de la prochaine consultation.';
+
+  var lignesHtml=texte.split('\n').map(function(l){
+    if(!l.trim())return '<div style="height:6px;"></div>';
+    if(l.startsWith('Examens '))return '<div style="font-size:10px;font-weight:700;color:#0A7E6A;margin:8px 0 4px;">'+esc(l)+'</div>';
+    if(l.startsWith('- '))return '<div style="font-size:13px;color:#1A2B3C;padding:4px 0 4px 12px;border-bottom:1px solid #f3f4f6;">'+esc(l)+'</div>';
+    return '<div style="font-size:12px;color:#374151;padding:2px 0;">'+esc(l)+'</div>';
+  }).join('');
+
+  return '<div id="ordBioSection" style="background:#fff;font-family:Arial,sans-serif;color:#1A2B3C;border-radius:12px;overflow:hidden;margin-top:12px;">'+
+    '<div style="background:#1E40AF;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">'+
+      '<div><div style="font-size:10px;color:rgba(255,255,255,.8);">DOKITA PRO</div>'+
+      '<div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE BIOLOGIQUE</div></div>'+
+      '<div style="text-align:right;font-size:10px;color:rgba(255,255,255,.8);"><div>Réf: '+esc(s.dossierId||'-')+'</div><div>'+dateAff+'</div></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;background:#EFF6FF;">'+
+      '<div style="background:#fff;border:1px solid #1E40AF;border-radius:8px;padding:10px;">'+
+        '<div style="font-size:9px;font-weight:700;color:#1E40AF;margin-bottom:4px;">PRESCRIPTEUR</div>'+
+        '<div style="font-size:12px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
+        '<div style="font-size:10px;color:#6B7280;font-style:italic;">'+esc(ord.specialite||'-')+'</div>'+
+      '</div>'+
+      '<div style="background:#fff;border:1px solid #1E40AF;border-radius:8px;padding:10px;">'+
+        '<div style="font-size:9px;font-weight:700;color:#1E40AF;margin-bottom:4px;">PATIENT</div>'+
+        '<div style="font-size:12px;font-weight:700;">'+esc(patNom)+'</div>'+
+        '<div style="font-size:10px;color:#6B7280;margin-top:3px;">ID: '+esc(SESSION_PATIENT_ID||'-')+'</div>'+
+      '</div>'+
+    '</div>'+
+    (ord.diagnostic?'<div style="padding:8px 14px;background:#eff6ff;border-bottom:1px solid #e5e7eb;"><div style="font-size:9px;font-weight:700;color:#1E40AF;margin-bottom:3px;">DIAGNOSTIC</div><div style="font-size:12px;">'+esc(ord.diagnostic)+'</div></div>':'')+
+    '<div style="background:#1E40AF;padding:7px 14px;"><div style="font-size:9px;font-weight:700;color:#fff;">EXAMENS PRESCRITS</div></div>'+
+    '<div style="padding:12px 14px;">'+lignesHtml+'</div>'+
+    '<div style="padding:16px;display:flex;justify-content:flex-end;">'+
+      '<div style="width:170px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
+        '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
+        '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="background:#1E40AF;padding:8px 14px;text-align:center;">'+
+      '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
+    '</div>'+
+  '</div>';
+}
+
 async function voirOrdonnanceHisto(i){
   if(!HISTO_CACHE.length)HISTO_CACHE=await chargerHistoriqueNotion();
   var s=HISTO_CACHE[i];
@@ -5868,8 +5952,21 @@ async function voirOrdonnanceHisto(i){
       '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
     '</div>';
 
-  document.getElementById('ordDetailBody').innerHTML=buildOrdHtml(i)+btnHtml;
+  document.getElementById('ordDetailBody').innerHTML=buildOrdHtml(i)+buildOrdBioHtml(i,[])+btnHtml;
   nav('ordonnanceDetailScreen');
+
+  // Charger examens prescrits depuis Supabase et mettre à jour l'ordo bio
+  if(s.supabaseId){
+    fetch(DB_URL+'?table=examens&filter=consultation_id=eq.'+encodeURIComponent(s.supabaseId)+'&filter2=statut=eq.prescrit&order=created_at.asc',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    }).then(function(r){return r.json();}).then(function(data){
+      var examens=Array.isArray(data)?data:(data.data||[]);
+      if(examens.length){
+        var bioEl=document.getElementById('ordBioSection');
+        if(bioEl)bioEl.outerHTML=buildOrdBioHtml(i,examens);
+      }
+    }).catch(function(){});
+  }
 }
 
 function telechargerOrdonnance(i){
