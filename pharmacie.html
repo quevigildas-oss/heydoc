@@ -124,8 +124,8 @@ async function init(){
     };
 
     if(statut==='valide'){renderValide();}
-    else if(statut==='selectionne'){renderRetraitAttente();}
-    else if(statut==='repondu'){renderDejaRepondu();}
+    else if(statut==='selectionne'||statut==='accepte'){renderSelectionne();}
+    else if(statut==='repondu'||statut==='offres_recues'){renderDejaRepondu();}
     else if(statut==='annule'){renderAnnule();}
     else{renderForm();}
   }catch(e){
@@ -165,6 +165,40 @@ function renderForm(){
       '<div class="card-body">'+medsHtml+'</div>'+
     '</div>'+
     '<button class="btn-submit" onclick="soumettre()">✅ Soumettre mon offre</button>'+
+    '<div style="height:30px;"></div>';
+}
+
+function renderSelectionne(){
+  STATE='selectionne';
+  document.getElementById('hdrSub').textContent='Votre offre a été retenue';
+  var d=aoData;
+  var medsHtml='';
+  if(d.meds&&d.meds.length){
+    medsHtml='<div class="card">'+
+      '<div class="card-hdr">💊 MÉDICAMENTS À PRÉPARER</div>'+
+      '<div class="card-body">'+
+        d.meds.map(function(m,i){
+          var nomMed=typeof m==='string'?m.trim():((m.nom||'')+(m.dose?' '+m.dose:'')+(m.poso?' — '+m.poso:'')+(m.duree?' — '+m.duree:''));
+          return '<div style="padding:8px 0;border-bottom:1px solid #e5e7eb;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;">'+
+            '<div class="med-num">'+(i+1)+'</div>'+escHtml(nomMed)+
+          '</div>';
+        }).join('')+
+      '</div>'+
+    '</div>';
+  }
+  document.getElementById('mainContent').innerHTML=
+    '<div class="success">'+
+      '<div class="success-ico">🎯</div>'+
+      '<div class="success-title">Votre offre a été sélectionnée !</div>'+
+      '<div class="success-sub">Le patient vient récupérer sa commande.<br>Préparez les médicaments ci-dessous.</div>'+
+    '</div>'+
+    medsHtml+
+    '<div class="retrait-box">'+
+      '<div class="retrait-title">🔐 Saisir le code du patient</div>'+
+      '<div style="font-size:12px;color:#6B7280;text-align:center;margin-bottom:12px;">Le patient vous communique son code à voix haute.</div>'+
+      '<input class="retrait-input" id="codeRetraitInput" type="text" inputmode="numeric" maxlength="6" placeholder="——————" oninput="autoValiderRetrait(this)">'+
+      '<div id="retraitErr" style="color:#dc2626;font-size:12px;text-align:center;margin-top:8px;display:none;"></div>'+
+    '</div>'+
     '<div style="height:30px;"></div>';
 }
 
@@ -290,9 +324,9 @@ async function soumettre(){
     await dbReq('PATCH',{
       table:'appels_offres',
       id:aoData.supabaseId,
-      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'repondu',date_reponse:new Date().toISOString()}
+      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'offres_recues',date_reponse:new Date().toISOString()}
     });
-    aoData.offre=offre;aoData.statut='repondu';
+    aoData.offre=offre;aoData.statut='offres_recues';
     renderDejaRepondu();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ Soumettre mon offre';
