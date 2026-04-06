@@ -3930,20 +3930,25 @@ async function confirmerRecuperationProfil(){
     SEL=PROFILS.length-1;
     saveProfils();
 
-    // Sync traitements depuis Supabase si disponibles
-    if(p.traitements&&p.patientId){
+    // Sync traitements depuis Supabase uniquement (pas le cache local de l'émetteur)
+    var traitSupa=p.traitements||'';
+    if(traitSupa&&p.patientId){
       try{
         var traitKey='traits_'+p.patientId;
-        var lignes=p.traitements.split('\n').filter(function(l){return l.trim().length>2;});
-        var items=lignes.map(function(l){
-          var estALD=l.indexOf('[ALD]')>=0;
-          var clean=l.replace('[ALD]','').trim();
-          var parts=clean.split('—');
-          var nomDose=(parts[0]||'').trim().split(' ');
-          return {nom:nomDose.slice(0,-1).join(' ')||clean,dosage:nomDose.slice(-1)[0]||'',ald:estALD,statut:'actif',source:'transfert'};
-        });
-        localStorage.setItem(traitKey,JSON.stringify(items));
-        dbg('Traitements transférés: '+items.length);
+        // Vider d'abord tout cache local existant
+        localStorage.removeItem(traitKey);
+        var lignes=traitSupa.split('\n').filter(function(l){return l.trim().length>2;});
+        if(lignes.length){
+          var items=lignes.map(function(l){
+            var estALD=l.indexOf('[ALD]')>=0;
+            var clean=l.replace('[ALD]','').trim();
+            var parts=clean.split('—');
+            var nomDose=(parts[0]||'').trim().split(' ');
+            return {nom:nomDose.slice(0,-1).join(' ')||clean,dosage:nomDose.slice(-1)[0]||'',ald:estALD,statut:'actif',source:'transfert'};
+          });
+          localStorage.setItem(traitKey,JSON.stringify(items));
+          dbg('Traitements transférés depuis Supabase: '+items.length);
+        }
       }catch(e){}
     }
 
