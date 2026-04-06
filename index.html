@@ -3720,14 +3720,19 @@ async function genererCodeTransfert(){
 
   toast('⏳ Génération du code...');
   try{
-    var patchRes=await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+    var patchRes=await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify({code_transfert:code+'|'+expire})
     });
+    var patchData=await patchRes.json();
+    dbg('PATCH code_transfert — status:'+patchRes.status+' supabaseId:'+p.supabaseId+' data:'+JSON.stringify(patchData).slice(0,150));
     if(!patchRes.ok){
-      var errData=await patchRes.json();
-      toast('⚠️ Erreur PATCH: '+JSON.stringify(errData).slice(0,100));
+      toast('⚠️ Erreur PATCH: '+JSON.stringify(patchData).slice(0,100));
+      return;
+    }
+    if(!patchData||( Array.isArray(patchData)&&!patchData.length)){
+      toast('⚠️ Patient introuvable en base — supabaseId: '+p.supabaseId);
       return;
     }
     TRANSFERT_CODE_COURANT={code:code,patientId:p.patientId,supabaseId:p.supabaseId,expire:expire};
@@ -3754,7 +3759,7 @@ async function genererCodeTransfert(){
         if(expireEl)expireEl.textContent='Expiré';
         TRANSFERT_CODE_COURANT=null;
         toast('⚠️ Code expiré');
-        fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+        fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
           method:'PATCH',
           headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
           body:JSON.stringify({code_transfert:''})
@@ -3799,7 +3804,7 @@ async function annulerTransfert(){
   var p=PROFILS[SEL];
   if(p&&p.supabaseId){
     try{
-      await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+      await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
         method:'PATCH',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
         body:JSON.stringify({code_transfert:''})
@@ -3901,7 +3906,7 @@ async function confirmerRecuperationProfil(){
   try{
     // PATCH Supabase : nouveau compte_parent_id (UUID) + effacer code_transfert
     var myId=PROFILS[0]&&PROFILS[0].supabaseId||null;
-    await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+    await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify({
@@ -4161,7 +4166,7 @@ async function mettreAJourProfilNotion(p){
   if(p.poids)body.poids=parseFloat(p.poids)||null;
   if(p.sx)body.sexe=p.sx==='H'?'M':p.sx==='F'?'F':null;
   try{
-    await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+    await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify(body)
