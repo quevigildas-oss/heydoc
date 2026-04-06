@@ -1,16 +1,4 @@
 <!DOCTYPE html>
-<!-- ============================================
-     DOKITA — Pharmacie (Réponse Appel d'Offre)
-     VERSION : V4.4
-     DATE    : 2026-03-29
-     CHANGELOG:
-       V4.4 — 2026-03-29 : Fix PATCH soumettre (table/id en query params)
-                           Médicaments normalisés objet→string (fix [object Object])
-                           ao_id restauré (ALTER TABLE confirmé)
-                           dbReq PATCH : extrait table/id du body → query params
-                           Médicaments lisibles dans renderForm + renderRetraitAttente + soumettre
-       V1.0 — 2026-03-20 : Version initiale pharmacie Supabase
-============================================ -->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -94,19 +82,16 @@ function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 
 async function dbReq(method,body,qs){
   var url=DB_URL+(qs?'?'+qs:'');
-  // Pour PATCH : table et id en query params
+  // Pour PATCH : extraire table et id du body et les mettre en query params
   if(method==='PATCH'&&body&&body.table){
-    url=DB_URL+'?table='+body.table+(body.id?'&id='+encodeURIComponent(body.id):'');
+    var q='table='+body.table+(body.id?'&id='+body.id:'');
+    url=DB_URL+'?'+q;
     body=body.data||body;
   }
   var opts={method:method||'GET',headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY}};
   if(body)opts.body=JSON.stringify(body);
   var r=await fetch(url,opts);
-  if(!r.ok){
-    var errBody='';
-    try{errBody=JSON.stringify(await r.json());}catch(e){errBody=r.statusText;}
-    throw new Error('DB '+r.status+' — '+errBody.slice(0,200));
-  }
+  if(!r.ok)throw new Error('DB '+r.status);
   return await r.json();
 }
 
@@ -138,10 +123,10 @@ async function init(){
       offre:offreJson
     };
 
-    if(statut==='livre'){renderValide();}
-    else if(statut==='accepte'){renderRetraitAttente();}
-    else if(statut==='offres_recues'){renderDejaRepondu();}
-    else if(statut==='annule'){renderNonRetenu();}
+    if(statut==='valide'){renderValide();}
+    else if(statut==='selectionne'){renderRetraitAttente();}
+    else if(statut==='repondu'){renderDejaRepondu();}
+    else if(statut==='annule'){renderAnnule();}
     else{renderForm();}
   }catch(e){
     el.innerHTML='<div class="error">❌ Erreur chargement : '+escHtml(e.message)+'</div>';
@@ -183,6 +168,23 @@ function renderForm(){
     '<div style="height:30px;"></div>';
 }
 
+function renderAnnule(){
+  STATE='annule';
+  document.getElementById('hdrSub').textContent='Appel d\'offre clôturé';
+  document.getElementById('mainContent').innerHTML=
+    '<div style="text-align:center;padding:32px 20px;">'+
+      '<div style="font-size:48px;margin-bottom:16px;">🙏</div>'+
+      '<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:#1A2B3C;margin-bottom:12px;">Merci pour votre réactivité</div>'+
+      '<div style="font-size:14px;color:#6B7280;line-height:1.7;margin-bottom:24px;">'+
+        'Le patient a retenu une autre offre pour cette commande.<br>'+
+        'Dokita est fier de vous compter parmi ses partenaires et ne manquera pas de vous transmettre les prochains appels d\'offre dans votre secteur.'+
+      '</div>'+
+      '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;padding:16px;color:#166534;font-size:13px;font-weight:600;">'+
+        '💊 Votre pharmacie reste active sur le réseau Dokita'+
+      '</div>'+
+    '</div>';
+}
+
 function renderDejaRepondu(){
   STATE='confirme';
   document.getElementById('hdrSub').textContent='Offre soumise';
@@ -208,37 +210,6 @@ function renderDejaRepondu(){
       '<div class="success-sub">En attente de la décision du patient.<br>Vous serez contacté si votre offre est retenue.</div>'+
     '</div>'+
     offreHtml+
-    '<div style="height:30px;"></div>';
-}
-
-function renderNonRetenu(){
-  STATE='non_retenu';
-  document.getElementById('hdrSub').textContent='Offre non retenue';
-  var d=aoData;
-  var offreHtml='';
-  if(d.offre&&d.offre.length){
-    offreHtml='<div class="card">'+
-      '<div class="card-hdr">💊 VOTRE OFFRE SOUMISE</div>'+
-      '<div class="card-body">'+
-        d.offre.map(function(item){
-          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">'+
-            '<span style="font-size:13px;font-weight:600;color:#9CA3AF;">'+(item.disponible?'✅':'❌')+' '+escHtml(item.medicament||'')+'</span>'+
-            '<span style="font-size:13px;color:#9CA3AF;">'+(item.total>0?item.total.toLocaleString('fr-FR')+' FCFA':'—')+'</span>'+
-          '</div>';
-        }).join('')+
-      '</div>'+
-    '</div>';
-  }
-  document.getElementById('mainContent').innerHTML=
-    '<div style="background:#fff;border-radius:12px;padding:24px 20px;text-align:center;margin-bottom:14px;border:1px solid #e5e7eb;">'+
-      '<div style="font-size:40px;margin-bottom:12px;">🙏</div>'+
-      '<div style="font-size:18px;font-weight:800;color:#1A2B3C;margin-bottom:8px;">Merci pour votre participation</div>'+
-      '<div style="font-size:13px;color:#6B7280;line-height:1.6;">Le patient a choisi une autre pharmacie pour cette commande.<br><br>Votre offre a bien été reçue et étudiée.<br>Nous vous remercions pour votre réactivité.</div>'+
-    '</div>'+
-    offreHtml+
-    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;">'+
-      '<div style="font-size:12px;color:#065f46;font-weight:600;">💡 Dokita vous contactera pour les prochaines opportunités</div>'+
-    '</div>'+
     '<div style="height:30px;"></div>';
 }
 
@@ -319,9 +290,9 @@ async function soumettre(){
     await dbReq('PATCH',{
       table:'appels_offres',
       id:aoData.supabaseId,
-      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'offres_recues',date_reponse:new Date().toISOString()}
+      data:{pharmacie_nom:nom,pharmacie_tel:tel,offre_json:offre,statut:'repondu',date_reponse:new Date().toISOString()}
     });
-    aoData.offre=offre;aoData.statut='offres_recues';
+    aoData.offre=offre;aoData.statut='repondu';
     renderDejaRepondu();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ Soumettre mon offre';
@@ -346,12 +317,12 @@ async function validerRetrait(){
     return;
   }
   try{
-    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'livre',date_validation:new Date().toISOString()}});
+    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'valide',date_validation:new Date().toISOString()}});
     // Annuler les autres offres du même consultation_id
     try{
       var autres=await dbReq('GET',null,'table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(aoData.consultId));
       var rows=Array.isArray(autres)?autres:(autres.data||[]);
-      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='livre';}).map(function(r){
+      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='valide';}).map(function(r){
         return dbReq('PATCH',{table:'appels_offres',id:r.id,data:{statut:'annule'}}).catch(function(){});
       }));
     }catch(e){}
