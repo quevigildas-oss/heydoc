@@ -3720,11 +3720,16 @@ async function genererCodeTransfert(){
 
   toast('⏳ Génération du code...');
   try{
-    await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
+    var patchRes=await fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
       method:'PATCH',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify({code_transfert:code+'|'+expire})
     });
+    if(!patchRes.ok){
+      var errData=await patchRes.json();
+      toast('⚠️ Erreur PATCH: '+JSON.stringify(errData).slice(0,100));
+      return;
+    }
     TRANSFERT_CODE_COURANT={code:code,patientId:p.patientId,supabaseId:p.supabaseId,expire:expire};
     try{localStorage.removeItem('dk_transfer_'+p.patientId);localStorage.setItem('dk_transfer_'+p.patientId,JSON.stringify(TRANSFERT_CODE_COURANT));}catch(e){}
     document.getElementById('transfertCodeVal').textContent=code;
