@@ -3436,6 +3436,7 @@ function ajouterTraitementDepuisOrdonnance(medoc,prescripteur){
 // ══════════════════════════════
 var TRANSFERT_DESTINATAIRE='';
 var TRANSFERT_CODE_COURANT=null; // {code, patientId, supabaseId, expire}
+var TRANSFERT_TIMER=null; // timer compte à rebours
 
 function ouvrirTransfertOuRecuperation(){
   // Modal de choix : Transférer ou Récupérer
@@ -3732,20 +3733,22 @@ async function genererCodeTransfert(){
     document.getElementById('transfertCodeBox').style.display='block';
     toast('✅ Code généré — valable 2 min (TEST)');
 
+    // Stopper tout timer précédent avant d'en démarrer un nouveau
+    if(TRANSFERT_TIMER){clearInterval(TRANSFERT_TIMER);TRANSFERT_TIMER=null;}
+
     // Compte à rebours toutes les secondes
     var expireEl=document.getElementById('transfertExpire');
     var deadline=Date.now()+DUREE_MS;
-    var timer=setInterval(function(){
+    TRANSFERT_TIMER=setInterval(function(){
       var reste=Math.max(0,deadline-Date.now());
       var min=Math.floor(reste/60000);
       var sec=Math.floor((reste%60000)/1000);
       if(expireEl)expireEl.textContent=min+'m '+String(sec).padStart(2,'0')+'s';
       if(reste<=0){
-        clearInterval(timer);
+        clearInterval(TRANSFERT_TIMER);TRANSFERT_TIMER=null;
         if(expireEl)expireEl.textContent='Expiré';
         TRANSFERT_CODE_COURANT=null;
         toast('⚠️ Code expiré');
-        // Nettoyer le code expiré en Supabase
         fetch(DB_URL+'?table=patients&id='+p.supabaseId,{
           method:'PATCH',
           headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
@@ -3786,6 +3789,8 @@ function copierCodeTransfert(){
 
 async function annulerTransfert(){
   if(!confirm('Annuler ce code de transfert ?'))return;
+  // Stopper le timer
+  if(TRANSFERT_TIMER){clearInterval(TRANSFERT_TIMER);TRANSFERT_TIMER=null;}
   var p=PROFILS[SEL];
   if(p&&p.supabaseId){
     try{
