@@ -123,7 +123,7 @@ async function init(){
       offre:offreJson
     };
 
-    if(statut==='valide'){renderValide();}
+    if(statut==='livre'){renderLivre();}
     else if(statut==='selectionne'||statut==='accepte'){renderSelectionne();}
     else if(statut==='repondu'||statut==='offres_recues'){renderDejaRepondu();}
     else if(statut==='annule'){renderAnnule();}
@@ -281,8 +281,8 @@ function renderRetraitAttente(){
     '<div style="height:30px;"></div>';
 }
 
-function renderValide(){
-  STATE='valide';
+function renderLivre(){
+  STATE='livre';
   document.getElementById('hdrSub').textContent='Commande validée';
   document.getElementById('mainContent').innerHTML=
     '<div class="success">'+
@@ -351,17 +351,17 @@ async function validerRetrait(){
     return;
   }
   try{
-    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'valide',date_validation:new Date().toISOString()}});
+    await dbReq('PATCH',{table:'appels_offres',id:aoData.supabaseId,data:{statut:'livre',date_validation:new Date().toISOString()}});
     // Annuler les autres offres du même consultation_id
     try{
       var autres=await dbReq('GET',null,'table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(aoData.consultId));
       var rows=Array.isArray(autres)?autres:(autres.data||[]);
-      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='valide';}).map(function(r){
+      await Promise.all(rows.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='livre';}).map(function(r){
         return dbReq('PATCH',{table:'appels_offres',id:r.id,data:{statut:'annule'}}).catch(function(){});
       }));
     }catch(e){}
     toast('✅ Retrait validé !');
-    setTimeout(function(){renderValide();},1500);
+    setTimeout(function(){renderLivre();},1500);
   }catch(e){
     if(errEl){errEl.textContent='Erreur : '+e.message;errEl.style.display='block';}
   }
