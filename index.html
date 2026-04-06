@@ -5977,7 +5977,7 @@ async function voirOrdonnanceHisto(i){
   var usageKey='ord_used_'+s.supabaseId;
   var deja=localStorage.getItem(usageKey);
 
-  var btnHtml=
+  var btnMedsHtml=
     '<div style="display:flex;gap:10px;margin-top:12px;">'+
       (deja?
         '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée</div>'
@@ -5988,10 +5988,22 @@ async function voirOrdonnanceHisto(i){
       '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
     '</div>';
 
-  document.getElementById('ordDetailBody').innerHTML=buildOrdHtml(i)+buildOrdBioHtml(i,[])+btnHtml;
+  var btnBioHtml=
+    '<div style="display:flex;gap:10px;margin-top:10px;">'+
+      '<button onclick="telechargerOrdoBio('+i+')" style="flex:1;padding:13px;background:#1E40AF;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'+
+      '<button onclick="partagerOrdoBio('+i+')" style="flex:1;padding:13px;background:rgba(30,64,175,.1);border:1px solid #1E40AF;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#1E40AF;cursor:pointer;">📤 Partager</button>'+
+    '</div>';
+
+  document.getElementById('ordDetailBody').innerHTML=
+    buildOrdHtml(i)+
+    btnMedsHtml+
+    '<div id="ordBioWrapper" style="margin-top:16px;">'+
+      '<div id="ordBioSection"></div>'+
+      '<div id="ordBioBtns" style="display:none;">'+btnBioHtml+'</div>'+
+    '</div>';
   nav('ordonnanceDetailScreen');
 
-  // Charger examens prescrits depuis Supabase et mettre à jour l'ordo bio
+  // Charger examens depuis Supabase et mettre à jour l'ordo bio
   if(s.supabaseId){
     fetch(DB_URL+'?table=examens&filter=consultation_id=eq.'+encodeURIComponent(s.supabaseId)+'&order=created_at.asc',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -6000,6 +6012,8 @@ async function voirOrdonnanceHisto(i){
       if(examens.length){
         var bioEl=document.getElementById('ordBioSection');
         if(bioEl)bioEl.outerHTML=buildOrdBioHtml(i,examens);
+        var btnsEl=document.getElementById('ordBioBtns');
+        if(btnsEl)btnsEl.style.display='flex';
       }
     }).catch(function(){});
   }
@@ -6085,6 +6099,42 @@ async function partagerOrdonnance(i){
   },500);
 }
 
+
+function telechargerOrdoBio(i){
+  var bioEl=document.getElementById('ordBioSection');
+  if(!bioEl||!bioEl.innerHTML.trim()){toast('Ordonnance biologique non disponible');return;}
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ordonnance Biologique Dokita</title></head><body>'+bioEl.outerHTML+'</body></html>';
+  var blob=new Blob([html],{type:'text/html'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='ordonnance-biologique-dokita.html';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+}
+
+async function partagerOrdoBio(i){
+  var s=HISTO_CACHE[i];if(!s)return;
+  var ord=(s.ordonnance)||{};
+  var p=PROFILS[SEL]||{};
+  var patNom=((p.prenom||'')+' '+(p.nom||'')).trim()||'-';
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+
+  // Récupérer les examens depuis le DOM
+  var bioEl=document.getElementById('ordBioSection');
+  var txt='🔬 ORDONNANCE BIOLOGIQUE — DOKITA PRO\n\n'+
+    'Prescripteur : '+(ord.medecin||'-')+'\n'+
+    'Patient : '+patNom+'\n'+
+    'Date : '+dateAff+'\n\n'+
+    'Veuillez faire pratiquer les examens complémentaires suivants.\n\n'+
+    'Résultats à apporter lors de la prochaine consultation.\n\n'+
+    'Document généré par Dokita Pro';
+
+  if(navigator.share){
+    try{await navigator.share({title:'Ordonnance Biologique Dokita',text:txt});}catch(e){}
+  } else {
+    try{await navigator.clipboard.writeText(txt);toast('📋 Copié dans le presse-papier');}catch(e){}
+  }
+}
 
 function reouvriConsultation(i){
   if(!PROFILS[SEL])return;
