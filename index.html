@@ -1709,28 +1709,28 @@ function delP(i){
   // Cas profil transféré — workflow spécial
   if(p.transfere){
     if(!confirm('Supprimer le compte Dokita de '+p.prenom+' ?\n\nSes données médicales resteront conservées pendant 10 ans conformément aux recommandations OMS.'))return;
-    // Écrire Date suppression = aujourd'hui + 10 ans dans Notion
+    // Écrire date_suppression = aujourd'hui + 10 ans en Supabase
     var dateSuppression=new Date();
     dateSuppression.setFullYear(dateSuppression.getFullYear()+10);
     var dateStr=dateSuppression.toISOString().slice(0,10);
-    if(p.notionPageId){
-      notionPatientRequest('/pages/'+p.notionPageId,'PATCH',{
-        properties:{
-          'Date suppression':{date:{start:dateStr}}
-        }
+    if(p.supabaseId){
+      fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({date_suppression:dateStr})
       }).then(function(){
         dbg('Date suppression programmée : '+dateStr);
-      }).catch(function(e){dbgWarn('Notion date suppression: '+e.message);});
+      }).catch(function(e){dbgWarn('date suppression PATCH: '+e.message);});
     }
-    // Supprimer localStorage local (session, profils, traitements, historique)
+    // Supprimer localStorage local
     try{
       localStorage.removeItem('dk_session');
       localStorage.removeItem('hd_profils');
       localStorage.removeItem('traits_'+(p.patientId||''));
+      localStorage.removeItem('dk_transfer_'+(p.patientId||''));
       var histoKeys=Object.keys(localStorage).filter(function(k){return k.indexOf('histo_')===0;});
       histoKeys.forEach(function(k){localStorage.removeItem(k);});
     }catch(e){}
-    // Déconnecter
     SESSION_EMAIL='';SESSION_PATIENT_ID='';
     PROFILS=[];SEL=-1;CURRENT=null;
     toast('✅ Compte supprimé — données conservées jusqu\'au '+dateStr);
@@ -3910,7 +3910,7 @@ async function confirmerRecuperationProfil(){
   btn.textContent='⏳ Transfert en cours...';btn.disabled=true;
 
   try{
-    // PATCH Supabase : nouveau compte_parent_id (UUID) + effacer code_transfert
+    // PATCH Supabase : compte_parent_id + lien_familial + code_transfert='' + audit transfert
     var myId=PROFILS[0]&&PROFILS[0].supabaseId||null;
     await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
       method:'PATCH',
@@ -3918,7 +3918,10 @@ async function confirmerRecuperationProfil(){
       body:JSON.stringify({
         compte_parent_id:myId,
         lien_familial:LIENS[p.lien]||p.lien,
-        code_transfert:''
+        code_transfert:'',
+        date_transfert:new Date().toISOString(),
+        transfert_vers_email:SESSION_EMAIL||'',
+        transfert_vers_id:myId||null
       })
     });
 
