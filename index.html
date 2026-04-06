@@ -1141,7 +1141,7 @@ async function seConnecter(){
       allergies:p.allergies||'',antecedents:p.antecedents||'',
       traitements:p.traitements_reguliers||'',
       patientId:SESSION_PATIENT_ID,supabaseId:p.id,
-      lien:'moi',compteParent:'',transfere:false
+      lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
     };
     PROFILS=[profilPrincipal];SEL=0;
     err.className='login-err';
@@ -1337,7 +1337,7 @@ async function rechargerSessionNotion(){
       allergies:p.allergies||'',antecedents:p.antecedents||'',
       traitements:p.traitements_reguliers||'',
       patientId:SESSION_PATIENT_ID,supabaseId:p.id,
-      lien:'moi',compteParent:'',transfere:false
+      lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
     };
     // Chercher membres famille via compte_parent_id (UUID)
     var rf=await fetch(DB_URL+'?table=patients&filter=compte_parent_id=eq.'+encodeURIComponent(p.id)+'&limit=10',{
