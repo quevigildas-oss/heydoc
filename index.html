@@ -3732,14 +3732,14 @@ async function genererCodeTransfert(){
     document.getElementById('transfertCodeBox').style.display='block';
     toast('✅ Code généré — valable 2 min (TEST)');
 
-    // Compte à rebours
+    // Compte à rebours toutes les secondes
     var expireEl=document.getElementById('transfertExpire');
     var deadline=Date.now()+DUREE_MS;
     var timer=setInterval(function(){
       var reste=Math.max(0,deadline-Date.now());
-      var heures=Math.floor(reste/3600000);
-      var min=Math.floor((reste%3600000)/60000);
-      if(expireEl)expireEl.textContent=heures>0?heures+'h '+min+'m':min+'m';
+      var min=Math.floor(reste/60000);
+      var sec=Math.floor((reste%60000)/1000);
+      if(expireEl)expireEl.textContent=min+'m '+String(sec).padStart(2,'0')+'s';
       if(reste<=0){
         clearInterval(timer);
         if(expireEl)expireEl.textContent='Expiré';
@@ -3753,7 +3753,7 @@ async function genererCodeTransfert(){
         }).catch(function(){});
         try{localStorage.removeItem('dk_transfer_'+p.patientId);}catch(e){}
       }
-    },60000);
+    },1000);
   }catch(e){
     toast('⚠️ Erreur: '+e.message);
   }
