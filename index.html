@@ -4337,7 +4337,7 @@ var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // cha
 async function chargerEtablissements(){
   // Chargement au login — stocké en mémoire pour toute la session
   try{
-    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&filter2=accepte_ao=eq.true&limit=500',{
+    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&limit=500',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
@@ -4505,17 +4505,18 @@ async function ouvrirNouveauRDV(){
   // Filtrer établissements qui acceptent les RDV
   var etabs=ETABLISSEMENTS.filter(function(e){return e.accepte_rdv;});
   if(!etabs.length){
-    // Recharger si vide
     await chargerEtablissements();
     etabs=ETABLISSEMENTS.filter(function(e){return e.accepte_rdv;});
   }
 
   var TYPES_ETAB={
-    'cabinet':  {ico:'👨‍⚕️', label:'Médecin'},
-    'labo':     {ico:'🧪', label:'Laboratoire'},
-    'clinique': {ico:'🏥', label:'Clinique'},
-    'hopital':  {ico:'🏨', label:'Hôpital'},
-    'autre':    {ico:'🏢', label:'Autre'}
+    'cabinet':    {ico:'👨‍⚕️', label:'Médecin / Cabinet'},
+    'medecin':    {ico:'👨‍⚕️', label:'Médecin'},
+    'pharmacie':  {ico:'💊', label:'Pharmacie'},
+    'labo':       {ico:'🧪', label:'Laboratoire'},
+    'clinique':   {ico:'🏥', label:'Clinique'},
+    'hopital':    {ico:'🏨', label:'Hôpital'},
+    'autre':      {ico:'🏢', label:'Autre'}
   };
 
   // Grouper par type
