@@ -4458,7 +4458,21 @@ async function ouvrirRDV(){
           '</div>'+
           (dateAff?'<div style="font-size:12px;color:var(--text2);">📆 '+dateAff+(heureAff?' à '+heureAff:'')+'</div>':'')+
           (rdv.motif?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">'+escHtml(rdv.motif)+'</div>':'')+
-          (rdv.statut==='propose'?
+          (rdv.statut==='propose'&&rdv.creneaux_proposes&&rdv.creneaux_proposes.length?
+            '<div style="margin-top:10px;">'+
+              '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;">Créneaux proposés — choisissez :</div>'+
+              rdv.creneaux_proposes.map(function(c){
+                var JOURS=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+                var MOIS=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+                var d=new Date(c.date+'T00:00:00');
+                var label=JOURS[d.getDay()]+' '+d.getDate()+' '+MOIS[d.getMonth()]+' à '+c.heure;
+                return '<button onclick="confirmerCreneau(\''+rdv.id+'\',\''+c.date+'\',\''+c.heure+'\')" '+
+                  'style="display:block;width:100%;text-align:left;padding:9px 12px;background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.25);border-radius:8px;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;margin-bottom:6px;">'+
+                  '📅 '+label+'</button>';
+              }).join('')+
+              '<button onclick="annulerRDV(\''+rdv.id+'\')" style="width:100%;margin-top:4px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text3);cursor:pointer;">Refuser toutes les propositions</button>'+
+            '</div>'
+          :rdv.statut==='propose'?
             '<div style="display:flex;gap:8px;margin-top:10px;">'+
               '<button onclick="confirmerRDV(\''+rdv.id+'\')" style="flex:1;padding:9px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:8px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">✅ Confirmer</button>'+
               '<button onclick="annulerRDV(\''+rdv.id+'\')" style="flex:1;padding:9px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;font-size:12px;font-weight:700;color:#ef4444;cursor:pointer;">❌ Refuser</button>'+
@@ -4695,6 +4709,23 @@ async function soumettreDemRDV(slotId, date, heure, btn){
     btn.disabled=false;btn.textContent='✅ Envoyer la demande';
     toast('❌ '+e.message);
   }
+}
+
+async function confirmerCreneau(rdvId, date, heure){
+  try{
+    await fetch(DB_URL+'?table=rendez_vous&filter=id=eq.'+encodeURIComponent(rdvId),{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        statut:'confirme',
+        date_confirmee:date,
+        heure_confirmee:heure,
+        creneaux_proposes:[]
+      })
+    });
+    toast('✅ RDV confirmé — '+new Date(date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'})+' à '+heure);
+    ouvrirRDV();
+  }catch(e){toast('❌ '+e.message);}
 }
 
 async function confirmerRDV(rdvId){
