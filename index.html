@@ -2460,7 +2460,8 @@ function ouvrirEspaceProfil(i){
   CURRENT=Object.assign({},p,{_idx:i,_eph:false});
   nav('espaceProfilScreen');
   mettreAJourBadgeTuile();
-  mettreAJourBadgeAnalyses(); // ← appel immédiat pour badge examens
+  mettreAJourBadgeAnalyses();
+  mettreAJourBadgeRDV(p);
 
   // Rechargement silencieux depuis Supabase pour avoir les données fraîches
   if(p.supabaseId){
