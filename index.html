@@ -4705,21 +4705,18 @@ async function soumettreDemRDV(btn){
   var msg='🏥 Nouvelle demande de RDV Dokita\n\nPatient : '+patNom+'\nMotif : '+typeLabel+(precision?' — '+precision:'')+'\n\nConnectez-vous à Dokita Pro pour proposer des créneaux.';
 
   try{
-    var res=await fetch(DB_URL,{
+    var res=await fetch(DB_URL+'?table=rendez_vous',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify({
-        table:'rendez_vous',
-        data:{
-          patient_id:p.supabaseId||p.patientId,
-          patient_nom:patNom,
-          etablissement_id:RDV_ETABLISSEMENT_SEL.id,
-          etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,
-          type_rdv:typeVal,
-          motif:typeLabel+(precision?' — '+precision:''),
-          statut:'demande',
-          creneaux_proposes:[]
-        }
+        patient_id:p.supabaseId||p.patientId,
+        patient_nom:patNom,
+        etablissement_id:RDV_ETABLISSEMENT_SEL.id,
+        etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,
+        type_rdv:typeVal,
+        motif:typeLabel+(precision?' — '+precision:''),
+        statut:'demande',
+        creneaux_proposes:[]
       })
     });
     if(!res.ok){var err=await res.json();throw new Error(JSON.stringify(err).slice(0,200));}
