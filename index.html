@@ -4446,6 +4446,11 @@ async function ouvrirRDV(){
 
     var html=addBtn;
     rows.forEach(function(rdv){
+      // Parser creneaux_proposes si string
+      if(typeof rdv.creneaux_proposes==='string'){
+        try{rdv.creneaux_proposes=JSON.parse(rdv.creneaux_proposes);}catch(e){rdv.creneaux_proposes=[];}
+      }
+      if(!Array.isArray(rdv.creneaux_proposes))rdv.creneaux_proposes=[];
       var st=STATUT_RDV[rdv.statut]||{label:rdv.statut,color:'var(--text3)',bg:'var(--card)'};
       var dateAff=rdv.date_confirmee||rdv.date_souhaitee||'';
       if(dateAff)dateAff=new Date(dateAff).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'});
