@@ -4651,7 +4651,7 @@ async function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
 
   // Vérifier si demande en cours sur cet établissement
   try{
-    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=etablissement_id=eq.'+encodeURIComponent(etabId)+'&filter3=statut=eq.demande&limit=1',{
+    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId||p.patientId)+'&filter2=etablissement_id=eq.'+encodeURIComponent(etabId)+'&filter3=statut=eq.demande&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
