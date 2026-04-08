@@ -4701,16 +4701,8 @@ async function soumettreDemRDV(btn){
   if(!p||!p.patientId){toast('Profil non disponible');return;}
   btn.disabled=true;btn.textContent='⏳ Envoi...';
 
-  // Ouvrir WhatsApp immédiatement (dans le handler clic = pas bloqué)
   var patNom=(p.prenom||'')+' '+(p.nom||'');
   var msg='🏥 Nouvelle demande de RDV Dokita\n\nPatient : '+patNom+'\nMotif : '+typeLabel+(precision?' — '+precision:'')+'\n\nConnectez-vous à Dokita Pro pour proposer des créneaux.';
-  var waUrl='';
-  if(RDV_ETABLISSEMENT_SEL.whatsapp){
-    waUrl='https://wa.me/'+RDV_ETABLISSEMENT_SEL.whatsapp.replace(/\D/g,'')+'?text='+encodeURIComponent(msg);
-    window.open(waUrl,'_blank');
-  } else if(RDV_ETABLISSEMENT_SEL.email){
-    window.open('mailto:'+RDV_ETABLISSEMENT_SEL.email+'?subject=Nouvelle demande RDV Dokita&body='+encodeURIComponent(msg),'_blank');
-  }
 
   try{
     var res=await fetch(DB_URL,{
@@ -4731,8 +4723,22 @@ async function soumettreDemRDV(btn){
       })
     });
     if(!res.ok){var err=await res.json();throw new Error(JSON.stringify(err).slice(0,200));}
+
+    // Fermer modal + notifier
     var m=document.getElementById('rdvDemandeModal');if(m)m.remove();
     toast('✅ Demande envoyée — le praticien vous proposera des créneaux');
+
+    // Ouvrir WhatsApp après succès
+    if(RDV_ETABLISSEMENT_SEL.whatsapp){
+      var a=document.createElement('a');
+      a.href='https://wa.me/'+RDV_ETABLISSEMENT_SEL.whatsapp.replace(/\D/g,'')+'?text='+encodeURIComponent(msg);
+      a.target='_blank';a.rel='noopener';
+      document.body.appendChild(a);a.click();
+      setTimeout(function(){a.remove();},100);
+    } else if(RDV_ETABLISSEMENT_SEL.email){
+      window.open('mailto:'+RDV_ETABLISSEMENT_SEL.email+'?subject=Nouvelle demande RDV Dokita&body='+encodeURIComponent(msg),'_blank');
+    }
+
     nav('rdvScreen');
     ouvrirRDV();
   }catch(e){
