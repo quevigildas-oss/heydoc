@@ -4417,7 +4417,7 @@ async function ouvrirRDV(){
   if(!p||!p.patientId){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Profil non disponible</div>';return;}
 
   try{
-    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=created_at.desc&limit=20',{
+    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId||p.patientId)+'&order=created_at.desc&limit=20',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
