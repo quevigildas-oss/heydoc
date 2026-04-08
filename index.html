@@ -4501,34 +4501,47 @@ function ouvrirNouveauRDV(){
   nav('rdvNouveauScreen');
   var el=document.getElementById('rdvNouveauBody');
   el.innerHTML=
-    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Type de praticien ou établissement</div>'+
-    '<select id="rdvTypeEtab" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:8px;">'+
-      '<option value="">-- Choisissez --</option>'+
-      '<option value="cabinet">👨‍⚕️ Médecin / Cabinet</option>'+
-      '<option value="labo">🧪 Laboratoire d\'analyses</option>'+
-      '<option value="clinique">🏥 Clinique / Centre médical</option>'+
-      '<option value="hopital">🏨 Hôpital</option>'+
-      '<option value="pharmacie">💊 Pharmacie</option>'+
-      '<option value="autre">🏢 Autre</option>'+
-    '</select>'+
+    '<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+      '<select id="rdvTypeEtab" style="flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;">'+
+        '<option value="">-- Type --</option>'+
+        '<option value="cabinet">👨‍⚕️ Médecin</option>'+
+        '<option value="labo">🧪 Laboratoire</option>'+
+        '<option value="clinique">🏥 Clinique</option>'+
+        '<option value="hopital">🏨 Hôpital</option>'+
+        '<option value="pharmacie">💊 Pharmacie</option>'+
+        '<option value="autre">🏢 Autre</option>'+
+      '</select>'+
+      '<input id="rdvSearch" type="text" placeholder="🔍 Rechercher..." style="flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;">'+
+    '</div>'+
     '<div id="rdvEtabListe"></div>';
 
   document.getElementById('rdvTypeEtab').addEventListener('change', function(){
     var type=this.value;
-    if(!type)return;
-    chargerEtabsParType(type);
+    var q=document.getElementById('rdvSearch').value.trim();
+    if(type||q)chargerEtabsParType(type,q);
+  });
+  document.getElementById('rdvSearch').addEventListener('input', function(){
+    var q=this.value.trim();
+    var type=document.getElementById('rdvTypeEtab').value;
+    if(q.length>=2||type)chargerEtabsParType(type,q);
   });
 }
 
-async function chargerEtabsParType(type){
+async function chargerEtabsParType(type,q){
   var el=document.getElementById('rdvEtabListe');
   el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);">⏳ Chargement...</div>';
   try{
-    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&filter2=type=eq.'+encodeURIComponent(type)+'&filter3=accepte_rdv=eq.true&order=nom.asc&limit=100',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var url=DB_URL+'?table=etablissements&filter=actif=eq.true&filter2=accepte_rdv=eq.true';
+    if(type)url+='&filter3=type=eq.'+encodeURIComponent(type);
+    url+='&order=nom.asc&limit=100';
+    var r=await fetch(url,{headers:{'x-dokita-key':DOKITA_KEY}});
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
+    // Filtre recherche côté client
+    if(q&&q.length>=2){
+      var ql=q.toLowerCase();
+      rows=rows.filter(function(e){return (e.nom||'').toLowerCase().includes(ql)||(e.ville||'').toLowerCase().includes(ql);});
+    }
     if(!rows.length){
       el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">Aucun établissement disponible pour ce type.</div>';
       return;
