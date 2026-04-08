@@ -4644,10 +4644,23 @@ async function ouvrirCreneaux(etablissementId){
   }
 }
 
-function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
+async function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
   RDV_ETABLISSEMENT_SEL={id:etabId, nom:etabNom, whatsapp:etabWa, email:etabEmail};
   var p=PROFILS[SEL];
   if(!p||!p.patientId){toast('Profil non disponible');return;}
+
+  // Vérifier si demande en cours sur cet établissement
+  try{
+    var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=etablissement_id=eq.'+encodeURIComponent(etabId)+'&filter3=statut=eq.demande&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length){
+      toast('⚠️ Une demande est déjà en cours auprès de cet établissement. Merci de patienter le retour de l\'établissement.');
+      return;
+    }
+  }catch(e){}
 
   var old=document.getElementById('rdvDemandeModal');if(old)old.remove();
   var modal=document.createElement('div');
@@ -4706,7 +4719,7 @@ async function soumettreDemRDV(btn){
       body:JSON.stringify({
         table:'rendez_vous',
         data:{
-          patient_id:p.patientId,
+          patient_id:p.supabaseId||p.patientId,
           patient_nom:patNom,
           etablissement_id:RDV_ETABLISSEMENT_SEL.id,
           etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,
@@ -4717,7 +4730,7 @@ async function soumettreDemRDV(btn){
         }
       })
     });
-    if(!res.ok){var err=await res.json();throw new Error(JSON.stringify(err).slice(0,80));}
+    if(!res.ok){var err=await res.json();throw new Error(JSON.stringify(err).slice(0,200));}
     var m=document.getElementById('rdvDemandeModal');if(m)m.remove();
     toast('✅ Demande envoyée — le praticien vous proposera des créneaux');
     nav('rdvScreen');
