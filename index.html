@@ -667,7 +667,11 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📅</div>
           <div class="doss-tile-title">RDV</div>
           <div class="doss-tile-sub" id="rdvTileSub">Mes rendez-vous</div>
-          <div id="rdvTileBadge" style="display:none;" class="doss-tile-badge"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
+            <span id="rdvTagConfirme" style="display:none;font-size:9px;font-weight:700;background:rgba(0,200,150,.15);color:var(--accent);border-radius:99px;padding:2px 7px;"></span>
+            <span id="rdvTagPropose" style="display:none;font-size:9px;font-weight:700;background:rgba(74,158,255,.15);color:#4a9eff;border-radius:99px;padding:2px 7px;"></span>
+            <span id="rdvTagAttente" style="display:none;font-size:9px;font-weight:700;background:rgba(245,158,11,.15);color:#F59E0B;border-radius:99px;padding:2px 7px;"></span>
+          </div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossierMedical()" id="dossierMedTile">
           <div class="doss-tile-ico" style="background:rgba(99,102,241,.12);">🗂️</div>
@@ -3128,21 +3132,17 @@ function mettreAJourBadgeRDV(profil){
     headers:{'x-dokita-key':DOKITA_KEY}
   }).then(function(r){return r.json();}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
-    var nbAttente=rows.filter(function(r){return r.statut==='demande'||r.statut==='propose';}).length;
-    var badge=document.getElementById('rdvTileBadge');
+    var nbConfirme=rows.filter(function(r){return r.statut==='confirme';}).length;
+    var nbPropose=rows.filter(function(r){return r.statut==='propose';}).length;
+    var nbAttente=rows.filter(function(r){return r.statut==='demande';}).length;
+    var tagC=document.getElementById('rdvTagConfirme');
+    var tagP=document.getElementById('rdvTagPropose');
+    var tagA=document.getElementById('rdvTagAttente');
     var sub=document.getElementById('rdvTileSub');
-    if(badge){
-      if(nbAttente>0){
-        badge.style.display='inline-block';
-        badge.textContent=nbAttente+' en attente';
-      } else {
-        badge.style.display='none';
-      }
-    }
-    if(sub){
-      if(nbAttente>0)sub.textContent=nbAttente+' RDV en attente';
-      else sub.textContent='Mes rendez-vous';
-    }
+    if(tagC){if(nbConfirme>0){tagC.textContent='\u2705 '+nbConfirme+' confirm\u00e9'+(nbConfirme>1?'s':'');tagC.style.display='inline';}else tagC.style.display='none';}
+    if(tagP){if(nbPropose>0){tagP.textContent='\uD83D\uDCCB '+nbPropose+' \u00e0 choisir';tagP.style.display='inline';}else tagP.style.display='none';}
+    if(tagA){if(nbAttente>0){tagA.textContent='\u23F3 '+nbAttente+' en attente';tagA.style.display='inline';}else tagA.style.display='none';}
+    if(sub){var total=nbConfirme+nbPropose+nbAttente;sub.textContent=total>0?total+' rendez-vous actif'+(total>1?'s':''):'Mes rendez-vous';}
   }).catch(function(){});
 }
 
