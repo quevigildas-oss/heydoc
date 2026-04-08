@@ -4470,7 +4470,7 @@ async function ouvrirRDV(){
                 var JOURS=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
                 var MOIS=['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
                 var d=new Date(c.date+'T00:00:00');
-                var label=JOURS[d.getDay()]+' '+d.getDate()+' '+MOIS[d.getMonth()]+' à '+c.heure;
+                var label=JOURS[d.getDay()]+' '+d.getDate()+' '+MOIS[d.getMonth()]+' · '+c.heure+(c.heure_fin?' – '+c.heure_fin:'');
                 return '<button onclick="confirmerCreneau(\''+rdv.id+'\',\''+c.date+'\',\''+c.heure+'\')" '+
                   'style="display:block;width:100%;text-align:left;padding:9px 12px;background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.25);border-radius:8px;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;margin-bottom:6px;">'+
                   '📅 '+label+'</button>';
