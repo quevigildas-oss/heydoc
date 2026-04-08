@@ -4501,36 +4501,55 @@ function ouvrirNouveauRDV(){
   nav('rdvNouveauScreen');
   var el=document.getElementById('rdvNouveauBody');
   el.innerHTML=
-    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Type de praticien</div>'+
-    '<select id="rdvTypeEtab" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:14px;">'+
-      '<option value="cabinet">\u{1F468}\u200D\u2695\uFE0F M\u00e9decin / Cabinet</option>'+
-      '<option value="labo">\u{1F9EA} Laboratoire d\'analyses</option>'+
-      '<option value="clinique">\u{1F3E5} Clinique / Centre m\u00e9dical</option>'+
-      '<option value="hopital">\u{1F3E8} H\u00f4pital</option>'+
-      '<option value="pharmacie">\u{1F48A} Pharmacie</option>'+
-      '<option value="autre">\u{1F3E2} Autre</option>'+
+    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Type de praticien ou établissement</div>'+
+    '<select id="rdvTypeEtab" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:8px;">'+
+      '<option value="">-- Choisissez --</option>'+
+      '<option value="cabinet">👨‍⚕️ Médecin / Cabinet</option>'+
+      '<option value="labo">🧪 Laboratoire d\'analyses</option>'+
+      '<option value="clinique">🏥 Clinique / Centre médical</option>'+
+      '<option value="hopital">🏨 Hôpital</option>'+
+      '<option value="pharmacie">💊 Pharmacie</option>'+
+      '<option value="autre">🏢 Autre</option>'+
     '</select>'+
+    '<div id="rdvEtabListe"></div>';
 
-    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Motif de la consultation</div>'+
-    '<select id="rdvMotifSelect" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:14px;">'+
-      '<option value="consultation">Premi\u00e8re consultation</option>'+
-      '<option value="consultation">Consultation de suivi</option>'+
-      '<option value="renouvellement">Renouvellement d\'ordonnance</option>'+
-      '<option value="examen">R\u00e9sultats d\'examens</option>'+
-      '<option value="examen">Prise de sang / Pr\u00e9l\u00e8vement</option>'+
-      '<option value="consultation">Vaccination</option>'+
-      '<option value="urgence">Urgence</option>'+
-      '<option value="consultation">Autre</option>'+
-    '</select>'+
-
-    '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Pr\u00e9cisions (optionnel)</div>'+
-    '<textarea id="rdvPrecisionInput" rows="2" placeholder="Ex: renouvellement metformine, douleurs abdominales..." style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;resize:none;box-sizing:border-box;margin-bottom:20px;"></textarea>'+
-
-    '<button id="rdvEnvoyerBtn" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(217,48,37,.9),rgba(239,68,68,.8));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">\u{1F4E4} Envoyer la demande</button>';
-
-  document.getElementById('rdvEnvoyerBtn').addEventListener('click', function(){
-    soumettreDemRDV(this);
+  document.getElementById('rdvTypeEtab').addEventListener('change', function(){
+    var type=this.value;
+    if(!type)return;
+    chargerEtabsParType(type);
   });
+}
+
+async function chargerEtabsParType(type){
+  var el=document.getElementById('rdvEtabListe');
+  el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);">⏳ Chargement...</div>';
+  try{
+    var r=await fetch(DB_URL+'?table=etablissements&filter=actif=eq.true&filter2=type=eq.'+encodeURIComponent(type)+'&filter3=accepte_rdv=eq.true&order=nom.asc&limit=100',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){
+      el.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">Aucun établissement disponible pour ce type.</div>';
+      return;
+    }
+    el.innerHTML=rows.map(function(e){
+      return '<div data-eid="'+e.id+'" data-enom="'+escHtml(e.nom)+'" data-ewa="'+escHtml(e.whatsapp||e.telephone||'')+'" data-email="'+escHtml(e.email||'')+'" class="rdv-etab-card" '+
+        'style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(e.nom)+'</div>'+
+          '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+escHtml(e.ville||'')+(e.google_rating?' ⭐ '+e.google_rating:'')+'</div>'+
+        '</div>'+
+        '<div style="font-size:20px;color:var(--text3);">›</div>'+
+      '</div>';
+    }).join('');
+    el.addEventListener('click',function(ev){
+      var card=ev.target.closest('.rdv-etab-card');
+      if(card)selectionnerEtablissement(card.dataset.eid,card.dataset.enom,card.dataset.ewa,card.dataset.email);
+    });
+  }catch(e){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--danger);">❌ '+e.message+'</div>';
+  }
 }
 
 
@@ -4612,9 +4631,8 @@ async function ouvrirCreneaux(etablissementId){
   }
 }
 
-async function selectionnerEtablissement(etabId){
-  RDV_ETABLISSEMENT_SEL=ETABLISSEMENTS.find(function(e){return e.id===etabId;})||null;
-  if(!RDV_ETABLISSEMENT_SEL){toast('Établissement introuvable');return;}
+function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
+  RDV_ETABLISSEMENT_SEL={id:etabId, nom:etabNom, whatsapp:etabWa, email:etabEmail};
   var p=PROFILS[SEL];
   if(!p||!p.patientId){toast('Profil non disponible');return;}
 
@@ -4625,8 +4643,7 @@ async function selectionnerEtablissement(etabId){
   modal.innerHTML=
     '<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;box-sizing:border-box;padding-bottom:calc(24px + var(--sb));">'+
       '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;">📅 Demande de RDV</div>'+
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:18px;">'+escHtml(RDV_ETABLISSEMENT_SEL.nom)+'</div>'+
-
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:18px;">'+escHtml(etabNom)+'</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Motif de la consultation</div>'+
       '<select id="rdvMotifSelect" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;margin-bottom:14px;">'+
         '<option value="consultation">Première consultation</option>'+
@@ -4638,16 +4655,12 @@ async function selectionnerEtablissement(etabId){
         '<option value="urgence">Urgence</option>'+
         '<option value="consultation">Autre</option>'+
       '</select>'+
-
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Précisions (optionnel)</div>'+
       '<textarea id="rdvPrecisionInput" rows="2" placeholder="Ex: renouvellement metformine, douleurs abdominales..." style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--text);outline:none;resize:none;box-sizing:border-box;margin-bottom:16px;"></textarea>'+
-
       '<button id="rdvEnvoyerBtn" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(217,48,37,.9),rgba(239,68,68,.8));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">📤 Envoyer la demande</button>'+
       '<button onclick="document.getElementById(\'rdvDemandeModal\').remove()" style="width:100%;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;">Annuler</button>'+
     '</div>';
   document.body.appendChild(modal);
-
-  // Bouton envoyer — dans le handler direct pour que window.open ne soit pas bloqué
   document.getElementById('rdvEnvoyerBtn').addEventListener('click',function(){
     soumettreDemRDV(this);
   });
