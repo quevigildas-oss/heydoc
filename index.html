@@ -1147,7 +1147,7 @@ async function seConnecter(){
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
     syncTraitementsDepuisNotion(profilPrincipal);
-    nav('accueilScreen');
+    mettreAJourBadgeRDV(profilPrincipal);
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
     // Charger établissements en arrière-plan dès le login
     chargerEtablissements();
@@ -1360,6 +1360,7 @@ async function rechargerSessionNotion(){
     SEL=0;
     saveProfils();
     syncTraitementsDepuisNotion(profilPrincipal); // toujours appeler — efface les ALD si traitements vide
+    mettreAJourBadgeRDV(profilPrincipal);
     return true;
   }catch(e){
     dbg('rechargerSession ERR: '+e.message);
@@ -3117,6 +3118,31 @@ function supprimerTrait(idx){
   renderTraitements(items);
   mettreAJourBadgeTuile();
   toast('🗑 Traitement supprimé');
+}
+
+function mettreAJourBadgeRDV(profil){
+  var p=profil||PROFILS[SEL];
+  if(!p||!p.supabaseId)return;
+  fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId)+'&order=created_at.desc&limit=20',{
+    headers:{'x-dokita-key':DOKITA_KEY}
+  }).then(function(r){return r.json();}).then(function(data){
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    var nbAttente=rows.filter(function(r){return r.statut==='demande'||r.statut==='propose';}).length;
+    var badge=document.getElementById('rdvTileBadge');
+    var sub=document.getElementById('rdvTileSub');
+    if(badge){
+      if(nbAttente>0){
+        badge.style.display='inline-block';
+        badge.textContent=nbAttente+' en attente';
+      } else {
+        badge.style.display='none';
+      }
+    }
+    if(sub){
+      if(nbAttente>0)sub.textContent=nbAttente+' RDV en attente';
+      else sub.textContent='Mes rendez-vous';
+    }
+  }).catch(function(){});
 }
 
 function mettreAJourBadgeTuile(keyOverride){
