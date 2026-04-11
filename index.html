@@ -5876,45 +5876,74 @@ function buildOrdHtml(i){
   var patNom=((p.prenom||'')+' '+(p.nom||'')).trim()||'-';
   var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
   function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-  var medsHtml=(ord.medicaments||[]).map(function(m,idx){
-    var bg=idx%2===0?'#fff':'#f9fafb';
-    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
-      '<div style="width:22px;height:22px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
-      '<div style="flex:1;font-size:13px;color:#1A2B3C;font-weight:500;">'+esc(m)+'</div>'+
-    '</div>';
-  }).join('');
-  return '<div style="background:#fff;font-family:Arial,sans-serif;color:#1A2B3C;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:calc(100vh - 160px);">'+
-    '<div style="background:#0A7E6A;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">'+
-      '<div><div style="font-size:10px;color:rgba(255,255,255,.8);">DOKITA PRO</div>'+
-      '<div style="font-size:15px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div></div>'+
-      '<div style="text-align:right;font-size:10px;color:rgba(255,255,255,.8);"><div>Réf: '+esc(s.dossierId||'-')+'</div><div>'+dateAff+'</div></div>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;background:#E8F5F2;">'+
-      '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:10px;">'+
-        '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">PRESCRIPTEUR</div>'+
-        '<div style="font-size:12px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
-        '<div style="font-size:10px;color:#6B7280;font-style:italic;">'+esc(ord.specialite||'-')+'</div>'+
+
+  // Reconstruire les médicaments depuis medsRaw (format objet) ou medicaments (format string)
+  var meds=[];
+  if(ord.medsRaw&&ord.medsRaw.length){
+    meds=(ord.medsRaw||[]).concat((ord.medsAldRaw||[]).map(function(m){return Object.assign({},m,{_ald:true});}));
+  }
+  var medsHtml=meds.length?meds.map(function(m){
+    return '<div class="med'+(m._ald||m.ald?' ald':'')+'">'+
+      '<div class="mname">'+esc(m.nom||'')+(m._ald||m.ald?'<span class="aldtag">ALD</span>':'')+'</div>'+
+      (m.dose?'<div class="mdose">'+esc(m.dose)+'</div>':'')+
+      '<div class="mposo">'+
+        (m.poso?'<div>🕐 '+esc(m.poso)+'</div>':'')+
+        (m.duree?'<div>📅 Durée : '+esc(m.duree)+'</div>':'')+
+        (m.conditionnement?'<div>📦 '+esc(m.conditionnement)+'</div>':'')+
+      '</div></div>';
+  }).join(''):'<div class="empty">Aucun médicament enregistré</div>';
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>'+
+    '@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap");'+
+    '*{margin:0;padding:0;box-sizing:border-box;}body{font-family:"DM Sans",sans-serif;background:#fff;color:#0A1628;}'+
+    '.pg{max-width:680px;margin:0 auto;padding:32px 24px;}'+
+    '.hdr{background:linear-gradient(135deg,#00C896,#0EA5E9);border-radius:16px;padding:24px;margin-bottom:24px;color:#fff;}'+
+    '.hdr h1{font-family:"Syne",sans-serif;font-size:22px;font-weight:800;}'+
+    '.hdr p{font-size:12px;opacity:.85;margin-top:4px;}'+
+    '.meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}'+
+    '.bloc{background:#F8FAFC;border-radius:12px;padding:16px;}'+
+    '.bloctit{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748B;margin-bottom:10px;}'+
+    '.row{font-size:13px;color:#0A1628;margin-bottom:4px;}'+
+    '.row b{font-weight:600;}'+
+    '.diag{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;margin-bottom:20px;}'+
+    '.diaglbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#3B82F6;margin-bottom:6px;}'+
+    '.diagval{font-family:"Syne",sans-serif;font-size:16px;font-weight:700;color:#1E3A5F;}'+
+    '.medstit{font-family:"Syne",sans-serif;font-size:13px;font-weight:700;color:#0A1628;margin-bottom:12px;}'+
+    '.med{background:#fff;border:1.5px solid #E2E8F0;border-radius:12px;padding:14px 16px;margin-bottom:10px;}'+
+    '.med.ald{border-color:#A78BFA;background:#FAF5FF;}'+
+    '.mname{font-family:"Syne",sans-serif;font-size:14px;font-weight:800;color:#0A1628;}'+
+    '.mdose{font-size:12px;color:#0EA5E9;font-weight:600;margin-top:2px;}'+
+    '.mposo{font-size:12px;color:#475569;margin-top:4px;line-height:1.6;}'+
+    '.aldtag{display:inline-block;background:#EDE9FE;color:#7C3AED;font-size:9px;font-weight:700;border-radius:4px;padding:2px 6px;margin-left:6px;text-transform:uppercase;}'+
+    '.notesbox{background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px;margin-top:16px;font-size:12px;color:#92400E;line-height:1.6;}'+
+    '.foot{margin-top:28px;padding-top:20px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:flex-end;}'+
+    '.footmed{font-size:13px;color:#0A1628;}'+
+    '.footmed strong{font-family:"Syne",sans-serif;font-size:14px;font-weight:800;display:block;margin-bottom:2px;}'+
+    '.sigbox{width:140px;height:60px;border:1.5px dashed #CBD5E1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94A3B8;}'+
+    '.empty{text-align:center;padding:24px;color:#94A3B8;font-size:13px;}'+
+    '@media print{.pg{padding:20px;}}'+
+  '</style></head><body><div class="pg">'+
+    '<div class="hdr"><h1>Ordonnance Médicale</h1><p>Dokita Pro • '+esc(ord.medecin||'-')+' • '+esc(ord.specialite||'-')+'</p></div>'+
+    '<div class="meta">'+
+      '<div class="bloc"><div class="bloctit">Patient</div>'+
+        '<div class="row"><b>'+esc(patNom)+'</b></div>'+
+        (p._age||p.naiss?'<div class="row">'+(p._age||calcAge(p.naiss)||'-')+' ans'+(p.poids?' • '+p.poids+'kg':'')+'</div>':'')+
+        (p.ville?'<div class="row">'+esc(p.ville)+'</div>':'')+
       '</div>'+
-      '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:10px;">'+
-        '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">PATIENT</div>'+
-        '<div style="font-size:12px;font-weight:700;">'+esc(patNom)+'</div>'+
-        '<div style="font-size:10px;color:#6B7280;margin-top:3px;">ID: '+esc(SESSION_PATIENT_ID||'-')+'</div>'+
+      '<div class="bloc"><div class="bloctit">Consultation</div>'+
+        '<div class="row"><b>'+dateAff+'</b></div>'+
+        '<div class="row" style="font-size:11px;color:#64748B;">'+esc(s.dossierId||'-')+'</div>'+
       '</div>'+
     '</div>'+
-    (ord.diagnostic?'<div style="padding:8px 14px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;"><div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:3px;">DIAGNOSTIC</div><div style="font-size:12px;">'+esc(ord.diagnostic)+'</div></div>':'')+
-    '<div style="background:#0A7E6A;padding:7px 14px;"><div style="font-size:9px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div></div>'+
+    (ord.diagnostic?'<div class="diag"><div class="diaglbl">Diagnostic</div><div class="diagval">'+esc(ord.diagnostic)+'</div></div>':'')+
+    '<div class="medstit">💊 Traitement prescrit</div>'+
     medsHtml+
-    (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:10px 14px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:3px;">NOTES</div><div style="font-size:12px;">'+esc(ord.notes)+'</div></div>':'')+
-    '<div style="flex:1;min-height:120px;padding:16px;display:flex;justify-content:flex-end;align-items:flex-end;">'+
-      '<div style="width:170px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
-        (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>')+
-        '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
-      '</div>'+
+    (ord.notes?'<div class="notesbox"><b style="display:block;margin-bottom:6px;">📝 Notes</b>'+esc(ord.notes).replace(/\n/g,'<br>')+'</div>':'')+
+    '<div class="foot">'+
+      '<div class="footmed"><strong>'+esc(ord.medecin||'-')+'</strong>'+esc(ord.specialite||'')+'</div>'+
+      (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:60px;object-fit:contain;border-radius:8px;" />':'<div class="sigbox">Signature & Cachet</div>')+
     '</div>'+
-    '<div style="background:#0A7E6A;padding:8px 14px;text-align:center;">'+
-      '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel</div>'+
-    '</div>'+
-  '</div>';
+  '</div></body></html>';
 }
 
 function buildOrdBioHtml(i,examens){
