@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.7
+     VERSION : V4.8
      DATE    : 2026-04-01
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
-       V4.7 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
+       V4.8 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
                            chargerEtablissements() au login — en mémoire toute la session
                            RDV patient : tuile 📅, liste, nouveau RDV, créneaux, confirmation
                            Fallback WhatsApp RDV désactivé (var whatsappDisabled=true)
@@ -667,10 +667,10 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-ico" style="background:rgba(217,48,37,.1);">📅</div>
           <div class="doss-tile-title">RDV</div>
           <div class="doss-tile-sub" id="rdvTileSub">Mes rendez-vous</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-            <span id="rdvTagConfirme" style="display:none;font-size:9px;font-weight:700;background:rgba(0,200,150,.15);color:var(--accent);border-radius:99px;padding:2px 7px;"></span>
-            <span id="rdvTagPropose" style="display:none;font-size:9px;font-weight:700;background:rgba(74,158,255,.15);color:#4a9eff;border-radius:99px;padding:2px 7px;"></span>
-            <span id="rdvTagAttente" style="display:none;font-size:9px;font-weight:700;background:rgba(245,158,11,.15);color:#F59E0B;border-radius:99px;padding:2px 7px;"></span>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;justify-content:center;min-height:20px;align-items:center;">
+            <span id="rdvTagConfirme" style="display:none;font-size:9px;font-weight:700;background:rgba(0,200,150,.15);color:var(--accent);border-radius:99px;padding:2px 8px;white-space:nowrap;"></span>
+            <span id="rdvTagPropose" style="display:none;font-size:9px;font-weight:700;background:rgba(74,158,255,.15);color:#4a9eff;border-radius:99px;padding:2px 8px;white-space:nowrap;"></span>
+            <span id="rdvTagAttente" style="display:none;font-size:9px;font-weight:700;background:rgba(245,158,11,.15);color:#F59E0B;border-radius:99px;padding:2px 8px;white-space:nowrap;"></span>
           </div>
         </div>
         <div class="doss-tile" onclick="ouvrirDossierMedical()" id="dossierMedTile">
@@ -2287,6 +2287,7 @@ async function envoyerDossier(email,nomMed){
     traitements_reguliers:cleanStr(traitementsStr,300),
     allergies:cleanStr(p.allergies||resume.allergies||'',200),
     antecedents:cleanStr(p.antecedents||resume.antecedents||'',300),
+    patient_sexe:p.sx=='H'?'Masculin':p.sx=='F'?'Féminin':'Non renseigné',
     statut:'en_attente',
     medecin_id:medObj?medObj.supabaseId:null
   };
@@ -2365,9 +2366,20 @@ async function envoyerDossier(email,nomMed){
     }catch(e){dbgWarn('Étape déclaratifs: '+e.message);}
   }
 
-  // ── ÉTAPE 5 : message patient ──
+  // ── ÉTAPE 5 : message patient + navigation ──
   addMsg('ai','Votre dossier a bien été transmis au '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié dès validation.');
-  toast(saveOk?'✅ Dossier envoyé':'⚠️ Erreur envoi — réessayez');
+  toast(saveOk?'✅ Dossier envoyé — votre médecin a été notifié':'⚠️ Erreur envoi — réessayez');
+
+  // Griser le bouton Dossier pour éviter les doublons
+  if(saveOk){
+    var btnDos=document.getElementById('btnDossier');
+    if(btnDos){btnDos.disabled=true;btnDos.textContent='✅ Envoyé';btnDos.style.opacity='0.5';btnDos.style.cursor='not-allowed';}
+    // Naviguer vers l'historique après 2 secondes
+    setTimeout(function(){
+      nav('historiqueScreen');
+      renderHistorique().catch(function(){});
+    },2000);
+  }
 
   // ── ÉTAPE 6 : onboarding nouveau patient — proposer upload ordonnance ──
   if(saveOk){
@@ -5895,7 +5907,7 @@ function buildOrdHtml(i){
     (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:10px 14px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:3px;">NOTES</div><div style="font-size:12px;">'+esc(ord.notes)+'</div></div>':'')+
     '<div style="flex:1;min-height:120px;padding:16px;display:flex;justify-content:flex-end;align-items:flex-end;">'+
       '<div style="width:170px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
-        '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
+        (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>')+
         '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
       '</div>'+
     '</div>'+
@@ -5958,7 +5970,7 @@ function buildOrdBioHtml(i,examens){
     '</div>'+
     '<div style="padding:16px;display:flex;justify-content:flex-end;">'+
       '<div style="width:170px;border:1px solid #D1D5DB;border-radius:8px;padding:12px;text-align:center;">'+
-        '<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>'+
+        (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:60px;">Signature & Cachet du médecin</div>')+
         '<div style="border-top:1px solid #1A2B3C;padding-top:5px;font-size:9px;font-weight:700;">'+esc(ord.medecin||'-')+'</div>'+
       '</div>'+
     '</div>'+
@@ -5976,7 +5988,7 @@ async function voirOrdonnanceHisto(i){
   // Charger ordonnance depuis Supabase
   if(!s.ordonnance&&s.supabaseId){
     try{
-      var r=await fetch(DB_URL+'?table=ordonnances&filter=consultation_id=eq.'+s.supabaseId+'&limit=1',{
+      var r=await fetch(DB_URL+'?table=ordonnances&select=*&filter=consultation_id=eq.'+s.supabaseId+'&limit=1',{
         headers:{'x-dokita-key':DOKITA_KEY}
       });
       var data=await r.json();
@@ -6001,7 +6013,7 @@ async function voirOrdonnanceHisto(i){
         var medSpec='';
         if(row.medecin_id){
           try{
-            var rm=await fetch(DB_URL+'?table=medecins&filter=id=eq.'+row.medecin_id+'&limit=1',{
+            var rm=await fetch(DB_URL+'?table=medecins&select=*&filter=id=eq.'+row.medecin_id+'&limit=1',{
               headers:{'x-dokita-key':DOKITA_KEY}
             });
             var dm=await rm.json();
@@ -6023,7 +6035,8 @@ async function voirOrdonnanceHisto(i){
           notes:row.justification||'',
           date:s.date,
           conforme:row.conforme_oms,
-          ordonnanceId:row.id
+          ordonnanceId:row.id,
+          signature_base64:row.signature_base64||null
         };
         dbg('Ordonnance chargée depuis Supabase ✅ medecin='+medNom);
       }
@@ -6156,7 +6169,7 @@ function telechargerOrdonnance(i){
       (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:12px 16px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div><div style="font-size:12px;">'+escHtml(ord.notes)+'</div></div>':'')+
       '<div style="padding:20px 16px;display:flex;justify-content:flex-end;flex:1;align-items:flex-end;">'+
         '<div style="width:200px;border:1px solid #D1D5DB;border-radius:8px;padding:14px;text-align:center;">'+
-          '<div style="font-size:9px;color:#6B7280;margin-bottom:70px;">Signature & Cachet du médecin</div>'+
+          (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:70px;">Signature & Cachet du médecin</div>')+
           '<div style="border-top:1px solid #1A2B3C;padding-top:6px;font-size:10px;font-weight:700;">'+escHtml(ord.medecin||'-')+'</div>'+
         '</div>'+
       '</div>'+
