@@ -1711,7 +1711,14 @@ function renderProfils(){
   btn.disabled=true; // on passe par l'espace profil maintenant
 }
 
-function selP(i){SEL=i;renderProfils();}
+async function selP(i){
+  SEL=i;
+  renderProfils();
+  // Rafraîchir profil Supabase à chaque sélection de profil
+  if(PROFILS[i]&&PROFILS[i].patientId){
+    await rafraichirProfilSupabase(PROFILS[i].patientId);
+  }
+}
 function delP(i){
   var p=PROFILS[i];
   if(!p)return;
@@ -1883,10 +1890,12 @@ function saveProfil(){
 // ══════════════════════════════
 // CONSULTATION
 // ══════════════════════════════
-function lancerConsult(){
+async function lancerConsult(){
   if(SEL<0)return;
   PREV_SCREEN='profilsScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false});
+  // Rafraîchir profil depuis Supabase avant de lancer la consultation
+  await rafraichirProfilSupabase(CURRENT.patientId);
   startChat();
 }
 
@@ -1908,6 +1917,68 @@ function lancerEph(){
     tel:'', lien:'ephemere', _age:a, _eph:true, _idx:-1
   };
   startChat();
+}
+
+
+// ══════════════════════════════
+// RAFRAÎCHISSEMENT PROFIL SUPABASE
+// Appelé à l'ouverture app, nouvelle consultation, reprise consultation
+// Garantit que antécédents, ALD, médicaments actifs sont à jour
+// ══════════════════════════════
+async function rafraichirProfilSupabase(patientId){
+  if(!patientId)return;
+  try{
+    // 1. Recharger profil patient
+    var rp=await fetch(DB_URL+'?table=patients&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var dp=await rp.json();
+    var pat=Array.isArray(dp)?dp[0]:(dp.data?dp.data[0]:null);
+    if(pat){
+      // Mettre à jour CURRENT avec les données fraîches
+      if(CURRENT&&CURRENT.patientId===patientId){
+        CURRENT.antecedents=pat.antecedents||CURRENT.antecedents||'';
+        CURRENT.allergies=pat.allergies||CURRENT.allergies||'';
+        CURRENT.poids=pat.poids||CURRENT.poids||'';
+        CURRENT.ville=pat.ville||CURRENT.ville||'';
+        CURRENT.traitements=pat.traitements_reguliers||CURRENT.traitements||'';
+      }
+      // Mettre à jour aussi PROFILS[SEL]
+      if(SEL>=0&&PROFILS[SEL]&&PROFILS[SEL].patientId===patientId){
+        PROFILS[SEL].antecedents=pat.antecedents||PROFILS[SEL].antecedents||'';
+        PROFILS[SEL].allergies=pat.allergies||PROFILS[SEL].allergies||'';
+        PROFILS[SEL].poids=pat.poids||PROFILS[SEL].poids||'';
+        PROFILS[SEL].ville=pat.ville||PROFILS[SEL].ville||'';
+        PROFILS[SEL].traitements=pat.traitements_reguliers||PROFILS[SEL].traitements||'';
+      }
+      dbg('Profil rafraîchi depuis Supabase ✅ '+patientId);
+    }
+
+    // 2. Recharger médicaments actifs (dossier_medical)
+    var rm=await fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&filter2=statut=eq.actif&filter3=type=eq.medicament_cours&limit=20',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var dm=await rm.json();
+    var meds=Array.isArray(dm)?dm:(dm.data||[]);
+    if(meds.length&&CURRENT&&CURRENT.patientId===patientId){
+      CURRENT._medsEncours=meds.map(function(m){return {nom:m.valeur||m.nom,dose:m.dose||''};});
+      dbg('Médicaments actifs rechargés: '+CURRENT._medsEncours.length);
+    }
+
+    // 3. Recharger ALD (dossier_medical type=ald)
+    var ra=await fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&filter2=statut=eq.actif&filter3=type=eq.ald&limit=10',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var da=await ra.json();
+    var alds=Array.isArray(da)?da:(da.data||[]);
+    if(alds.length&&CURRENT&&CURRENT.patientId===patientId){
+      CURRENT._aldsStr=alds.map(function(a){return a.valeur||a.nom;}).join(', ');
+      dbg('ALD rechargés: '+CURRENT._aldsStr);
+    }
+
+  }catch(e){
+    dbgWarn('rafraichirProfilSupabase erreur: '+e.message);
+  }
 }
 
 // ══════════════════════════════
@@ -4178,7 +4249,7 @@ function supprimerSession(i){
   renderHistorique();
 }
 
-function reprendreSession(i){
+async function reprendreSession(i){
   var key=getHistoKey();
   var sessions=[];
   try{var s=localStorage.getItem(key);if(s)sessions=JSON.parse(s);}catch(e){}
@@ -4186,6 +4257,8 @@ function reprendreSession(i){
   if(!session)return;
   // Marquer comme reprise pour ne pas dupliquer dans l'historique
   CURRENT._reprise=true;
+  // Rafraîchir profil depuis Supabase avant reprise
+  await rafraichirProfilSupabase(CURRENT.patientId);
   CID=session.cid||null; // restaurer le CID si sauvegardé
   msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
   document.getElementById('msgsList').innerHTML='';
