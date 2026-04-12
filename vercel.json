@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/pharmacie", "destination": "/pharmacie.html" }
+    { "source": "/pharmacie", "destination": "/pharmacie.html" },
+    { "source": "/video", "destination": "/video.html" }
   ]
 }
