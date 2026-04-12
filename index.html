@@ -6,7 +6,8 @@
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
-       V4.9 — 2026-04-11 : Signature médecin dans ordonnance · Template ordonnance Pro · Nav histo après envoi · Bouton dossier bloqué · Tags RDV centrés · Sexe dans email
+       V4.9 — 2026-04-12 : Message prévention téléphone après envoi dossier · Anamnèse dynamique (boutons OPTIONS) · Rafraîchissement profil Supabase · Générique sur ordonnance
+V4.9 — 2026-04-11 : Signature médecin dans ordonnance · Template ordonnance Pro · Nav histo après envoi · Bouton dossier bloqué · Tags RDV centrés · Sexe dans email
 V4.8 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
                            chargerEtablissements() au login — en mémoire toute la session
                            RDV patient : tuile 📅, liste, nouveau RDV, créneaux, confirmation
@@ -2477,6 +2478,7 @@ async function envoyerDossier(email,nomMed){
 
   // ── ÉTAPE 5 : message patient + navigation ──
   addMsg('ai','Votre dossier a bien été transmis au '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié dès validation.');
+  if(saveOk)addMsg('ai','📱 Gardez votre téléphone près de vous avec le son activé — votre médecin peut vous contacter pour une consultation audio ou vidéo dans les prochaines heures.');
   toast(saveOk?'✅ Dossier envoyé — votre médecin a été notifié':'⚠️ Erreur envoi — réessayez');
 
   // Griser le bouton Dossier pour éviter les doublons
