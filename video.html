@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+  <title>Dokita — Consultation</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'DM Sans',sans-serif;background:#0A1628;color:#fff;height:100vh;display:flex;flex-direction:column;}
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
+
+    #header{
+      background:#0D1F35;
+      padding:12px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid rgba(255,255,255,.1);
+      flex-shrink:0;
+    }
+    #header .logo{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;background:linear-gradient(135deg,#00C896,#0EA5E9);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    #header .sub{font-size:11px;color:rgba(255,255,255,.5);}
+    #status{font-size:12px;color:#00C896;font-weight:600;}
+
+    #waiting{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      text-align:center;
+    }
+    #waiting .ico{font-size:64px;margin-bottom:20px;animation:pulse 2s infinite;}
+    @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.08);}}
+    #waiting h2{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:10px;}
+    #waiting p{font-size:13px;color:rgba(255,255,255,.6);line-height:1.6;max-width:300px;}
+
+    #videoContainer{
+      display:none;
+      flex:1;
+      flex-direction:column;
+    }
+    #videoFrame{
+      flex:1;
+      border:none;
+      width:100%;
+    }
+
+    #footer{
+      padding:12px 16px;
+      background:#0D1F35;
+      border-top:1px solid rgba(255,255,255,.1);
+      font-size:10px;
+      color:rgba(255,255,255,.4);
+      text-align:center;
+      flex-shrink:0;
+    }
+
+    #btnRejoindre{
+      margin-top:24px;
+      background:linear-gradient(135deg,#00C896,#0EA5E9);
+      border:none;
+      border-radius:14px;
+      padding:16px 32px;
+      font-family:'Syne',sans-serif;
+      font-size:16px;
+      font-weight:700;
+      color:#0A1628;
+      cursor:pointer;
+      width:100%;
+      max-width:320px;
+    }
+    #btnRejoindre:disabled{opacity:.5;cursor:not-allowed;}
+
+    #infoData{
+      margin-top:16px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.1);
+      border-radius:12px;
+      padding:12px 16px;
+      font-size:11px;
+      color:rgba(255,255,255,.5);
+      max-width:320px;
+      text-align:left;
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <div class="logo">Dokita</div>
+    <div class="sub">Consultation médicale</div>
+  </div>
+  <div id="status">⏳ En attente</div>
+</div>
+
+<div id="waiting">
+  <div class="ico">🩺</div>
+  <h2>Votre consultation est prête</h2>
+  <p>Votre médecin Dokita vous attend. Cliquez sur le bouton ci-dessous pour rejoindre la consultation.</p>
+
+  <button id="btnRejoindre" onclick="rejoindre()">
+    📞 Rejoindre la consultation
+  </button>
+
+  <div id="infoData">
+    💡 Cette consultation consomme environ <span id="consData">7 Mo</span> de données internet pour 15 minutes.<br><br>
+    Assurez-vous d'être dans un endroit calme.
+  </div>
+</div>
+
+<div id="videoContainer">
+  <iframe id="videoFrame"
+    allow="camera;microphone;autoplay;display-capture"
+    style="flex:1;border:none;width:100%;height:100%;">
+  </iframe>
+</div>
+
+<div id="footer">
+  Dokita — Outil d'aide à la décision médicale · Confidentiel
+</div>
+
+<script>
+  // Récupérer le token depuis l'URL
+  // Format : /video?t=TOKEN&m=audio|video
+  var params = new URLSearchParams(window.location.search);
+  var token  = params.get('t');
+  var mode   = params.get('m') || 'audio';
+  var isAudio = mode === 'audio';
+
+  // Adapter le message data
+  document.getElementById('consData').textContent = isAudio ? '7 Mo' : '75 Mo';
+
+  // Adapter le bouton selon le mode
+  var btn = document.getElementById('btnRejoindre');
+  btn.textContent = isAudio ? '📞 Rejoindre la consultation audio' : '📹 Rejoindre la consultation vidéo';
+
+  if (!token) {
+    document.getElementById('waiting').innerHTML =
+      '<div style="font-size:48px;margin-bottom:16px;">⚠️</div>' +
+      '<h2>Lien invalide</h2>' +
+      '<p>Ce lien de consultation est invalide ou a expiré. Contactez votre médecin Dokita.</p>';
+    document.getElementById('btnRejoindre') && (document.getElementById('btnRejoindre').style.display = 'none');
+  }
+
+  function rejoindre() {
+    if (!token) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ Connexion en cours...';
+    document.getElementById('status').textContent = '🟢 En consultation';
+
+    // Construire l'URL Daily.co avec le token patient
+    // Le room_url est stocké dans le token — Daily.co le gère automatiquement
+    var dailyUrl = 'https://dokita.daily.co/' + params.get('r') + '?t=' + token;
+
+    // Afficher l'iframe
+    var frame = document.getElementById('videoFrame');
+    frame.src = dailyUrl;
+
+    document.getElementById('waiting').style.display = 'none';
+    var container = document.getElementById('videoContainer');
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.flex = '1';
+  }
+</script>
+
+</body>
+</html>
