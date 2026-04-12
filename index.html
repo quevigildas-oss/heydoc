@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.8
+     VERSION : V4.9
      DATE    : 2026-04-01
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
-       V4.8 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
+       V4.9 — 2026-04-11 : Signature médecin dans ordonnance · Template ordonnance Pro · Nav histo après envoi · Bouton dossier bloqué · Tags RDV centrés · Sexe dans email
+V4.8 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
                            chargerEtablissements() au login — en mémoire toute la session
                            RDV patient : tuile 📅, liste, nouveau RDV, créneaux, confirmation
                            Fallback WhatsApp RDV désactivé (var whatsappDisabled=true)
@@ -207,6 +208,10 @@ select.finput option{background:var(--bg3);}
 .msg.user .msg-t{text-align:right;}
 @keyframes mIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
 .typing-d{display:flex;gap:4px;padding:10px 14px;background:var(--card);border-radius:16px;border-bottom-left-radius:4px;border:1px solid var(--border);}
+.opt-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.opt-btn{background:var(--bg3);border:1.5px solid var(--border);border-radius:20px;padding:6px 14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .15s;}
+.opt-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,200,150,.08);}
+.opt-btn:disabled{cursor:not-allowed;}
 .typing-d span{width:6px;height:6px;background:var(--text3);border-radius:50%;animation:td 1.2s infinite;}
 .typing-d span:nth-child(2){animation-delay:.2s;}.typing-d span:nth-child(3){animation-delay:.4s;}
 @keyframes td{0%,100%{transform:translateY(0);opacity:.4;}50%{transform:translateY(-5px);opacity:1;}}
@@ -2025,11 +2030,38 @@ function addMsg(role,text){
   msgs.push({role:role,text:text,time:ti});
   var d=document.createElement('div');
   d.className='msg '+role;
+
+  // Détecter et extraire [OPTIONS: A | B | C]
+  var optionsHtml='';
+  var cleanText=text;
+  var optMatch=text.match(/\[OPTIONS:\s*([^\]]+)\]/);
+  if(optMatch&&role==='ai'){
+    var options=optMatch[1].split('|').map(function(o){return o.trim();}).filter(Boolean);
+    cleanText=text.replace(/\[OPTIONS:\s*[^\]]+\]/,'').trim();
+    optionsHtml='<div class="opt-btns">'+
+      options.map(function(opt){
+        var safeOpt=opt.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        return '<button class="opt-btn" data-val="'+safeOpt+'" onclick="choisirOption(this)">'+opt+'</button>';
+      }).join('')+
+    '</div>';
+  }
+
   d.innerHTML='<div class="msg-b">'+
-    text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').split('\n').join('<br>')+
-  '</div><div class="msg-t">'+ti+'</div>';
+    cleanText.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/_(.+?)_/g,'<em>$1</em>').split('\n').join('<br>')+
+  '</div>'+optionsHtml+'<div class="msg-t">'+ti+'</div>';
   document.getElementById('msgsList').appendChild(d);
   document.getElementById('msgsList').scrollTop=999999;
+}
+
+function choisirOption(btn){
+  var val=btn.getAttribute('data-val')||btn.textContent;
+  // Désactiver tous les boutons du même groupe
+  var btns=btn.parentElement.querySelectorAll('.opt-btn');
+  btns.forEach(function(b){b.disabled=true;b.style.opacity='0.5';});
+  btn.style.opacity='1';btn.style.fontWeight='700';btn.style.borderColor='var(--accent)';
+  // Envoyer comme message utilisateur
+  document.getElementById('chatInp').value=val;
+  sendMsg();
 }
 
 function showTyping(){
@@ -2049,15 +2081,21 @@ async function sendMsg(){
   addMsg('user',txt);showTyping();
   var p=CURRENT;
   var a=p._age||calcAge(p.naiss);
-  var ctx='[PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
+  // Contexte profil complet injecté dans le prompt AfriBot
+  var lienFamilial=p.lien||'';
+  var estEnfant=lienFamilial==='enfant'||lienFamilial==='Mon enfant';
+  var ctx='[PROFIL PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
     (a?', '+a+' ans':'')+
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+
     (p.taille?', '+p.taille+'cm':'')+
     (p.ville?', '+p.ville:'')+
     (p.allergies?', Allergies: '+p.allergies:'')+
-    (p.antecedents?', Antécédents: '+p.antecedents:'')+
-    (p.traitements?', ALD: '+p.traitements:'')+
+    (p.antecedents?', Antécédents personnels: '+p.antecedents:'')+
+    (p.traitements?', ALD/Traitements: '+p.traitements:'')+
+    (estEnfant&&p.antecedents_parent?', Antécédents familiaux (parent): '+p.antecedents_parent:'')+
+    (lienFamilial?', Lien familial: '+lienFamilial:'')+
+    (p._eph?', Profil: éphémère':'')+
     '] ';
 
   // Construire contexte médicaments connus pour question dynamique RAG
@@ -5938,6 +5976,7 @@ function buildOrdHtml(i){
     (ord.diagnostic?'<div class="diag"><div class="diaglbl">Diagnostic</div><div class="diagval">'+esc(ord.diagnostic)+'</div></div>':'')+
     '<div class="medstit">💊 Traitement prescrit</div>'+
     medsHtml+
+    '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:#166534;">💡 Ces médicaments sont prescrits sous leur nom générique — Le générique : c\'est moins cher et tout aussi efficace 😉</div>'+
     (ord.notes?'<div class="notesbox"><b style="display:block;margin-bottom:6px;">📝 Notes</b>'+esc(ord.notes).replace(/\n/g,'<br>')+'</div>':'')+
     '<div class="foot">'+
       '<div class="footmed"><strong>'+esc(ord.medecin||'-')+'</strong>'+esc(ord.specialite||'')+'</div>'+
