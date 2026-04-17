@@ -2238,7 +2238,12 @@ async function sendMsg(){
   if(isFirst&&!CURRENT._reprise){
     epidemioCtx=getContexteEpidemio(p.ville||'');
   }
-  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+medsConnusStr+' '+epidemioCtx+' '+txt:txt;
+  // Historique consultations passées — relecture pour détecter récurrences
+  var histoCtx='';
+  if(isFirst&&!CURRENT._reprise){
+    histoCtx=getContexteHistorique();
+  }
+  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+medsConnusStr+' '+epidemioCtx+' '+histoCtx+' '+txt:txt;
   // Construire historique messages pour /api/rag
   var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
   messages.push({role:'user',content:fullTxt});
@@ -7014,6 +7019,48 @@ function getContexteEpidemio(ville) {
   ctx+=' | ALERTES SAISONNIERES: '+alertes.join(' · ');
   ctx+=' | ALERTES PERMANENTES: '+permanentes.join(' · ');
   ctx+='. Utilise ce contexte pour prioriser tes suspicions diagnostiques et adapter tes recommandations de prevention.]';
+  return ctx;
+}
+
+
+// ══════════════════════════════
+// HISTORIQUE CONSULTATIONS — Résumé injecté dans AfriBot
+// Relecture des 5 dernières consultations pour détecter récurrences
+// ══════════════════════════════
+function getContexteHistorique(){
+  if(!HISTO_CACHE || HISTO_CACHE.length === 0) return '';
+
+  // Prendre les 5 dernières consultations (déjà triées desc)
+  var recentes = HISTO_CACHE.slice(0, 5);
+
+  var lignes = recentes.map(function(h, i){
+    var date = h.date || 'date inconnue';
+    var symp = (h.symptomes || '').slice(0, 120);
+    var diag = (h.diagnostic || '').slice(0, 80);
+    var statut = h.traite ? 'traité' : 'en attente';
+    return 'Consultation ' + (i+1) + ' (' + date + '): Symptômes: ' + symp +
+           (diag ? ' | Diagnostic: ' + diag : '') +
+           ' | Statut: ' + statut;
+  });
+
+  // Détecter récurrences — chercher mots-clés communs entre consultations
+  var tousSymptomes = recentes.map(function(h){ return (h.symptomes||'').toLowerCase(); });
+  var motsCles = ['fièvre','paludisme','toux','céphalée','diarrhée','vomissement',
+                  'douleur','fatigue','paludisme','malaria','fievre','mal de tete',
+                  'ventre','gorge','urine','essoufflement'];
+  var recurrences = [];
+  motsCles.forEach(function(mot){
+    var count = tousSymptomes.filter(function(s){ return s.includes(mot); }).length;
+    if(count >= 2) recurrences.push(mot + ' (' + count + 'x)');
+  });
+
+  var ctx = '[HISTORIQUE CONSULTATIONS DU PATIENT (' + recentes.length + ' dernières): ';
+  ctx += lignes.join(' || ');
+  if(recurrences.length > 0){
+    ctx += ' | ⚠️ PLAINTES RÉCURRENTES DÉTECTÉES: ' + recurrences.join(', ') +
+           ' — explorer si traitement précédent a échoué, si résistance ou maladie chronique sous-jacente';
+  }
+  ctx += '. Tiens compte de cet historique pour contextualiser le nouveau motif de consultation.]';
   return ctx;
 }
 
