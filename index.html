@@ -579,6 +579,30 @@ select.finput option{background:var(--bg3);}
     <div class="field"><label class="flabel">Téléphone</label><input class="finput" id="fTel" type="tel" placeholder="+225 07 00 00 00"/></div>
     <div class="field"><label class="flabel">Email</label><input class="finput" id="fEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
     <div class="field"><label class="flabel">Ville</label><input class="finput" id="fVille" placeholder="ex: Abidjan" autocomplete="off"/></div>
+    <div class="field"><label class="flabel">Langue préférée</label>
+      <select class="finput" id="fLangue">
+        <option value="">Français (défaut)</option>
+        <option value="lingala">Lingala</option>
+        <option value="kikongo">Kikongo</option>
+        <option value="munukutuba">Munukutuba</option>
+        <option value="tshiluba">Tshiluba</option>
+        <option value="swahili">Swahili</option>
+        <option value="dioula">Dioula / Bambara</option>
+        <option value="wolof">Wolof</option>
+        <option value="haoussa">Haoussa</option>
+        <option value="yoruba">Yoruba</option>
+        <option value="igbo">Igbo</option>
+        <option value="moore">Mooré</option>
+        <option value="ewe">Ewe / Mina</option>
+        <option value="fon">Fon</option>
+        <option value="fang">Fang</option>
+        <option value="peul">Peul / Fulfulde</option>
+        <option value="amharique">Amharique</option>
+        <option value="anglais">Anglais</option>
+        <option value="portugais">Portugais</option>
+        <option value="arabe">Arabe</option>
+      </select>
+    </div>
     <div class="field"><label class="flabel">Lien familial</label>
       <select class="finput" id="fLien">
         <option value="moi">Moi-même</option><option value="enfant">Mon enfant</option>
@@ -1783,7 +1807,7 @@ function setESx(s){ESX=s;document.getElementById('esxH').classList.toggle('on',s
 function openAdd(idx){
   EDIT_I=idx;SX='';
   document.getElementById('addTitle').textContent=idx>=0?'Modifier le profil':'Nouveau profil';
-  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel','fEmail','fVille','fGroupe'].forEach(function(id){document.getElementById(id).value='';});
+  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel','fEmail','fVille','fGroupe','fLangue'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fLien').value='moi';
   document.getElementById('sxH').classList.remove('on');
   document.getElementById('sxF').classList.remove('on');
@@ -1796,6 +1820,7 @@ function openAdd(idx){
     document.getElementById('fTaille').value=p.taille||'';
     document.getElementById('fPoids').value=p.poids||'';
     document.getElementById('fGroupe').value=p.groupe_sanguin||'';
+    document.getElementById('fLangue').value=p.langue||'';
     majIMC();
     document.getElementById('fTel').value=p.tel||'';
     document.getElementById('fEmail').value=p.email||'';
@@ -1816,6 +1841,7 @@ function saveProfil(){
     taille:document.getElementById('fTaille').value||'',
     poids:document.getElementById('fPoids').value||'',
     groupe_sanguin:document.getElementById('fGroupe').value||'',
+    langue:document.getElementById('fLangue').value||'',
     tel:document.getElementById('fTel').value||'',
     email:document.getElementById('fEmail').value||'',
     ville:document.getElementById('fVille').value||'',
@@ -1857,6 +1883,7 @@ function saveProfil(){
         email:SESSION_EMAIL,
         ville:p.ville||'Abidjan',
         groupe_sanguin:p.groupe_sanguin||null,
+        langue_preferee:p.langue||null,
         patient_id:p.patientId,
         code_patient:SESSION_CODE_TEMP,
         lien_familial:'moi'
@@ -2190,6 +2217,7 @@ async function sendMsg(){
     (p.traitements?', ALD/Traitements: '+p.traitements:'')+
     (estEnfant&&p.antecedents_parent?', Antécédents familiaux (parent): '+p.antecedents_parent:'')+
     (lienFamilial?', Lien familial: '+lienFamilial:'')+
+    (p.langue?', Langue préférée: '+p.langue+' (utiliser comme fallback si langue du message ambiguë)':'')+
     (p._eph?', Profil: éphémère':'')+
     '] ';
 
