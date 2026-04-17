@@ -559,8 +559,22 @@ select.finput option{background:var(--bg3);}
       <div class="sex-row"><div class="sex-btn" id="sxH" onclick="setSx('H')">👨 Masculin</div><div class="sex-btn" id="sxF" onclick="setSx('F')">👩 Féminin</div></div>
     </div>
     <div class="two-col">
-      <div class="field"><label class="flabel">Taille (cm)</label><input class="finput" id="fTaille" type="number" placeholder="170" min="30" max="250"/></div>
-      <div class="field"><label class="flabel">Poids (kg)</label><input class="finput" id="fPoids" type="number" placeholder="70" min="2" max="300"/></div>
+      <div class="field"><label class="flabel">Taille (cm)</label><input class="finput" id="fTaille" type="number" placeholder="170" min="30" max="250" oninput="majIMC()"/></div>
+      <div class="field"><label class="flabel">Poids (kg)</label><input class="finput" id="fPoids" type="number" placeholder="70" min="2" max="300" oninput="majIMC()"/></div>
+    </div>
+    <div class="two-col">
+      <div class="field"><label class="flabel">Groupe sanguin</label>
+        <select class="finput" id="fGroupe">
+          <option value="">Non renseigné</option>
+          <option value="A+">A+</option><option value="A-">A-</option>
+          <option value="B+">B+</option><option value="B-">B-</option>
+          <option value="AB+">AB+</option><option value="AB-">AB-</option>
+          <option value="O+">O+</option><option value="O-">O-</option>
+        </select>
+      </div>
+      <div class="field"><label class="flabel">IMC</label>
+        <div class="finput" id="imcDisplay" style="background:var(--bg3);color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;">—</div>
+      </div>
     </div>
     <div class="field"><label class="flabel">Téléphone</label><input class="finput" id="fTel" type="tel" placeholder="+225 07 00 00 00"/></div>
     <div class="field"><label class="flabel">Email</label><input class="finput" id="fEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
@@ -1769,7 +1783,7 @@ function setESx(s){ESX=s;document.getElementById('esxH').classList.toggle('on',s
 function openAdd(idx){
   EDIT_I=idx;SX='';
   document.getElementById('addTitle').textContent=idx>=0?'Modifier le profil':'Nouveau profil';
-  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel','fEmail','fVille'].forEach(function(id){document.getElementById(id).value='';});
+  ['fPrenom','fNom','fNaiss','fTaille','fPoids','fTel','fEmail','fVille','fGroupe'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('fLien').value='moi';
   document.getElementById('sxH').classList.remove('on');
   document.getElementById('sxF').classList.remove('on');
@@ -1781,6 +1795,8 @@ function openAdd(idx){
     document.getElementById('fNaiss').value=p.naiss||'';
     document.getElementById('fTaille').value=p.taille||'';
     document.getElementById('fPoids').value=p.poids||'';
+    document.getElementById('fGroupe').value=p.groupe_sanguin||'';
+    majIMC();
     document.getElementById('fTel').value=p.tel||'';
     document.getElementById('fEmail').value=p.email||'';
     document.getElementById('fVille').value=p.ville||'';
@@ -1799,6 +1815,7 @@ function saveProfil(){
   var p={prenom:pr,nom:no,naiss:na,sx:SX,
     taille:document.getElementById('fTaille').value||'',
     poids:document.getElementById('fPoids').value||'',
+    groupe_sanguin:document.getElementById('fGroupe').value||'',
     tel:document.getElementById('fTel').value||'',
     email:document.getElementById('fEmail').value||'',
     ville:document.getElementById('fVille').value||'',
@@ -1839,6 +1856,7 @@ function saveProfil(){
         telephone:p.tel||null,
         email:SESSION_EMAIL,
         ville:p.ville||'Abidjan',
+        groupe_sanguin:p.groupe_sanguin||null,
         patient_id:p.patientId,
         code_patient:SESSION_CODE_TEMP,
         lien_familial:'moi'
@@ -2156,11 +2174,16 @@ async function sendMsg(){
   // Contexte profil complet injecté dans le prompt AfriBot
   var lienFamilial=p.lien||'';
   var estEnfant=lienFamilial==='enfant'||lienFamilial==='Mon enfant';
+  // Calculer IMC si taille et poids disponibles
+  var imc=null;
+  if(p.poids&&p.taille){imc=Math.round(parseFloat(p.poids)/Math.pow(parseFloat(p.taille)/100,2)*10)/10;}
   var ctx='[PROFIL PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
     (a?', '+a+' ans':'')+
     (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+
     (p.taille?', '+p.taille+'cm':'')+
+    (imc?', IMC: '+imc:'')+(imc?(imc<18.5?' (maigreur)':imc<25?' (normal)':imc<30?' (surpoids)':' (obésité)'):'')+ 
+    (p.groupe_sanguin?', Groupe sanguin: '+p.groupe_sanguin:'')+
     (p.ville?', '+p.ville:'')+
     (p.allergies?', Allergies: '+p.allergies:'')+
     (p.antecedents?', Antécédents personnels: '+p.antecedents:'')+
@@ -6755,6 +6778,25 @@ function getPreventionItems(age, sexe){
   }
 
   return items;
+}
+
+
+// Calcul IMC en temps réel dans le formulaire profil
+function majIMC(){
+  var taille=parseFloat(document.getElementById('fTaille').value);
+  var poids=parseFloat(document.getElementById('fPoids').value);
+  var el=document.getElementById('imcDisplay');
+  if(!el)return;
+  if(taille>0&&poids>0){
+    var imc=Math.round(poids/Math.pow(taille/100,2)*10)/10;
+    var label=imc<18.5?'Maigreur':imc<25?'Normal':imc<30?'Surpoids':'Obésité';
+    var color=imc<18.5?'#D97706':imc<25?'#059669':imc<30?'#F59E0B':'#EF4444';
+    el.textContent=imc+' — '+label;
+    el.style.color=color;
+  }else{
+    el.textContent='—';
+    el.style.color='var(--text2)';
+  }
 }
 
 </script>
