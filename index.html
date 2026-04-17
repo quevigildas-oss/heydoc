@@ -2205,7 +2205,12 @@ async function sendMsg(){
   }
   var isFirst=msgs.filter(function(m){return m.role==='user';}).length===1;
   var traitsCtx=isFirst&&!CURRENT._reprise?getTraitsContextIA():'';
-  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+medsConnusStr+' '+txt:txt;
+  // Contexte épidémiologique temps réel (saison + alertes zone géo)
+  var epidemioCtx='';
+  if(isFirst&&!CURRENT._reprise){
+    epidemioCtx=getContexteEpidemio(p.ville||'');
+  }
+  var fullTxt=(isFirst&&!CURRENT._reprise)?ctx+(traitsCtx?' '+traitsCtx+' ':' ')+medsConnusStr+' '+epidemioCtx+' '+txt:txt;
   // Construire historique messages pour /api/rag
   var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
   messages.push({role:'user',content:fullTxt});
@@ -6797,6 +6802,191 @@ function majIMC(){
     el.textContent='—';
     el.style.color='var(--text2)';
   }
+}
+
+
+// ══════════════════════════════
+// CONTEXTE ÉPIDÉMIOLOGIQUE TEMPS RÉEL
+// Source : GBD 2023 · OMS AFRO · WHO AFRO Guidelines
+// Basé sur mois actuel + ville/pays du patient
+// ══════════════════════════════
+function getContexteEpidemio(ville) {
+  var mois = new Date().getMonth() + 1;
+  var v = (ville || '').toLowerCase();
+
+  // ── Zone géographique ────────────────────────────────────────
+  var pays = 'Afrique subsaharienne';
+  var zone = 'centrale';
+
+  if(v.match(/brazzaville|pointe.noire|dolisie|nkayi/)){
+    pays='Congo-Brazzaville'; zone='centrale';
+  } else if(v.match(/kinshasa|lubumbashi|goma|bukavu|kisangani/)){
+    pays='RDC'; zone='centrale';
+  } else if(v.match(/abidjan|yamoussoukro|bouak|daloa|korhogo/)){
+    pays="Cote d'Ivoire"; zone='ouest';
+  } else if(v.match(/douala|yaounde|garoua|maroua/)){
+    pays='Cameroun'; zone='centrale';
+  } else if(v.match(/libreville|port.gentil/)){
+    pays='Gabon'; zone='centrale';
+  } else if(v.match(/dakar|thies|kaolack|ziguinchor/)){
+    pays='Senegal'; zone='sahel';
+  } else if(v.match(/bamako|sikasso|mopti/)){
+    pays='Mali'; zone='sahel';
+  } else if(v.match(/ouagadougou|bobo.dioulasso/)){
+    pays='Burkina Faso'; zone='sahel';
+  } else if(v.match(/niamey|zinder|maradi/)){
+    pays='Niger'; zone='sahel';
+  } else if(v.match(/ndjamena|moundou/)){
+    pays='Tchad'; zone='sahel';
+  } else if(v.match(/lome|sokode/)){
+    pays='Togo'; zone='ouest';
+  } else if(v.match(/cotonou|porto.novo|parakou/)){
+    pays='Benin'; zone='ouest';
+  } else if(v.match(/accra|kumasi|tamale/)){
+    pays='Ghana'; zone='ouest';
+  } else if(v.match(/lagos|abuja|kano|ibadan/)){
+    pays='Nigeria'; zone='ouest';
+  } else if(v.match(/nairobi|mombasa/)){
+    pays='Kenya'; zone='est';
+  } else if(v.match(/dar.es.salaam|dodoma/)){
+    pays='Tanzanie'; zone='est';
+  } else if(v.match(/kampala/)){
+    pays='Ouganda'; zone='est';
+  } else if(v.match(/luanda/)){
+    pays='Angola'; zone='australe';
+  }
+
+  // ── Saison et alertes selon zone + mois ──────────────────────
+  var saison='';
+  var alertes=[];
+  var inArray=function(v,arr){return arr.indexOf(v)>=0;};
+
+  if(zone==='centrale'){
+    if(inArray(mois,[3,4,5,6])){
+      saison='Grande saison des pluies (mars-juin)';
+      alertes=[
+        'Paludisme TRES ELEVE — TDR systematique si fievre — diagnostic prioritaire absolu',
+        'Cholera et gastro-enterites augmentes — eau traitee obligatoire',
+        'Dengue et Chikungunya en circulation urbaine',
+        'Typhoide augmentee (contamination hydrique)',
+        'Infections respiratoires basses frequentes enfants < 5 ans',
+        'Helminthiases et schistosomiase augmentees apres pluies'
+      ];
+    } else if(inArray(mois,[9,10,11])){
+      saison='Petite saison des pluies (sept-nov)';
+      alertes=[
+        'Paludisme ELEVE — TDR si fievre',
+        'Cholera et diarrhees en surveillance',
+        'Arbovirus (dengue) en circulation'
+      ];
+    } else if(inArray(mois,[12,1,2])){
+      saison='Grande saison seche (dec-fev)';
+      alertes=[
+        'Paludisme MODERE — maintenir moustiquaire MILDA',
+        'Meningite bacterienne augmentee en saison seche',
+        'Pneumonies et infections respiratoires plus frequentes',
+        'Conjonctivites et trachome en zones rurales',
+        'Rougeole — epidemies possibles si couverture vaccinale insuffisante'
+      ];
+    } else {
+      saison='Petite saison seche (juil-aout)';
+      alertes=[
+        'Paludisme MODERE — maintenir moustiquaire MILDA',
+        'Periode de transition — surveiller fievres inexpliquees'
+      ];
+    }
+  } else if(zone==='ouest'){
+    if(inArray(mois,[4,5,6,7,8,9,10])){
+      saison='Saison des pluies (avr-oct)';
+      alertes=[
+        'Paludisme TRES ELEVE — premier diagnostic a eliminer si fievre',
+        'Cholera en alerte — eau traitee obligatoire',
+        'Fievre jaune endemique — verifier statut vaccinal (YF obligatoire)',
+        'Dengue en circulation zones urbaines cotieres',
+        'Rougeole — verifier carnet vaccination enfants',
+        'Helminthiases et schistosomiase augmentees'
+      ];
+    } else {
+      saison='Saison seche Harmattan (nov-mars)';
+      alertes=[
+        'Paludisme MODERE — TDR si fievre',
+        'ALERTE MENINGITE a meningocoque — harmattan = air sec = risque augmente',
+        'Infections respiratoires et rhinites augmentees avec harmattan',
+        'Conjonctivites frequentes avec poussiere',
+        'Rougeole — periode epidemique possible'
+      ];
+    }
+  } else if(zone==='sahel'){
+    if(inArray(mois,[6,7,8,9])){
+      saison='Saison des pluies (juin-sept)';
+      alertes=[
+        'Paludisme TRES ELEVE — pic de transmission — TDR systematique',
+        'Chimioprevention saisonniere (CPS) obligatoire : enfants 3 mois - 5 ans',
+        'Cholera en alerte zones rurales — eau potable critique',
+        'Typhoide augmentee — hygiene alimentaire',
+        'Rougeole — surveillance epidemique'
+      ];
+    } else if(inArray(mois,[11,12,1,2,3])){
+      saison='Harmattan — Saison seche (nov-mars)';
+      alertes=[
+        'ALERTE MENINGITE ELEVEE — Ceinture africaine : risque TRES ELEVE en harmattan',
+        'Vaccin MenACWY recommande si non vaccine en zone de ceinture',
+        'Paludisme FAIBLE — mais TDR si fievre inexpliquee',
+        'Infections respiratoires et pneumonies tres frequentes avec harmattan',
+        'Conjonctivites massives avec vent de sable',
+        'Rougeole — epidemies frequentes en saison seche'
+      ];
+    } else {
+      saison='Transition (avr-mai / oct)';
+      alertes=[
+        'Paludisme en hausse — debut de transmission',
+        'Preparer chimioprevention saisonniere pour enfants < 5 ans'
+      ];
+    }
+  } else if(zone==='est'){
+    if(inArray(mois,[3,4,5])){
+      saison='Longues pluies (mars-mai)';
+      alertes=[
+        'Paludisme ELEVE zones basse altitude',
+        'Rift Valley Fever possible apres fortes pluies (contact animal)',
+        'Cholera en alerte zones cotieres'
+      ];
+    } else if(inArray(mois,[10,11,12])){
+      saison='Courtes pluies (oct-dec)';
+      alertes=[
+        'Paludisme MODERE a ELEVE',
+        'Dengue en circulation zones urbaines'
+      ];
+    } else {
+      saison='Saison seche';
+      alertes=[
+        'Paludisme FAIBLE a MODERE selon altitude',
+        'Infections respiratoires en hausse',
+        'Meningite en surveillance'
+      ];
+    }
+  } else {
+    saison='Voir contexte local';
+    alertes=['Paludisme endemique — TDR si fievre'];
+  }
+
+  // ── Alertes permanentes Afrique subsaharienne ─────────────────
+  var permanentes=[
+    'VIH : depistage annuel recommande pour tous les adultes',
+    'Tuberculose : si toux > 2 semaines + amaigrissement ou fievre nocturne',
+    'Hepatite B : verifier statut vaccinal — vacciner si non immunise',
+    'Drepanocytose : depistage neonatal prioritaire',
+    'Hypertension et Diabete : mesure TA et glycemie a chaque consultation'
+  ];
+
+  // ── Contexte final injecte dans AfriBot ──────────────────────
+  var ctx='[CONTEXTE EPIDEMIOLOGIQUE AU '+new Date().toLocaleDateString('fr-FR')+': ';
+  ctx+='Pays: '+pays+' | Zone: '+zone;
+  ctx+=' | Saison: '+saison;
+  ctx+=' | ALERTES SAISONNIERES: '+alertes.join(' · ');
+  ctx+=' | ALERTES PERMANENTES: '+permanentes.join(' · ');
+  ctx+='. Utilise ce contexte pour prioriser tes suspicions diagnostiques et adapter tes recommandations de prevention.]';
+  return ctx;
 }
 
 </script>
