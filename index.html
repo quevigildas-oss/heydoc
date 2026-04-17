@@ -703,10 +703,10 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-sub">Carnet & Connues</div>
         </div>
 
-        <div class="doss-tile" onclick="ouvrirDossier('chirurgie','🏥','Opérations chirurgicales','Antécédents chirurgicaux')">
-          <div class="doss-tile-ico" style="background:rgba(217,48,37,.07);">🏥</div>
-          <div class="doss-tile-title">Chirurgie</div>
-          <div class="doss-tile-sub">Antécédents</div>
+        <div class="doss-tile" onclick="ouvrirPrevention()">
+          <div class="doss-tile-ico" style="background:rgba(0,168,120,.1);">🛡️</div>
+          <div class="doss-tile-title">Prévention</div>
+          <div class="doss-tile-sub">Dépistage & Vaccins</div>
         </div>
       </div>
     </div>
@@ -6594,6 +6594,181 @@ if('serviceWorker' in navigator){
     });
   });
 }
+
+// ══════════════════════════════
+// PRÉVENTION & DÉPISTAGE
+// ══════════════════════════════
+function ouvrirPrevention(){
+  var p = PROFILS[SEL]||{};
+  var age = p._age || calcAge(p.naiss) || 0;
+  var sexe = p.sx || ''; // 'H' ou 'F'
+
+  // Construire la liste selon l'âge et le sexe
+  var items = getPreventionItems(age, sexe);
+
+  var body = document.getElementById('preventionBody');
+  var sub  = document.getElementById('preventionSub');
+
+  var tranche = age < 2 ? '0-23 mois' : age < 10 ? '2-9 ans' : age < 15 ? '10-14 ans' : age < 25 ? '15-24 ans' : age < 50 ? '25-49 ans' : '50 ans et plus';
+  sub.textContent = 'Pour ' + (p.prenom||'vous') + ' · ' + age + ' ans · ' + tranche;
+
+  if(!items.length){
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">Aucune recommandation disponible pour ce profil.</div>';
+    nav('preventionScreen');
+    return;
+  }
+
+  // Regrouper par type
+  var groupes = {};
+  items.forEach(function(it){
+    if(!groupes[it.type]) groupes[it.type] = [];
+    groupes[it.type].push(it);
+  });
+
+  var typeOrder = ['🟢 Systématique','🟡 Recommandé','🔵 À risque'];
+  var typeColors = {'🟢 Systématique':'#059669','🟡 Recommandé':'#D97706','🔵 À risque':'#0284C7'};
+  var typeBg = {'🟢 Systématique':'rgba(5,150,105,.08)','🟡 Recommandé':'rgba(217,151,6,.08)','🔵 À risque':'rgba(2,132,199,.08)'};
+
+  var html = '';
+  typeOrder.forEach(function(type){
+    if(!groupes[type]) return;
+    html += '<div style="margin-bottom:20px;">';
+    html += '<div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:' + typeColors[type] + ';text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">' + type + '</div>';
+    groupes[type].forEach(function(it){
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">';
+      html += '<div style="font-size:22px;flex-shrink:0;">' + it.ico + '</div>';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">' + it.maladie + '</div>';
+      html += '<div style="font-size:11px;color:var(--text2);margin-bottom:2px;">' + it.acte + '</div>';
+      if(it.note) html += '<div style="font-size:10px;color:var(--text3);font-style:italic;">' + it.note + '</div>';
+      html += '</div>';
+      html += '<div style="font-size:9px;font-weight:700;padding:3px 7px;border-radius:6px;background:' + typeBg[type] + ';color:' + typeColors[type] + ';white-space:nowrap;flex-shrink:0;">' + it.freq + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+
+  html += '<div style="background:var(--bg3);border-radius:12px;padding:12px;margin-top:8px;font-size:10px;color:var(--text3);text-align:center;line-height:1.6;">';
+  html += '📚 Source : OMS AFRO · GBD 2023 · Recommandations Afrique subsaharienne<br>';
+  html += 'Ces recommandations sont indicatives — consultez votre médecin Dokita pour un bilan personnalisé.';
+  html += '</div>';
+
+  body.innerHTML = html;
+  nav('preventionScreen');
+}
+
+function getPreventionItems(age, sexe){
+  var items = [];
+  var H = sexe === 'H';
+  var F = sexe === 'F';
+  var tous = true;
+
+  // ── 0-23 MOIS ──────────────────────────────────────────────────
+  if(age < 2){
+    items = [
+      {ico:'💉',maladie:'Tuberculose',acte:'BCG',type:'🟢 Systématique',freq:'Naissance',note:''},
+      {ico:'💉',maladie:'Poliomyélite',acte:'VPO0 + VPO1/2/3 + IPV',type:'🟢 Systématique',freq:'Naissance + 6-10-14 sem',note:''},
+      {ico:'💉',maladie:'Hépatite B',acte:'HepB naissance + Pentavalent',type:'🟢 Systématique',freq:'Naissance + 6-10-14 sem',note:''},
+      {ico:'💉',maladie:'DTC (Diphtérie/Tétanos/Coqueluche)',acte:'Pentavalent',type:'🟢 Systématique',freq:'6-10-14 semaines',note:''},
+      {ico:'💉',maladie:'Pneumonie',acte:'PCV (pneumocoque)',type:'🟢 Systématique',freq:'6-10-14 semaines',note:''},
+      {ico:'💉',maladie:'Paludisme',acte:'RTS,S vaccin',type:'🟢 Systématique',freq:'6-9-12-18 mois',note:''},
+      {ico:'💉',maladie:'Rougeole',acte:'MCV1 + MCV2',type:'🟢 Systématique',freq:'9 mois + 15 mois',note:''},
+      {ico:'💉',maladie:'Fièvre jaune',acte:'Vaccin YF',type:'🟢 Systématique',freq:'9 mois',note:''},
+      {ico:'🛡️',maladie:'Malnutrition',acte:'Vitamine A + MUAC',type:'🟢 Systématique',freq:'6 mois puis /6 mois',note:''},
+      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanent',note:''},
+      {ico:'🔬',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
+      {ico:'🔬',maladie:'Drépanocytose',acte:'Électrophorèse Hb',type:'🟡 Recommandé',freq:'Naissance ou < 1 an',note:''},
+    ];
+  }
+
+  // ── 2-9 ANS ────────────────────────────────────────────────────
+  else if(age < 10){
+    items = [
+      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanente',note:''},
+      {ico:'🔬',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
+      {ico:'🛡️',maladie:'Paludisme',acte:'CPS (chimioprévention saisonnière)',type:'🟢 Systématique',freq:'Saison de transmission < 5 ans',note:''},
+      {ico:'🛡️',maladie:'Malnutrition',acte:'Vitamine A + MUAC',type:'🟢 Systématique',freq:'Tous les 6 mois jusqu\'a 5 ans',note:''},
+      {ico:'💊',maladie:'Parasites intestinaux',acte:'Albendazole 400mg',type:'🟢 Systématique',freq:'2×/an',note:''},
+      {ico:'💉',maladie:'Méningite',acte:'MenAfriVac (méningocoque A)',type:'🟢 Systématique',freq:'9 mois — zone ceinture',note:''},
+      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage si symptômes',type:'🟡 Recommandé',freq:'Si toux > 2 sem + fièvre',note:''},
+    ];
+  }
+
+  // ── 10-14 ANS ──────────────────────────────────────────────────
+  else if(age < 15){
+    items = [
+      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanent',note:''},
+      {ico:'🔬',maladie:'VIH',acte:'Dépistage',type:'🟡 Recommandé',freq:'Proposé dès 12 ans',note:''},
+      {ico:'💉',maladie:'Tétanos/Diphtérie',acte:'Rappel Td',type:'🟢 Systématique',freq:'1 rappel',note:''},
+      {ico:'💊',maladie:'Parasites/MTN',acte:'Albendazole + Praziquantel',type:'🟡 Recommandé',freq:'Programme scolaire',note:''},
+    ];
+    if(F) items.unshift({ico:'💉',maladie:'Cancer col utérin (HPV)',acte:'Vaccin HPV (1 dose)',type:'🟢 Systématique',freq:'9-14 ans — priorité OMS AFRO',note:''});
+  }
+
+  // ── 15-24 ANS ──────────────────────────────────────────────────
+  else if(age < 25){
+    items = [
+      {ico:'🔬',maladie:'VIH',acte:'Test + counseling',type:'🟢 Systématique',freq:'Annuel · Semestriel si risque eleve',note:''},
+      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA + TDR',type:'🟢 Systématique',freq:'Permanent',note:''},
+      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
+      {ico:'🔬',maladie:'Hépatite B',acte:'AgHBs',type:'🟡 Recommandé',freq:'1 fois si statut inconnu',note:''},
+      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage clinique',type:'🟡 Recommandé',freq:'Si toux > 2 sem + AEG',note:''},
+      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟡 Recommandé',freq:'Chaque consultation',note:'Opportuniste'},
+    ];
+    if(F) items.push({ico:'💉',maladie:'Cancer col utérin (HPV)',acte:'HPV rattrapage (2 doses)',type:'🟡 Recommandé',freq:'Jusqu\'a 26 ans si non vaccinée',note:''});
+    if(H) items.push({ico:'🛡️',maladie:'VIH',acte:'Circoncision (VMMC)',type:'🔵 À risque',freq:'Si non circoncis',note:'Réduction risque ~60%'});
+  }
+
+  // ── 25-49 ANS ──────────────────────────────────────────────────
+  else if(age < 50){
+    items = [
+      {ico:'🔬',maladie:'VIH',acte:'Test',type:'🟢 Systématique',freq:'Annuel',note:''},
+      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage clinique',type:'🟡 Recommandé',freq:'Si toux ≥ 2 sem',note:'Sueurs nocturnes, amaigrissement'},
+      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟢 Systématique',freq:'Chaque consultation',note:''},
+      {ico:'🩸',maladie:'Diabète type 2',acte:'Glycemie a jeun',type:'🟡 Recommandé',freq:'Tous les 3 ans si risque eleve',note:''},
+      {ico:'🔬',maladie:'Hépatite B',acte:'AgHBs',type:'🟡 Recommandé',freq:'1 fois si inconnu',note:''},
+      {ico:'🦟',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
+      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
+    ];
+    if(F){
+      items.push({ico:'🔬',maladie:'Cancer col utérin',acte:'VIA ou HPV DNA',type:'🟢 Systématique',freq:'Tous les 5-10 ans dès 25 ans',note:'Tous les 3-5 ans si VIH+'});
+      items.push({ico:'🩺',maladie:'Cancer sein',acte:'Examen clinique',type:'🟡 Recommandé',freq:'Annuel + autopalpation mensuelle',note:''});
+    }
+  }
+
+  // ── 50 ANS ET PLUS ─────────────────────────────────────────────
+  else {
+    items = [
+      {ico:'🔬',maladie:'VIH',acte:'Test',type:'🟢 Systématique',freq:'Annuel',note:''},
+      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟢 Systématique',freq:'Chaque consultation',note:''},
+      {ico:'🩸',maladie:'Diabète type 2',acte:'Glycémie',type:'🟢 Systématique',freq:'Tous les 2 ans',note:''},
+      {ico:'👁️',maladie:'Cataracte',acte:'Examen ophtalmologique',type:'🟡 Recommandé',freq:'Annuel',note:'1ère cause cécité Afrique'},
+      {ico:'🔬',maladie:'Tuberculose',acte:'Rx pulmonaire / crachats',type:'🟡 Recommandé',freq:'Si toux chronique',note:''},
+      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
+      {ico:'🩺',maladie:'Insuffisance rénale',acte:'Créatinine + protéinurie',type:'🟡 Recommandé',freq:'Annuel si HTA ou diabète',note:''},
+    ];
+    if(F){
+      items.push({ico:'🔬',maladie:'Cancer col utérin',acte:'VIA / HPV DNA',type:'🟢 Systématique',freq:'Jusqu\'a 65 ans — tous les 5 ans',note:''});
+      items.push({ico:'🩺',maladie:'Cancer sein',acte:'Examen clinique',type:'🟡 Recommandé',freq:'Annuel',note:''});
+    }
+    if(H) items.push({ico:'🔬',maladie:'Cancer prostate',acte:'PSA + TR',type:'🔵 À risque',freq:'Dès 50 ans (45 si ATCD)',note:''});
+  }
+
+  return items;
+}
+
 </script>
+
+<!-- ══ PRÉVENTION & DÉPISTAGE ══ -->
+<div class="screen" id="preventionScreen">
+  <div class="hdr">
+    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
+    <div class="hdr-ico" style="background:rgba(0,168,120,.15);">🛡️</div>
+    <div style="flex:1"><div class="hdr-title">Prévention</div><div class="hdr-sub" id="preventionSub">Dépistage & Vaccins recommandés</div></div>
+    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
+  </div>
+  <div class="sbody" id="preventionBody" style="padding:16px;"></div>
+</div>
+
 </body>
 </html>
