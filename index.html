@@ -1309,9 +1309,10 @@ function genConsultId(patientId){
 // CONFIG
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
-var RAG_URL   ='https://heydoc-medecin.vercel.app/api/rag';
-var SAVE_URL  ='https://heydoc-medecin.vercel.app/api/save';
-var DB_URL    ='https://heydoc-medecin.vercel.app/api/db';
+var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
+var SAVE_URL     ='https://heydoc-medecin.vercel.app/api/save';
+var DB_URL       ='https://heydoc-medecin.vercel.app/api/db';
+var EXTRACT_URL  ='https://heydoc-medecin.vercel.app/api/extract-examen';
 
 // ══════════════════════════════
 // STATE
@@ -5099,7 +5100,7 @@ async function ajouterResultatReseau(input, examenId, nomExamen){
   if(file.size>4*1024*1024){toast('⚠️ Fichier trop lourd (max 4 MB)');return;}
   var p=PROFILS[SEL];
   if(!p||!p.patientId){toast('⚠️ Profil non disponible');return;}
-  toast('⏳ Envoi en cours...');
+  toast('⏳ Analyse en cours...');
   try{
     var base64=await new Promise(function(res,rej){
       var reader=new FileReader();
@@ -5107,6 +5108,44 @@ async function ajouterResultatReseau(input, examenId, nomExamen){
       reader.onerror=rej;
       reader.readAsDataURL(file);
     });
+
+    // ── ÉTAPE 1 : Extraction IA des valeurs par Claude Vision ──
+    var extractionIA=null;
+    var resultatTexte='';
+    try{
+      toast('🤖 Extraction IA des valeurs...');
+      var pCtx=(p.prenom||'')+(p._age?', '+p._age+' ans':'')+(p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'');
+      var extR=await fetch(EXTRACT_URL,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({
+          base64:base64,
+          mime_type:file.type,
+          nom_examen:nomExamen||'',
+          patient_context:pCtx
+        })
+      });
+      extractionIA=await extR.json();
+      if(extractionIA&&!extractionIA.erreur&&extractionIA.valeurs){
+        // Construire un résumé texte des valeurs extraites
+        var lignes=extractionIA.valeurs.map(function(v){
+          var flag=v.statut==='critique'?'🚨 ':v.statut==='eleve'?'⬆️ ':v.statut==='bas'?'⬇️ ':'✅ ';
+          return flag+v.parametre+': '+v.valeur+' '+v.unite+(v.norme?' (norme: '+v.norme+')':'');
+        });
+        resultatTexte=lignes.join(' | ');
+        if(extractionIA.interpretation_globale)resultatTexte+=' || '+extractionIA.interpretation_globale;
+        dbg('Extraction IA OK: '+extractionIA.valeurs.length+' valeurs');
+      }else{
+        dbgWarn('Extraction IA: '+JSON.stringify(extractionIA).slice(0,100));
+      }
+    }catch(e){dbgWarn('Extraction IA échouée: '+e.message);}
+
+    // Afficher alertes si valeurs critiques
+    if(extractionIA&&extractionIA.alertes&&extractionIA.alertes.length){
+      toast('🚨 Valeurs critiques détectées — médecin alerté');
+    }
+
+    // ── ÉTAPE 2 : Sauvegarder dans dossier_medical (fichier + résultat extrait) ──
     var nom=nomExamen?('Résultat — '+nomExamen+' — '+new Date().toLocaleDateString('fr-FR')):('Résultat labo — '+new Date().toLocaleDateString('fr-FR'));
     var r=await fetch(DB_URL,{
       method:'POST',
@@ -5123,28 +5162,108 @@ async function ajouterResultatReseau(input, examenId, nomExamen){
           visible_medecin:true,
           source:'prescrit_dokita',
           statut:'actif',
-          note:examenId||''
+          note:examenId||'',
+          resultat_ia:resultatTexte||null,
+          extraction_json:extractionIA?JSON.stringify(extractionIA):null
         }
       })
     });
     var data=await r.json();
     if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
 
-    // Si lié à un examen prescrit → PATCH statut resultat_recu
+    // ── ÉTAPE 3 : PATCH examen prescrit → statut resultat_recu + résultat ──
     if(examenId){
       try{
         await fetch(DB_URL+'?table=examens&id='+examenId,{
           method:'PATCH',
           headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-          body:JSON.stringify({statut:'resultat_recu',date_realisation:new Date().toISOString()})
+          body:JSON.stringify({
+            statut:'resultat_recu',
+            resultat:resultatTexte||'Fichier uploadé',
+            date_realisation:new Date().toISOString()
+          })
         });
         dbg('Examen '+examenId+' → resultat_recu');
       }catch(e){dbgWarn('PATCH examen: '+e.message);}
     }
 
-    toast('✅ Résultat ajouté — votre médecin peut le consulter');
+    // ── ÉTAPE 4 : Afficher résumé à l'utilisateur ──
+    if(extractionIA&&!extractionIA.erreur&&extractionIA.valeurs&&extractionIA.valeurs.length){
+      afficherResultatExtraction(extractionIA, nomExamen);
+    }else{
+      toast('✅ Résultat ajouté — votre médecin peut le consulter');
+    }
     chargerDossierDokita();
   }catch(e){toast('❌ '+e.message);}
+}
+
+function afficherResultatExtraction(extraction, nomExamen){
+  // Supprimer modal existant
+  var old=document.getElementById('extractionModal');if(old)old.remove();
+
+  var alertesCritiques=extraction.alertes&&extraction.alertes.length;
+  var html='<div style="position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;overflow:auto;">';
+  html+='<div style="background:var(--bg2);border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto;padding-bottom:calc(20px + var(--sb));">';
+
+  // Header
+  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
+  html+='<div style="font-size:24px;">🤖</div>';
+  html+='<div>';
+  html+='<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--text);">Analyse IA — '+(nomExamen||extraction.type_examen||'Résultat')+'</div>';
+  if(extraction.date_examen)html+='<div style="font-size:11px;color:var(--text3);">'+extraction.date_examen+(extraction.laboratoire?' · '+extraction.laboratoire:'')+'</div>';
+  html+='</div></div>';
+
+  // Alertes critiques
+  if(alertesCritiques){
+    html+='<div style="background:#FEF2F2;border:1.5px solid #EF4444;border-radius:12px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="font-size:11px;font-weight:700;color:#EF4444;text-transform:uppercase;margin-bottom:6px;">🚨 Valeurs critiques</div>';
+    extraction.alertes.forEach(function(a){
+      html+='<div style="font-size:12px;color:#7F1D1D;margin-bottom:3px;">• '+a+'</div>';
+    });
+    html+='</div>';
+  }
+
+  // Valeurs extraites
+  html+='<div style="margin-bottom:12px;">';
+  extraction.valeurs.forEach(function(v){
+    var color=v.statut==='critique'?'#EF4444':v.statut==='eleve'?'#F59E0B':v.statut==='bas'?'#3B82F6':'#10B981';
+    var ico=v.statut==='critique'?'🚨':v.statut==='eleve'?'⬆️':v.statut==='bas'?'⬇️':'✅';
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">';
+    html+='<div style="font-size:16px;">'+ico+'</div>';
+    html+='<div style="flex:1;">';
+    html+='<div style="font-size:13px;font-weight:600;color:var(--text);">'+v.parametre+'</div>';
+    if(v.interpretation)html+='<div style="font-size:11px;color:var(--text3);">'+v.interpretation+'</div>';
+    html+='</div>';
+    html+='<div style="text-align:right;">';
+    html+='<div style="font-size:14px;font-weight:700;color:'+color+';">'+v.valeur+' <span style="font-size:10px;font-weight:400;">'+v.unite+'</span></div>';
+    if(v.norme)html+='<div style="font-size:10px;color:var(--text3);">Norme: '+v.norme+'</div>';
+    html+='</div></div>';
+  });
+  html+='</div>';
+
+  // Interprétation globale
+  if(extraction.interpretation_globale){
+    html+='<div style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:12px;">';
+    html+='<div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:6px;">Interprétation</div>';
+    html+='<div style="font-size:12px;color:var(--text);line-height:1.5;">'+extraction.interpretation_globale+'</div>';
+    html+='</div>';
+  }
+
+  // Recommandations
+  if(extraction.recommandations){
+    html+='<div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:12px;padding:12px;margin-bottom:16px;">';
+    html+='<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;margin-bottom:6px;">Pour le médecin</div>';
+    html+='<div style="font-size:12px;color:var(--text);line-height:1.5;">'+extraction.recommandations+'</div>';
+    html+='</div>';
+  }
+
+  html+='<button onclick="document.getElementById(\'extractionModal\').remove()" style="width:100%;background:var(--grad);border:none;border-radius:12px;padding:14px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">✅ Résultat transmis au médecin</button>';
+  html+='</div></div>';
+
+  var modal=document.createElement('div');
+  modal.id='extractionModal';
+  modal.innerHTML=html;
+  document.body.appendChild(modal);
 }
 
 function ouvrirDocument(id,nom,url,isBase64,mime){
