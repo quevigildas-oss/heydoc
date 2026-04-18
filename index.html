@@ -2321,7 +2321,7 @@ function renderMeds(list){
       '<div class="r-spec">'+m.specialite+(m.note?' · ⭐'+m.note:'')+(m.tarif?' · '+m.tarif:'')+'</div>'+
       '<div class="r-btns">'+
         (tel?'<button class="rb call" onclick="window.location.href=\'tel:'+tel+'\'">📞 Appeler</button>':'')+
-        (em?'<button class="rb dos" onclick="envoyerDossier(\''+es+'\',\''+ns+'\')">📋 Dossier</button>':'')+
+        (em?'<button class="rb dos" id="btnDossier" onclick="envoyerDossier(\''+es+'\',\''+ns+'\')">📋 Dossier</button>':'')+
       '</div>'+
     '</div>';
   }).join('');
