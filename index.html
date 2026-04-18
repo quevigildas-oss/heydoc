@@ -5180,7 +5180,8 @@ async function ajouterResultatReseau(input, examenId, nomExamen){
           body:JSON.stringify({
             statut:'resultat_recu',
             resultat:resultatTexte||'Fichier uploadé',
-            date_realisation:new Date().toISOString()
+            date_realisation:new Date().toISOString(),
+            extraction_json:extractionIA&&!extractionIA.erreur?extractionIA:null
           })
         });
         dbg('Examen '+examenId+' → resultat_recu');
