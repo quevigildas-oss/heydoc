@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.10
-     DATE    : 2026-04-21 07:50:07
+     VERSION : V4.11
+     DATE    : 2026-04-21 20:42:05
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.11 — 2026-04-21 : Onglet Hors réseau supprimé · Docs déclaratifs intégrés dans Réseau Dokita
        V4.10 — 2026-04-21 : DB_URL + SAVE_URL → heydoc-mu (séparation architecturale patient/médecin) · EXTRACT_URL déjà sur heydoc-mu
        V4.9 — 2026-04-12 : Message prévention téléphone après envoi dossier · Anamnèse dynamique (boutons OPTIONS) · Rafraîchissement profil Supabase · Générique sur ordonnance
 V4.9 — 2026-04-11 : Signature médecin dans ordonnance · Template ordonnance Pro · Nav histo après envoi · Bouton dossier bloqué · Tags RDV centrés · Sexe dans email
@@ -763,8 +764,7 @@ select.finput option{background:var(--bg3);}
   </div>
   <!-- Onglets -->
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--card);flex-shrink:0;">
-    <div id="tabDokita" onclick="switchDossierTab('dokita')" style="flex:1;padding:12px;text-align:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);cursor:pointer;">🔵 Réseau Dokita</div>
-    <div id="tabHorsReseau" onclick="switchDossierTab('hors_reseau')" style="flex:1;padding:12px;text-align:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer;">📝 Hors réseau</div>
+    <div id="tabDokita" style="flex:1;padding:12px;text-align:center;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent);">🔵 Mon Dossier Médical</div>
   </div>
   <div class="sbody" id="dossierMedBody">
     <div style="text-align:center;padding:40px;color:var(--text3);">⏳ Chargement...</div>
@@ -2732,22 +2732,8 @@ function ouvrirDossierMedical(){
 // Alias pour compatibilité (appelé depuis badge analyses)
 function ouvrirAnalyses(){ouvrirDossierMedical();}
 
-function switchDossierTab(tab){
-  DOSSIER_TAB_ACTIF=tab;
-  // Style onglets
-  var tabDokita=document.getElementById('tabDokita');
-  var tabHors=document.getElementById('tabHorsReseau');
-  if(tabDokita){
-    tabDokita.style.color=tab==='dokita'?'var(--accent)':'var(--text3)';
-    tabDokita.style.borderBottom=tab==='dokita'?'2px solid var(--accent)':'2px solid transparent';
-  }
-  if(tabHors){
-    tabHors.style.color=tab==='hors_reseau'?'var(--accent)':'var(--text3)';
-    tabHors.style.borderBottom=tab==='hors_reseau'?'2px solid var(--accent)':'2px solid transparent';
-  }
-  if(tab==='dokita') chargerDossierDokita();
-  else chargerDossierHorsReseau();
-}
+function switchDossierTab(tab){chargerDossierDokita();}
+
 
 async function chargerDossierDokita(){
   var el=document.getElementById('dossierMedBody');
@@ -2831,6 +2817,59 @@ async function chargerDossierDokita(){
   // Sauvegarder données pour les sous-écrans
   el._examens=examensSupabase;
   el._ordos=ordos;
+
+  // ── Section documents déclaratifs (ex Hors réseau) ──
+  var addBtn='<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
+  var disclaimer='<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">⚠️ Les documents que vous ajoutez ici seront vérifiés par votre médecin Dokita. Vous certifiez qu\'ils vous appartiennent et sont authentiques.</div>';
+
+  var docsHtml='<div style="margin-top:16px;" id="horsReseauSection">'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">📁 Mes documents</div>'+
+    addBtn+disclaimer+
+    '<div id="docsDeclList"><div style="text-align:center;padding:16px;color:var(--text3);font-size:11px;">⏳ Chargement...</div></div>'+
+  '</div>';
+  el.innerHTML+=docsHtml;
+
+  // Charger les docs déclaratifs async
+  fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=source=eq.declaratif_patient&filter3=statut=eq.actif&order=created_at.desc&limit=50',{
+    headers:{'x-dokita-key':DOKITA_KEY}
+  }).then(function(r){return r.json();}).then(function(data){
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    var list=document.getElementById('docsDeclList');
+    if(!list)return;
+    if(!rows.length){
+      list.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:11px;">'+
+        '<div style="font-size:32px;margin-bottom:8px;">📂</div>'+
+        'Aucun document ajouté<br><span style="font-size:10px;">Ordonnances externes, radios, certificats...</span>'+
+      '</div>';
+      return;
+    }
+    var byType={};
+    rows.forEach(function(doc){var t=doc.type_document||'autre';if(!byType[t])byType[t]=[];byType[t].push(doc);});
+    var html='';
+    Object.keys(byType).forEach(function(type){
+      var tInfo=DOCS_TYPES[type]||DOCS_TYPES['autre'];
+      html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;margin:12px 0 6px;">'+tInfo.ico+' '+tInfo.label+'s</div>';
+      byType[type].forEach(function(doc){
+        var dateAff=doc.created_at?new Date(doc.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
+        var badge=doc.source==='confirme_medecin'?
+          '<span style="font-size:9px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:4px;padding:1px 5px;">✅ Confirmé</span>':
+          '<span style="font-size:9px;font-weight:700;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:4px;padding:1px 5px;">📝 En attente</span>';
+        html+='<div style="background:var(--card);border:1px solid '+tInfo.border+';border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;" onclick="ouvrirDocument(\''+doc.id+'\',\''+escHtml(doc.nom||'Document')+'\',\''+escHtml(doc.url||'')+'\',\''+escHtml(doc.contenu_base64?'base64':'')+'\',\''+escHtml(doc.mime_type||'\')')+'">'+
+          '<div style="width:40px;height:40px;border-radius:10px;background:'+tInfo.color+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+tInfo.ico+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
+            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
+            '<div style="margin-top:4px;">'+badge+'</div>'+
+          '</div>'+
+          '<div style="font-size:20px;color:var(--text3);">›</div>'+
+        '</div>';
+      });
+    });
+    list.innerHTML=html;
+  }).catch(function(){
+    var list=document.getElementById('docsDeclList');
+    if(list)list.innerHTML='';
+  });
 }
 
 function ouvrirDossierExamens(){
