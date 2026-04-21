@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.14
-     DATE    : 2026-04-21 21:21:45
+     VERSION : V4.15
+     DATE    : 2026-04-21 21:33:07
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2799,7 +2799,6 @@ async function chargerDossierDokita(){
 
   var html=
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'+
-    // Examens
     tuileGrille('ouvrirDossierExamens()',
       examAFaire>0?'rgba(239,68,68,.3)':'var(--border)',
       '🧪','Examens prescrits',
@@ -2807,34 +2806,24 @@ async function chargerDossierDokita(){
       : examFaits>0 ? badge(examFaits+' reçu'+(examFaits>1?'s':''),'var(--accent)','rgba(0,200,150,.1)','rgba(0,200,150,.3)')
       : '<span style="font-size:11px;color:var(--text3);">Aucun prescrit</span>'
     )+
-    // Ordonnances
     tuileGrille('ouvrirDossierOrdos()',
       ordosActives.length>0?'rgba(99,102,241,.3)':'var(--border)',
       '💊','Ordonnances',
       ordosActives.length>0 ? badge(ordosActives.length+' active'+(ordosActives.length>1?'s':''),'#818cf8','rgba(99,102,241,.12)','rgba(99,102,241,.3)')
       : '<span style="font-size:11px;color:var(--text3);">Aucune active</span>'
     )+
-    // Antécédents (pleine largeur)
-    '<div onclick="ouvrirDossierAntecedents()" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
-      '<div style="font-size:28px;margin-bottom:6px;">📋</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Antécédents médicaux</div>'+
-      (antecedents?'<span style="font-size:11px;color:#ef4444;">'+escHtml(antecedents.slice(0,60)+(antecedents.length>60?'...':''))+'</span>'
-      :'<span style="font-size:11px;color:var(--text3);">Aucun renseigné</span>')+
+    tuileGrille('ouvrirDossierDocs(\'radio\')',   countByType['radio']>0?DOCS_TYPES['radio'].border:'var(--border)',             '🩻','Imagerie / Radio',  badgeCount(countByType['radio']||0,      DOCS_TYPES['radio']))+
+    tuileGrille('ouvrirDossierDocs(\'certificat\')', countByType['certificat']>0?DOCS_TYPES['certificat'].border:'var(--border)','📄','Certificats',        badgeCount(countByType['certificat']||0,  DOCS_TYPES['certificat']))+
+    tuileGrille('ouvrirDossierDocs(\'autre\')',   countByType['autre']>0?DOCS_TYPES['autre'].border:'var(--border)',             '📎','Autres documents',   badgeCount(countByType['autre']||0,      DOCS_TYPES['autre']))+
+    tuileGrille('ouvrirDossierAntecedents()',
+      'var(--border)','📋','Antécédents',
+      antecedents?'<span style="font-size:10px;color:#ef4444;">'+escHtml(antecedents.slice(0,30)+(antecedents.length>30?'...':''))+'</span>'
+      :'<span style="font-size:11px;color:var(--text3);">Aucun</span>'
+    )+
     '</div>'+
-    // Tuiles docs
-    tuileGrille('ouvrirDossierDocs(\'radio\')',   countByType['radio']>0?DOCS_TYPES['radio'].border:'var(--border)',       '🩻','Imagerie / Radio',  badgeCount(countByType['radio']||0,      DOCS_TYPES['radio']))+
-    tuileGrille('ouvrirDossierDocs(\'certificat\')', countByType['certificat']>0?DOCS_TYPES['certificat'].border:'var(--border)', '📄','Certificats', badgeCount(countByType['certificat']||0,  DOCS_TYPES['certificat']))+
-    '<div onclick="ouvrirDossierDocs(\'autre\')" style="background:var(--card);border:1px solid '+(countByType['autre']>0?DOCS_TYPES['autre'].border:'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
-      '<div style="font-size:28px;margin-bottom:6px;">📎</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Autres documents</div>'+
-      badgeCount(countByType['autre']||0, DOCS_TYPES['autre'])+
+    '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--text2);line-height:1.5;text-align:center;">'+
+      '⚠️ Les documents ajoutés seront vérifiés par votre médecin. Vous certifiez qu\'ils vous appartiennent et sont authentiques.'+
     '</div>'+
-    '</div>'+
-    // Message responsabilité
-    '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--text2);line-height:1.5;">'+
-      '⚠️ Les documents que vous ajoutez seront vérifiés par votre médecin Dokita. Vous certifiez qu\'ils vous appartiennent et sont authentiques.'+
-    '</div>'+
-    // Bouton ajouter
     '<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:13px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
 
   el.innerHTML=html;
@@ -5438,7 +5427,7 @@ function ouvrirModalAjoutDoc(){
       '</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Nom / Description</div>'+
       '<input id="docNomInput" type="text" placeholder="Ex: Analyse sang 28/03/2026" style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;font-family:\'DM Sans\',sans-serif;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;margin-bottom:16px;">'+
-      '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text2);line-height:1.5;">'+
+      '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:11px;color:var(--text2);line-height:1.5;text-align:center;">'+
         '⚠️ <strong style="color:var(--warn);">Responsabilité</strong> — En uploadant ce document, vous certifiez qu\'il vous appartient et qu\'il est authentique. Dokita ne peut être tenu responsable des informations déclarées par le patient.'+
       '</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Fichier ou Photo</div>'+
@@ -7347,4 +7336,11 @@ function afficherImageModal(url, titre){
   var old=document.getElementById('imgViewModal');if(old)old.remove();
   var modal=document.createElement('div');
   modal.id='imgViewModal';
-  modal.style.cssText='position
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:600px;margin-bottom:12px;">'+
+      '<div style="font-size:13px;font-weight:700;color:#fff;">'+titre+'</div>'+
+      '<button onclick="document.getElementById(\'imgViewModal\').remove()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✕ Fermer</button>'+
+    '</div>'+
+    '<img src="'+url+'" style="max-width:100%;max-height:80vh;border-radius:12px;object-fit:contain;" />';
+  document.body.appendChild(modal
