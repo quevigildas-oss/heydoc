@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.12
-     DATE    : 2026-04-21 21:02:30
+     VERSION : V4.13
+     DATE    : 2026-04-21 21:13:44
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2742,130 +2742,117 @@ async function chargerDossierDokita(){
   if(!p){el.innerHTML='<div class="detail-empty">Sélectionnez un profil</div>';return;}
   var patId=p.patientId||'';
 
-  // Charger examens + ordonnances en parallèle
-  var examensSupabase=[], ordos=[];
+  var examensSupabase=[], ordos=[], docs=[];
   try{
-    var [rEx,rOrd]=await Promise.all([
+    var [rEx,rOrd,rDocs]=await Promise.all([
       fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=50',{headers:{'x-dokita-key':DOKITA_KEY}}),
-      fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.envoyee_patient&order=created_at.desc&limit=10',{headers:{'x-dokita-key':DOKITA_KEY}})
+      fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.envoyee_patient&order=created_at.desc&limit=10',{headers:{'x-dokita-key':DOKITA_KEY}}),
+      fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.actif&order=created_at.desc&limit=100',{headers:{'x-dokita-key':DOKITA_KEY}})
     ]);
     var dEx=await rEx.json(); examensSupabase=Array.isArray(dEx)?dEx:(dEx.data||[]);
     var dOrd=await rOrd.json(); ordos=Array.isArray(dOrd)?dOrd:(dOrd.data||[]);
+    var dDocs=await rDocs.json(); docs=Array.isArray(dDocs)?dDocs:(dDocs.data||[]);
   }catch(e){dbgWarn('Dossier Dokita: '+e.message);}
 
   var today=new Date();today.setHours(0,0,0,0);
 
-  // Compter examens obligatoires à faire
   var examAFaire=examensSupabase.filter(function(e){return e.statut==='prescrit'&&e.obligatoire;}).length;
   var examFaits=examensSupabase.filter(function(e){return e.statut==='resultat_recu';}).length;
-  var examAnnules=examensSupabase.filter(function(e){return e.statut==='annule';}).length;
-
-  // Ordonnances avec médicaments encore actifs
   var ordosActives=ordos.filter(function(o){
     var pf=o.prescription_finale||o.prescription_medecin||{};
     var tous=(pf.meds||[]).concat(pf.medsAld||[]);
     return tous.some(function(m){return !m.date_fin||new Date(m.date_fin)>=today;});
   });
-
-  // Antécédents depuis profil
   var antecedents=(p.antecedents||'').trim();
 
-  // Rendu tuiles
-  var html=
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;">'+
+  // Compter docs par type
+  var countByType={};
+  docs.forEach(function(d){var t=d.type_document||'autre';countByType[t]=(countByType[t]||0)+1;});
 
-    // Tuile Examens
-    '<div onclick="ouvrirDossierExamens()" style="background:var(--card);border:1px solid '+(examAFaire>0?'rgba(239,68,68,.3)':'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;">'+
-      '<div style="font-size:28px;margin-bottom:6px;">🧪</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Examens</div>'+
-      (examAFaire>0?
-        '<div style="display:inline-block;background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;">'+examAFaire+' à faire</div>'
-      :examFaits>0?
-        '<div style="font-size:11px;color:var(--accent);margin-top:4px;">'+examFaits+' reçu'+(examFaits>1?'s':'')+'</div>'
-      :
-        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Aucun prescrit</div>'
-      )+
-    '</div>'+
-
-    // Tuile Ordonnances actives
-    '<div onclick="ouvrirDossierOrdos()" style="background:var(--card);border:1px solid '+(ordosActives.length>0?'rgba(99,102,241,.3)':'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;">'+
-      '<div style="font-size:28px;margin-bottom:6px;">💊</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Ordonnances</div>'+
-      (ordosActives.length>0?
-        '<div style="display:inline-block;background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.3);border-radius:8px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;">'+ordosActives.length+' active'+(ordosActives.length>1?'s':'')+'</div>'
-      :
-        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Aucune active</div>'
-      )+
-    '</div>'+
-
-    // Tuile Antécédents
-    '<div onclick="ouvrirDossierAntecedents()" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
-      '<div style="font-size:28px;margin-bottom:6px;">📋</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">Antécédents médicaux</div>'+
-      (antecedents?
-        '<div style="font-size:12px;font-weight:700;color:#ef4444;">'+escHtml(antecedents.slice(0,80)+(antecedents.length>80?'...':''))+'</div>'
-      :'<div style="font-size:11px;color:var(--text3);">Aucun renseigné</div>')+
-      ((p.allergies&&p.allergies.trim())?
-        '<div style="font-size:11px;font-weight:700;color:#ef4444;margin-top:4px;opacity:.8;">⚠️ '+escHtml(p.allergies.slice(0,50)+(p.allergies.length>50?'...':''))+'</div>'
-      :'')+
-    '</div>'+
-
+  function tuile(onclick, border, ico, label, badge){
+    return '<div onclick="'+onclick+'" style="background:var(--card);border:1px solid '+border+';border-radius:16px;padding:16px;cursor:pointer;display:flex;align-items:center;gap:14px;margin-bottom:10px;">'+
+      '<div style="font-size:28px;flex-shrink:0;">'+ico+'</div>'+
+      '<div style="flex:1;">'+
+        '<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:var(--text);">'+label+'</div>'+
+        '<div style="margin-top:4px;">'+badge+'</div>'+
+      '</div>'+
+      '<div style="font-size:18px;color:var(--text3);">›</div>'+
     '</div>';
+  }
+
+  function badge(txt, color, bg, border){
+    return '<span style="display:inline-block;background:'+bg+';color:'+color+';border:1px solid '+border+';border-radius:6px;padding:1px 8px;font-size:10px;font-weight:700;">'+txt+'</span>';
+  }
+
+  function badgeCount(count, tInfo){
+    return count>0 ? badge(count+' doc'+(count>1?'s':''), 'var(--text)', tInfo.color, tInfo.border)
+      : '<span style="font-size:11px;color:var(--text3);">Aucun</span>';
+  }
+
+  var html=
+    // Examens
+    tuile('ouvrirDossierExamens()',
+      examAFaire>0?'rgba(239,68,68,.3)':'var(--border)',
+      '🧪','Examens prescrits',
+      examAFaire>0 ? badge(examAFaire+' à faire','#ef4444','rgba(239,68,68,.15)','rgba(239,68,68,.3)')
+      : examFaits>0 ? badge(examFaits+' reçu'+(examFaits>1?'s':''),'var(--accent)','rgba(0,200,150,.1)','rgba(0,200,150,.3)')
+      : '<span style="font-size:11px;color:var(--text3);">Aucun prescrit</span>'
+    )+
+    // Ordonnances
+    tuile('ouvrirDossierOrdos()',
+      ordosActives.length>0?'rgba(99,102,241,.3)':'var(--border)',
+      '💊','Ordonnances',
+      ordosActives.length>0 ? badge(ordosActives.length+' active'+(ordosActives.length>1?'s':''),'#818cf8','rgba(99,102,241,.12)','rgba(99,102,241,.3)')
+      : '<span style="font-size:11px;color:var(--text3);">Aucune active</span>'
+    )+
+    // Antécédents
+    tuile('ouvrirDossierAntecedents()',
+      'var(--border)','📋','Antécédents médicaux',
+      antecedents ? '<span style="font-size:11px;color:#ef4444;">'+escHtml(antecedents.slice(0,60)+(antecedents.length>60?'...':''))+'</span>'
+      : '<span style="font-size:11px;color:var(--text3);">Aucun renseigné</span>'
+    )+
+    // Séparateur docs
+    '<div style="font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 10px;">📁 Mes documents</div>'+
+    '<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:13px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>'+
+    // Tuiles docs
+    tuile('ouvrirDossierDocs(\'radio\')',  countByType['radio']>0?DOCS_TYPES['radio'].border:'var(--border)',  '🩻','Imagerie / Radio',    badgeCount(countByType['radio']||0,   DOCS_TYPES['radio']))+
+    tuile('ouvrirDossierDocs(\'certificat\')', countByType['certificat']>0?DOCS_TYPES['certificat'].border:'var(--border)', '📄','Certificats',  badgeCount(countByType['certificat']||0, DOCS_TYPES['certificat']))+
+    tuile('ouvrirDossierDocs(\'autre\')',  countByType['autre']>0?DOCS_TYPES['autre'].border:'var(--border)',  '📎','Autres documents',   badgeCount(countByType['autre']||0,   DOCS_TYPES['autre']));
 
   el.innerHTML=html;
-
-  // Sauvegarder données pour les sous-écrans
   el._examens=examensSupabase;
   el._ordos=ordos;
+  el._docs=docs;
+}
 
-  // ── Section documents déclaratifs ──
-  var addBtn='<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
-  var disclaimer='<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">⚠️ Les documents que vous ajoutez ici seront vérifiés par votre médecin Dokita. Vous certifiez qu\'ils vous appartiennent et sont authentiques.</div>';
-
-  el.innerHTML+=
-    '<div style="margin-top:16px;">'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">📁 Mes documents</div>'+
-      addBtn+disclaimer+
-      '<div id="docsTuiles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;"></div>'+
-      '<div id="docsDeclList"></div>'+
-    '</div>';
-
-  // Charger docs puis afficher tuiles + liste
-  fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=source=eq.declaratif_patient&filter3=statut=eq.actif&order=created_at.desc&limit=50',{
-    headers:{'x-dokita-key':DOKITA_KEY}
-  }).then(function(r){return r.json();}).then(function(data){
-    var rows=Array.isArray(data)?data:(data.data||[]);
-    el._docs=rows;
-
-    // Compter par type
-    var countByType={};
-    rows.forEach(function(doc){var t=doc.type_document||'autre';countByType[t]=(countByType[t]||0)+1;});
-
-    // Tuiles types docs
-    var tuiles=document.getElementById('docsTuiles');
-    if(tuiles){
-      var typesOrdre=['analyse','radio','certificat','autre'];
-      tuiles.innerHTML=typesOrdre.map(function(type){
-        var t=DOCS_TYPES[type];
-        var count=countByType[type]||0;
-        return '<div onclick="filtrerDocsDeclById(\''+type+'\')" id="tuileDoc_'+type+'" style="background:var(--card);border:1px solid '+(count>0?t.border:'var(--border)')+';border-radius:14px;padding:14px;cursor:pointer;text-align:center;">'+
-          '<div style="font-size:26px;margin-bottom:4px;">'+t.ico+'</div>'+
-          '<div style="font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--text);">'+t.label+'</div>'+
-          (count>0?
-            '<div style="display:inline-block;background:'+t.color+';border:1px solid '+t.border+';border-radius:6px;padding:1px 8px;font-size:10px;font-weight:700;color:var(--text);margin-top:4px;">'+count+'</div>':
-            '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Aucun</div>'
-          )+
-        '</div>';
-      }).join('');
-    }
-
-    // Afficher tous par défaut
-    rendreDocsDeclByType(rows, null);
-
-  }).catch(function(){
-    var list=document.getElementById('docsDeclList');
-    if(list)list.innerHTML='';
+function ouvrirDossierDocs(type){
+  var el=document.getElementById('dossierMedBody');
+  var docs=(el._docs||[]).filter(function(d){return (d.type_document||'autre')===type;});
+  var tInfo=DOCS_TYPES[type]||DOCS_TYPES['autre'];
+  var html=
+    '<button onclick="chargerDossierDokita()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px;">'+tInfo.ico+' '+tInfo.label+'s</div>';
+  if(!docs.length){
+    html+='<div style="text-align:center;padding:30px;color:var(--text3);"><div style="font-size:32px;margin-bottom:8px;">📂</div>Aucun document</div>';
+    el.innerHTML=html;return;
+  }
+  docs.forEach(function(doc){
+    var dateAff=doc.created_at?new Date(doc.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
+    var badge=doc.source==='confirme_medecin'?
+      '<span style="font-size:9px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:4px;padding:1px 5px;">✅ Confirmé</span>':
+      '<span style="font-size:9px;font-weight:700;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:4px;padding:1px 5px;">📝 En attente</span>';
+    html+=
+      '<div style="background:var(--card);border:1px solid '+tInfo.border+';border-radius:14px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;" onclick="ouvrirDocument(\''+doc.id+'\',\''+escHtml(doc.nom||'Document')+'\',\''+escHtml(doc.url||'')+'\',\''+escHtml(doc.contenu_base64?'base64':'')+'\',\''+escHtml(doc.mime_type||'')+'\')">'+
+        '<div style="width:44px;height:44px;border-radius:12px;background:'+tInfo.color+';display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">'+tInfo.ico+'</div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
+          '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
+          '<div style="margin-top:4px;">'+badge+'</div>'+
+        '</div>'+
+        '<div style="font-size:20px;color:var(--text3);">›</div>'+
+      '</div>';
   });
+  el.innerHTML=html;
 }
 
 function ouvrirDossierExamens(){
@@ -7362,8 +7349,4 @@ function afficherImageModal(url, titre){
     <div style="flex:1"><div class="hdr-title">Prévention</div><div class="hdr-sub" id="preventionSub">Dépistage & Vaccins recommandés</div></div>
     <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
-  <div class="sbody" id="preventionBody" style="padding:16px;"></div>
-</div>
-
-</body>
-</html>
+  <div class="sbody" id="p
