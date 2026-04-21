@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.11
-     DATE    : 2026-04-21 20:42:05
+     VERSION : V4.12
+     DATE    : 2026-04-21 21:02:30
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2818,54 +2818,50 @@ async function chargerDossierDokita(){
   el._examens=examensSupabase;
   el._ordos=ordos;
 
-  // ── Section documents déclaratifs (ex Hors réseau) ──
+  // ── Section documents déclaratifs ──
   var addBtn='<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
   var disclaimer='<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.5;">⚠️ Les documents que vous ajoutez ici seront vérifiés par votre médecin Dokita. Vous certifiez qu\'ils vous appartiennent et sont authentiques.</div>';
 
-  var docsHtml='<div style="margin-top:16px;" id="horsReseauSection">'+
-    '<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">📁 Mes documents</div>'+
-    addBtn+disclaimer+
-    '<div id="docsDeclList"><div style="text-align:center;padding:16px;color:var(--text3);font-size:11px;">⏳ Chargement...</div></div>'+
-  '</div>';
-  el.innerHTML+=docsHtml;
+  el.innerHTML+=
+    '<div style="margin-top:16px;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">📁 Mes documents</div>'+
+      addBtn+disclaimer+
+      '<div id="docsTuiles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;"></div>'+
+      '<div id="docsDeclList"></div>'+
+    '</div>';
 
-  // Charger les docs déclaratifs async
+  // Charger docs puis afficher tuiles + liste
   fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=source=eq.declaratif_patient&filter3=statut=eq.actif&order=created_at.desc&limit=50',{
     headers:{'x-dokita-key':DOKITA_KEY}
   }).then(function(r){return r.json();}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
-    var list=document.getElementById('docsDeclList');
-    if(!list)return;
-    if(!rows.length){
-      list.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:11px;">'+
-        '<div style="font-size:32px;margin-bottom:8px;">📂</div>'+
-        'Aucun document ajouté<br><span style="font-size:10px;">Ordonnances externes, radios, certificats...</span>'+
-      '</div>';
-      return;
-    }
-    var byType={};
-    rows.forEach(function(doc){var t=doc.type_document||'autre';if(!byType[t])byType[t]=[];byType[t].push(doc);});
-    var html='';
-    Object.keys(byType).forEach(function(type){
-      var tInfo=DOCS_TYPES[type]||DOCS_TYPES['autre'];
-      html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;margin:12px 0 6px;">'+tInfo.ico+' '+tInfo.label+'s</div>';
-      byType[type].forEach(function(doc){
-        var dateAff=doc.created_at?new Date(doc.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
-        var badge=doc.source==='confirme_medecin'?
-          '<span style="font-size:9px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:4px;padding:1px 5px;">✅ Confirmé</span>':
-          '<span style="font-size:9px;font-weight:700;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:4px;padding:1px 5px;">📝 En attente</span>';
-        html+='<div style="background:var(--card);border:1px solid '+tInfo.border+';border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;" onclick="ouvrirDocument(\''+doc.id+'\',\''+escHtml(doc.nom||'Document')+'\',\''+escHtml(doc.url||'')+'\',\''+escHtml(doc.contenu_base64?'base64':'')+'\',\''+escHtml(doc.mime_type||'\')')+'">'+
-          '<div style="width:40px;height:40px;border-radius:10px;background:'+tInfo.color+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+tInfo.ico+'</div>'+
-          '<div style="flex:1;min-width:0;">'+
-            '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
-            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
-            '<div style="margin-top:4px;">'+badge+'</div>'+
-          '</div>'+
-          '<div style="font-size:20px;color:var(--text3);">›</div>'+
+    el._docs=rows;
+
+    // Compter par type
+    var countByType={};
+    rows.forEach(function(doc){var t=doc.type_document||'autre';countByType[t]=(countByType[t]||0)+1;});
+
+    // Tuiles types docs
+    var tuiles=document.getElementById('docsTuiles');
+    if(tuiles){
+      var typesOrdre=['analyse','radio','certificat','autre'];
+      tuiles.innerHTML=typesOrdre.map(function(type){
+        var t=DOCS_TYPES[type];
+        var count=countByType[type]||0;
+        return '<div onclick="filtrerDocsDeclById(\''+type+'\')" id="tuileDoc_'+type+'" style="background:var(--card);border:1px solid '+(count>0?t.border:'var(--border)')+';border-radius:14px;padding:14px;cursor:pointer;text-align:center;">'+
+          '<div style="font-size:26px;margin-bottom:4px;">'+t.ico+'</div>'+
+          '<div style="font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--text);">'+t.label+'</div>'+
+          (count>0?
+            '<div style="display:inline-block;background:'+t.color+';border:1px solid '+t.border+';border-radius:6px;padding:1px 8px;font-size:10px;font-weight:700;color:var(--text);margin-top:4px;">'+count+'</div>':
+            '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Aucun</div>'
+          )+
         '</div>';
-      });
-    });
-    list.innerHTML=html;
+      }).join('');
+    }
+
+    // Afficher tous par défaut
+    rendreDocsDeclByType(rows, null);
+
   }).catch(function(){
     var list=document.getElementById('docsDeclList');
     if(list)list.innerHTML='';
@@ -5167,7 +5163,56 @@ async function chargerDossierHorsReseau(){
   }
 }
 
-// Alias pour compatibilité
+function filtrerDocsDeclById(type){
+  var el=document.getElementById('dossierMedBody');
+  var rows=el&&el._docs||[];
+  // Toggle : si déjà sélectionné → afficher tous
+  var actif=el&&el._docsFiltreActif;
+  var newFiltre=actif===type?null:type;
+  if(el)el._docsFiltreActif=newFiltre;
+  // Highlight tuile active
+  ['analyse','radio','certificat','autre'].forEach(function(t){
+    var tuile=document.getElementById('tuileDoc_'+t);
+    if(!tuile)return;
+    var tInfo=DOCS_TYPES[t];
+    tuile.style.background=newFiltre===t?tInfo.color:'var(--card)';
+    tuile.style.borderColor=newFiltre===t?tInfo.border:'var(--border)';
+  });
+  rendreDocsDeclByType(rows, newFiltre);
+}
+
+function rendreDocsDeclByType(rows, typeFiltre){
+  var list=document.getElementById('docsDeclList');
+  if(!list)return;
+  var filtered=typeFiltre?rows.filter(function(d){return (d.type_document||'autre')===typeFiltre;}):rows;
+  if(!filtered.length){
+    list.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);font-size:11px;">'+
+      '<div style="font-size:32px;margin-bottom:8px;">📂</div>'+
+      (typeFiltre?'Aucun document de ce type':'Aucun document ajouté')+
+      '<br><span style="font-size:10px;">Ordonnances externes, radios, certificats...</span>'+
+    '</div>';
+    return;
+  }
+  var html='';
+  filtered.forEach(function(doc){
+    var t=DOCS_TYPES[doc.type_document||'autre']||DOCS_TYPES['autre'];
+    var dateAff=doc.created_at?new Date(doc.created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'';
+    var badge=doc.source==='confirme_medecin'?
+      '<span style="font-size:9px;font-weight:700;color:var(--accent);background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.3);border-radius:4px;padding:1px 5px;">✅ Confirmé</span>':
+      '<span style="font-size:9px;font-weight:700;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:4px;padding:1px 5px;">📝 En attente</span>';
+    html+='<div style="background:var(--card);border:1px solid '+t.border+';border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;" onclick="ouvrirDocument(\''+doc.id+'\',\''+escHtml(doc.nom||'Document')+'\',\''+escHtml(doc.url||'')+'\',\''+escHtml(doc.contenu_base64?'base64':'')+'\',\''+escHtml(doc.mime_type||'')+'\')">'+
+      '<div style="width:40px;height:40px;border-radius:10px;background:'+t.color+';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">'+t.ico+'</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(doc.nom||'Document sans nom')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+dateAff+'</div>'+
+        '<div style="margin-top:4px;">'+badge+'</div>'+
+      '</div>'+
+      '<div style="font-size:20px;color:var(--text3);">›</div>'+
+    '</div>';
+  });
+  list.innerHTML=html;
+}
+
 function ouvrirDocuments(){ouvrirDossierMedical();}
 
 async function ajouterResultatReseau(input, examenId, nomExamen){
