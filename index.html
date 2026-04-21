@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.9
-     DATE    : 2026-04-20 19:45:58
+     VERSION : V4.10
+     DATE    : 2026-04-21 00:00:00
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.10 — 2026-04-21 : DB_URL + SAVE_URL → heydoc-mu (séparation architecturale patient/médecin) · EXTRACT_URL déjà sur heydoc-mu
        V4.9 — 2026-04-12 : Message prévention téléphone après envoi dossier · Anamnèse dynamique (boutons OPTIONS) · Rafraîchissement profil Supabase · Générique sur ordonnance
 V4.9 — 2026-04-11 : Signature médecin dans ordonnance · Template ordonnance Pro · Nav histo après envoi · Bouton dossier bloqué · Tags RDV centrés · Sexe dans email
 V4.8 — 2026-04-01 : Table etablissements unifiée (pharmacies/labos/cliniques/cabinets)
@@ -1310,8 +1311,8 @@ function genConsultId(patientId){
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
 var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
-var SAVE_URL     ='https://heydoc-medecin.vercel.app/api/save';
-var DB_URL       ='https://heydoc-medecin.vercel.app/api/db';
+var SAVE_URL     ='https://heydoc-mu.vercel.app/api/save';
+var DB_URL       ='https://heydoc-mu.vercel.app/api/db';
 var EXTRACT_URL  ='https://heydoc-mu.vercel.app/api/extract-examen';
 
 // ══════════════════════════════
