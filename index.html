@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.13
-     DATE    : 2026-04-21 21:13:44
+     VERSION : V4.14
+     DATE    : 2026-04-21 21:21:45
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2789,9 +2789,18 @@ async function chargerDossierDokita(){
       : '<span style="font-size:11px;color:var(--text3);">Aucun</span>';
   }
 
+  function tuileGrille(onclick, border, ico, label, badge){
+    return '<div onclick="'+onclick+'" style="background:var(--card);border:1px solid '+border+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">'+ico+'</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">'+label+'</div>'+
+      badge+
+    '</div>';
+  }
+
   var html=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'+
     // Examens
-    tuile('ouvrirDossierExamens()',
+    tuileGrille('ouvrirDossierExamens()',
       examAFaire>0?'rgba(239,68,68,.3)':'var(--border)',
       '🧪','Examens prescrits',
       examAFaire>0 ? badge(examAFaire+' à faire','#ef4444','rgba(239,68,68,.15)','rgba(239,68,68,.3)')
@@ -2799,25 +2808,34 @@ async function chargerDossierDokita(){
       : '<span style="font-size:11px;color:var(--text3);">Aucun prescrit</span>'
     )+
     // Ordonnances
-    tuile('ouvrirDossierOrdos()',
+    tuileGrille('ouvrirDossierOrdos()',
       ordosActives.length>0?'rgba(99,102,241,.3)':'var(--border)',
       '💊','Ordonnances',
       ordosActives.length>0 ? badge(ordosActives.length+' active'+(ordosActives.length>1?'s':''),'#818cf8','rgba(99,102,241,.12)','rgba(99,102,241,.3)')
       : '<span style="font-size:11px;color:var(--text3);">Aucune active</span>'
     )+
-    // Antécédents
-    tuile('ouvrirDossierAntecedents()',
-      'var(--border)','📋','Antécédents médicaux',
-      antecedents ? '<span style="font-size:11px;color:#ef4444;">'+escHtml(antecedents.slice(0,60)+(antecedents.length>60?'...':''))+'</span>'
-      : '<span style="font-size:11px;color:var(--text3);">Aucun renseigné</span>'
-    )+
-    // Séparateur docs
-    '<div style="font-family:\'Syne\',sans-serif;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin:16px 0 10px;">📁 Mes documents</div>'+
-    '<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:13px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>'+
+    // Antécédents (pleine largeur)
+    '<div onclick="ouvrirDossierAntecedents()" style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">📋</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Antécédents médicaux</div>'+
+      (antecedents?'<span style="font-size:11px;color:#ef4444;">'+escHtml(antecedents.slice(0,60)+(antecedents.length>60?'...':''))+'</span>'
+      :'<span style="font-size:11px;color:var(--text3);">Aucun renseigné</span>')+
+    '</div>'+
     // Tuiles docs
-    tuile('ouvrirDossierDocs(\'radio\')',  countByType['radio']>0?DOCS_TYPES['radio'].border:'var(--border)',  '🩻','Imagerie / Radio',    badgeCount(countByType['radio']||0,   DOCS_TYPES['radio']))+
-    tuile('ouvrirDossierDocs(\'certificat\')', countByType['certificat']>0?DOCS_TYPES['certificat'].border:'var(--border)', '📄','Certificats',  badgeCount(countByType['certificat']||0, DOCS_TYPES['certificat']))+
-    tuile('ouvrirDossierDocs(\'autre\')',  countByType['autre']>0?DOCS_TYPES['autre'].border:'var(--border)',  '📎','Autres documents',   badgeCount(countByType['autre']||0,   DOCS_TYPES['autre']));
+    tuileGrille('ouvrirDossierDocs(\'radio\')',   countByType['radio']>0?DOCS_TYPES['radio'].border:'var(--border)',       '🩻','Imagerie / Radio',  badgeCount(countByType['radio']||0,      DOCS_TYPES['radio']))+
+    tuileGrille('ouvrirDossierDocs(\'certificat\')', countByType['certificat']>0?DOCS_TYPES['certificat'].border:'var(--border)', '📄','Certificats', badgeCount(countByType['certificat']||0,  DOCS_TYPES['certificat']))+
+    '<div onclick="ouvrirDossierDocs(\'autre\')" style="background:var(--card);border:1px solid '+(countByType['autre']>0?DOCS_TYPES['autre'].border:'var(--border)')+';border-radius:16px;padding:16px;cursor:pointer;text-align:center;grid-column:1/-1;">'+
+      '<div style="font-size:28px;margin-bottom:6px;">📎</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Autres documents</div>'+
+      badgeCount(countByType['autre']||0, DOCS_TYPES['autre'])+
+    '</div>'+
+    '</div>'+
+    // Message responsabilité
+    '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--text2);line-height:1.5;">'+
+      '⚠️ Les documents que vous ajoutez seront vérifiés par votre médecin Dokita. Vous certifiez qu\'ils vous appartiennent et sont authentiques.'+
+    '</div>'+
+    // Bouton ajouter
+    '<button onclick="ouvrirModalAjoutDoc()" style="width:100%;padding:13px;background:linear-gradient(135deg,rgba(99,102,241,.9),rgba(130,80,220,.9));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📎</span> Ajouter un document</button>';
 
   el.innerHTML=html;
   el._examens=examensSupabase;
@@ -7329,24 +7347,4 @@ function afficherImageModal(url, titre){
   var old=document.getElementById('imgViewModal');if(old)old.remove();
   var modal=document.createElement('div');
   modal.id='imgViewModal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
-  modal.innerHTML=
-    '<div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:600px;margin-bottom:12px;">'+
-      '<div style="font-size:13px;font-weight:700;color:#fff;">'+titre+'</div>'+
-      '<button onclick="document.getElementById(\'imgViewModal\').remove()" style="background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✕ Fermer</button>'+
-    '</div>'+
-    '<img src="'+url+'" style="max-width:100%;max-height:80vh;border-radius:12px;object-fit:contain;" />';
-  document.body.appendChild(modal);
-}
-
-</script>
-
-<!-- ══ PRÉVENTION & DÉPISTAGE ══ -->
-<div class="screen" id="preventionScreen">
-  <div class="hdr">
-    <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
-    <div class="hdr-ico" style="background:rgba(0,168,120,.15);">🛡️</div>
-    <div style="flex:1"><div class="hdr-title">Prévention</div><div class="hdr-sub" id="preventionSub">Dépistage & Vaccins recommandés</div></div>
-    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
-  </div>
-  <div class="sbody" id="p
+  modal.style.cssText='position
