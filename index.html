@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.16
-     DATE    : 2026-04-21 21:54:54
+     VERSION : V4.17
+     DATE    : 2026-04-24 19:55:26
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1310,6 +1310,7 @@ function genConsultId(patientId){
 // CONFIG
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
+var DOKITA_ENV='dev'; // Passer à 'prod' avant go-live via Vercel env var ou ici
 var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
 var SAVE_URL     ='https://heydoc-mu.vercel.app/api/save';
 var DB_URL       ='https://heydoc-mu.vercel.app/api/db';
@@ -1944,6 +1945,10 @@ async function lancerConsult(){
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false});
   // Rafraîchir profil depuis Supabase avant de lancer la consultation
   await rafraichirProfilSupabase(CURRENT.patientId);
+  // Charger l'historique si pas encore en cache — critique pour getContexteHistorique()
+  if(!HISTO_CACHE||HISTO_CACHE.length===0){
+    try{HISTO_CACHE=await chargerHistoriqueNotion();}catch(e){dbg('HISTO preload err: '+e.message);}
+  }
   startChat();
 }
 
@@ -4426,9 +4431,9 @@ async function reprendreSession(i){
 
 function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-function dbg(msg){_dbgLog(msg,'#00ff88');}
-function dbgWarn(msg){_dbgLog('⚠️ '+msg,'#f59e0b');}
-function dbgError(msg){_dbgLog('🔴 ALERTE — '+msg,'#ef4444');}
+function dbg(msg){if(DOKITA_ENV==='prod')return;_dbgLog(msg,'#00ff88');}
+function dbgWarn(msg){if(DOKITA_ENV==='prod')return;_dbgLog('⚠️ '+msg,'#f59e0b');}
+function dbgError(msg){if(DOKITA_ENV==='prod')return;_dbgLog('🔴 ALERTE — '+msg,'#ef4444');}
 function _dbgLog(msg,color){
   var panel=document.getElementById('debugPanel');
   var log=document.getElementById('debugLog');
@@ -7302,7 +7307,7 @@ async function voirFichierExamen(examenId){
   toast('⏳ Chargement...');
   try{
     // Chercher le document lié dans dossier_medical (note = examenId)
-    var r=await fetch(DB_URL+'?table=dossier_medical&filter=note=eq.'+encodeURIComponent(examenId)+'&filter2=source=eq.prescrit_dokita&limit=1',{
+    var r=await fetch(DB_URL+'?table=dossier_medical&filter=note=eq.'+encodeURIComponent(examenId)+'&limit=1',{
       headers:{'x-dokita-key':DOKITA_KEY}
     });
     var data=await r.json();
@@ -7350,10 +7355,4 @@ function afficherImageModal(url, titre){
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
     <div class="hdr-ico" style="background:rgba(0,168,120,.15);">🛡️</div>
     <div style="flex:1"><div class="hdr-title">Prévention</div><div class="hdr-sub" id="preventionSub">Dépistage & Vaccins recommandés</div></div>
-    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
-  </div>
-  <div class="sbody" id="preventionBody" style="padding:16px;"></div>
-</div>
-
-</body>
-</html>
+    <div onclick="nav('accueilScreen')" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10
