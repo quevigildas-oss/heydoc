@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.18
-     DATE    : 2026-04-24 20:01:31
+     VERSION : V4.19
+     DATE    : 2026-04-24 20:11:29
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -6190,7 +6190,7 @@ function aoAnnuler(){
   AO_ITEMS=[];
 }
 
-function aoTermine(){
+async function aoTermine(){
   var m=document.getElementById('aoModal');
   if(m)m.remove();
 
@@ -6199,7 +6199,16 @@ function aoTermine(){
   AO_ITEMS.forEach(function(a){if(a.statut==='attente')a.statut='ignore';});
 
   if(envoyes.length>0){
-    try{localStorage.setItem('ao_soumis_'+AO_SESSION_ID,'1');}catch(e){}
+    // Marquer ao_soumis dans Supabase (plus de localStorage)
+    if(AO_SESSION_ID){
+      try{
+        await fetch(DB_URL+'?table=ordonnances&id='+AO_SESSION_ID,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+          body:JSON.stringify({ao_soumis:true})
+        });
+      }catch(e){dbg('ao_soumis patch err: '+e.message);}
+    }
     toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
     var btn=document.querySelector('button[onclick*="lancerAppelOffre"]');
     if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
@@ -6491,6 +6500,7 @@ async function voirOrdonnanceHisto(i){
           date:s.date,
           conforme:row.conforme_oms,
           ordonnanceId:row.id,
+          ao_soumis:!!row.ao_soumis,
           signature_base64:row.signature_base64||null
         };
         dbg('Ordonnance chargée depuis Supabase ✅ medecin='+medNom);
@@ -6501,8 +6511,7 @@ async function voirOrdonnanceHisto(i){
 
   // Vérifier AO depuis Supabase — prendre le statut le plus avancé
   var aoStatut='';
-  var aoLocalKey='ao_soumis_'+s.supabaseId;
-  var aoSoumisLocal=localStorage.getItem(aoLocalKey);
+  var aoSoumis=!!(s.ordonnance&&s.ordonnance.ao_soumis)||false;
   try{
     var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&limit=50',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -6510,14 +6519,12 @@ async function voirOrdonnanceHisto(i){
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length){
-      // Priorité : livre > accepte > en_livraison > offres_recues > en_attente > annule
-      // en_attente n'est affiché que si le patient a cliqué Terminé (localStorage)
       var priorite=['livre','accepte','en_livraison','offres_recues','annule'];
-      if(aoSoumisLocal)priorite.splice(4,0,'en_attente'); // ajouter en_attente seulement si session confirmée
+      if(aoSoumis)priorite.splice(4,0,'en_attente');
       var statuts=aoRows.map(function(r){return r.statut||'';});
       aoStatut=priorite.find(function(p){return statuts.includes(p);})||'';
     }
-    dbg('aoStatut: '+aoStatut+' local:'+aoSoumisLocal);
+    dbg('aoStatut: '+aoStatut+' supabase ao_soumis:'+aoSoumis);
   }catch(e){}
 
   var ord=s.ordonnance;
@@ -7357,7 +7364,4 @@ async function voirFichierExamen(examenId){
     var doc=rows[0];
     var b64=doc.contenu_base64||'';
     var mime=doc.mime_type||'image/jpeg';
-    if(!b64){toast('Fichier non disponible');return;}
-    // Ouvrir le fichier
-    var byteStr=atob(b64);
-    var ab=new ArrayBuffer(byteStr.len
+    if(!b64){toast('Fichier non dispo
