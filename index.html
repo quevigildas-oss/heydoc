@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.20
-     DATE    : 2026-04-25 08:29:49
+     VERSION : V4.22
+     DATE    : 2026-04-25 08:55:17
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2383,13 +2383,35 @@ async function loadMeds(){
           note:med.note_moyenne||'',
           ville:med.ville||'',
           distance:med.consultation_distance||false,
+          lat:parseFloat(med.latitude)||0,
+          lon:parseFloat(med.longitude)||0,
           supabaseId:med.id
         };
       });
       MEDS_LOADED=true;
-      renderMeds(NOTION_MEDS);
+      // Trier par distance si géoloc disponible
+      trierMedsParDistance(NOTION_MEDS, function(sorted){
+        renderMeds(sorted);
+      });
     }
   }catch(e){dbg('loadMeds erreur: '+e.message);}
+}
+
+function trierMedsParDistance(list, cb){
+  if(!navigator.geolocation){cb(list);return;}
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      var ulat=pos.coords.latitude, ulon=pos.coords.longitude;
+      var sorted=list.map(function(m){
+        var d=(m.lat&&m.lon)?distKm(ulat,ulon,m.lat,m.lon):9999;
+        return Object.assign({},m,{_distKm:d});
+      }).sort(function(a,b){return a._distKm-b._distKm;});
+      dbg('Médecins triés par distance depuis '+ulat.toFixed(2)+','+ulon.toFixed(2));
+      cb(sorted);
+    },
+    function(){cb(list);}, // fallback sans géoloc
+    {timeout:5000,maximumAge:300000}
+  );
 }
 
 function renderMeds(list){
@@ -2405,7 +2427,7 @@ function renderMeds(list){
     return '<div class="r-card'+(i===0?' best':'')+'">'+
       (i===0?'<div style="font-size:9px;font-weight:700;color:var(--accent);margin-bottom:3px;">✓ MEILLEUR CHOIX</div>':'')+
       '<div class="r-nom">'+m.nom+'</div>'+
-      '<div class="r-spec">'+m.specialite+(m.note?' · ⭐'+m.note:'')+(m.tarif?' · '+m.tarif:'')+'</div>'+
+      '<div class="r-spec">'+m.specialite+(m.note?' · ⭐'+m.note:'')+(m.tarif?' · '+m.tarif:'')+(m._distKm&&m._distKm<9999?' · 📍 '+(m._distKm<1?(m._distKm*1000).toFixed(0)+'m':m._distKm.toFixed(1)+'km'):'')+'</div>'+
       '<div class="r-btns">'+
         (tel?'<button class="rb call" onclick="window.location.href=\'tel:'+tel+'\'">📞 Appeler</button>':'')+
         '<button class="rb dos" id="btnDossier" onclick="envoyerDossier(\''+es+'\',\''+ns+'\',\''+(m.supabaseId||'')+'\')">📋 Dossier</button>'+
@@ -5665,16 +5687,20 @@ async function ouvrirOffres(){
       return;
     }
 
-    // Géolocalisation patient (TEST ou réelle)
-    var patLat=5.3467,patLon=-4.0167; // TEST Plateau
-    if(USER_LAT&&USER_LNG){patLat=USER_LAT;patLon=USER_LNG;}
+    // Géolocalisation patient — réelle si disponible, fallback TEST seulement en dev
+    var patLat=null,patLon=null;
+    if(USER_LAT&&USER_LNG){
+      patLat=USER_LAT;patLon=USER_LNG;
+    } else if(DOKITA_ENV!=='prod'){
+      patLat=5.3467;patLon=-4.0167; // TEST Plateau Abidjan — désactivé en prod
+    }
 
     // Calculer score pour chaque offre
     offresRepondues.forEach(function(o){
       var totalMeds=o.items.length;
       var disponibles=o.items.filter(function(i){return i.disponible;}).length;
       var prixMeds=o.items.reduce(function(s,i){return s+(i.total||0);},0);
-      var dist=o.gps?distKm(patLat,patLon,o.gps.lat,o.gps.lon)*2:o.rayon*2; // aller-retour
+      var dist=(patLat&&patLon&&o.gps)?distKm(patLat,patLon,o.gps.lat,o.gps.lon)*2:o.rayon*2; // aller-retour
       var coutTrajet=Math.round(dist*PRIX_KM);
       o.complete=(disponibles===totalMeds);
       o.nbDispo=disponibles;
@@ -5754,8 +5780,8 @@ function trouver2Stops(offres,patLat,patLon){
         else if(ib){prixB+=ib.total;medsB.push({med:med,item:ib});}
       });
 
-      var distA=a.gps?distKm(patLat,patLon,a.gps.lat,a.gps.lon)*2:a.rayon*2;
-      var distB=b.gps?distKm(patLat,patLon,b.gps.lat,b.gps.lon)*2:b.rayon*2;
+      var distA=(patLat&&patLon&&a.gps)?distKm(patLat,patLon,a.gps.lat,a.gps.lon)*2:a.rayon*2;
+      var distB=(patLat&&patLon&&b.gps)?distKm(patLat,patLon,b.gps.lat,b.gps.lon)*2:b.rayon*2;
       var total=prixA+prixB+Math.round((distA+distB)*PRIX_KM);
       if(total<meilleurPrix&&medsA.length>0&&medsB.length>0){
         meilleurPrix=total;
@@ -7322,32 +7348,4 @@ function getContexteEpidemio(ville) {
   var ctx='[CONTEXTE EPIDEMIOLOGIQUE AU '+new Date().toLocaleDateString('fr-FR')+': ';
   ctx+='Pays: '+pays+' | Zone: '+zone;
   ctx+=' | Saison: '+saison;
-  ctx+=' | ALERTES SAISONNIERES: '+alertes.join(' · ');
-  ctx+=' | ALERTES PERMANENTES: '+permanentes.join(' · ');
-  ctx+='. Utilise ce contexte pour prioriser tes suspicions diagnostiques et adapter tes recommandations de prevention.]';
-  return ctx;
-}
-
-
-// ══════════════════════════════
-// HISTORIQUE CONSULTATIONS — Résumé injecté dans AfriBot
-// Relecture des 5 dernières consultations pour détecter récurrences
-// ══════════════════════════════
-function getContexteHistorique(){
-  if(!HISTO_CACHE || HISTO_CACHE.length === 0) return '';
-
-  // Prendre les 5 dernières consultations (déjà triées desc)
-  var recentes = HISTO_CACHE.slice(0, 5);
-
-  var lignes = recentes.map(function(h, i){
-    var date = h.date || 'date inconnue';
-    var symp = (h.symptomes || '').slice(0, 120);
-    var diag = (h.diagnostic || '').slice(0, 80);
-    var statut = h.traite ? 'traité' : 'en attente';
-    return 'Consultation ' + (i+1) + ' (' + date + '): Symptômes: ' + symp +
-           (diag ? ' | Diagnostic: ' + diag : '') +
-           ' | Statut: ' + statut;
-  });
-
-  // Détecter récurrences — chercher mots-clés communs entre consultations
-  var tousSymptomes = recentes.map(function(h){ ret
+  ctx+=' | ALERTES SAISONNIERES: '+alerte
