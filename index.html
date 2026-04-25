@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.19
-     DATE    : 2026-04-24 20:11:29
+     VERSION : V4.20
+     DATE    : 2026-04-25 08:29:49
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1200,6 +1200,12 @@ async function seConnecter(){
     toast('Bienvenue '+profilPrincipal.prenom+' 👋');
     // Charger établissements en arrière-plan dès le login
     chargerEtablissements();
+    // Vérifier consentement IA
+    if(!p.ia_consent){
+      setTimeout(function(){afficherConsentementIA(p.id);},800);
+    } else {
+      renderProfils();nav('profilsScreen');
+    }
     // Membres famille via compte_parent_id (UUID)
     fetch(DB_URL+'?table=patients&filter=compte_parent_id=eq.'+encodeURIComponent(p.id)+'&limit=10',{
       headers:{'x-dokita-key':DOKITA_KEY}
@@ -1224,6 +1230,48 @@ async function seConnecter(){
       dbg('Membres famille chargés: '+membres.length);
     }).catch(function(e){dbg('Membres ERR: '+e.message);});
   }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
+}
+
+function afficherConsentementIA(supabaseId){
+  var old=document.getElementById('consentModal');if(old)old.remove();
+  var m=document.createElement('div');
+  m.id='consentModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+  m.innerHTML=
+    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;box-shadow:0 -4px 40px rgba(0,0,0,.3);">'+
+      '<div style="font-size:32px;text-align:center;margin-bottom:12px;">🤖</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);text-align:center;margin-bottom:12px;">Dokita utilise une IA médicale</div>'+
+      '<div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:20px;">'+
+        'Pour vous accompagner dans vos consultations, Dokita utilise <strong>AfriBot</strong>, un assistant médical IA basé sur les recommandations de l\'OMS et de Médecins Sans Frontières.<br><br>'+
+        '⚠️ <strong>AfriBot n\'est pas un médecin.</strong> Il collecte vos symptômes et aide le médecin à préparer votre consultation. La prescription est toujours validée et signée par un médecin humain.<br><br>'+
+        'Vos données sont <strong>strictement confidentielles</strong> et ne sont jamais partagées sans votre accord.'+
+      '</div>'+
+      '<button onclick="accepterConsentementIA(\''+supabaseId+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">✅ J\'accepte et je continue</button>'+
+      '<button onclick="refuserConsentementIA()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;">Je refuse — me déconnecter</button>'+
+    '</div>';
+  document.body.appendChild(m);
+}
+
+async function accepterConsentementIA(supabaseId){
+  document.getElementById('consentModal').remove();
+  // Sauvegarder consentement dans Supabase
+  try{
+    await fetch(DB_URL+'?table=patients&id='+supabaseId,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({ia_consent:true,ia_consent_date:new Date().toISOString()})
+    });
+  }catch(e){dbg('Consent save err: '+e.message);}
+  renderProfils();
+  nav('profilsScreen');
+}
+
+function refuserConsentementIA(){
+  document.getElementById('consentModal').remove();
+  SESSION_EMAIL='';SESSION_PATIENT_ID='';
+  try{localStorage.removeItem('dk_session');}catch(e){}
+  nav('loginScreen');
+  toast('Vous devez accepter pour utiliser Dokita.');
 }
 
 async function creerCompte(){
@@ -7302,66 +7350,4 @@ function getContexteHistorique(){
   });
 
   // Détecter récurrences — chercher mots-clés communs entre consultations
-  var tousSymptomes = recentes.map(function(h){ return (h.symptomes||'').toLowerCase(); });
-  var motsCles = ['fièvre','paludisme','toux','céphalée','diarrhée','vomissement',
-                  'douleur','fatigue','paludisme','malaria','fievre','mal de tete',
-                  'ventre','gorge','urine','essoufflement'];
-  var recurrences = [];
-  motsCles.forEach(function(mot){
-    var count = tousSymptomes.filter(function(s){ return s.includes(mot); }).length;
-    if(count >= 2) recurrences.push(mot + ' (' + count + 'x)');
-  });
-
-  var ctx = '[HISTORIQUE CONSULTATIONS DU PATIENT (' + recentes.length + ' dernières): ';
-  ctx += lignes.join(' || ');
-  if(recurrences.length > 0){
-    ctx += ' | ⚠️ PLAINTES RÉCURRENTES DÉTECTÉES: ' + recurrences.join(', ') +
-           ' — explorer si traitement précédent a échoué, si résistance ou maladie chronique sous-jacente';
-  }
-  ctx += '. Tiens compte de cet historique pour contextualiser le nouveau motif de consultation.]';
-  return ctx;
-}
-
-function getContexteExamens(){
-  // Récupérer les examens depuis HISTO_CACHE — extraction_json déjà chargé
-  var p=PROFILS[SEL];
-  if(!p||!p._examensCache||!p._examensCache.length) return '';
-
-  var examensAvecResultat=p._examensCache.filter(function(e){
-    return e.statut==='resultat_recu' && e.extraction_json;
-  });
-  if(!examensAvecResultat.length) return '';
-
-  var lignes=examensAvecResultat.slice(0,5).map(function(e){
-    var ext=null;
-    try{ext=typeof e.extraction_json==='string'?JSON.parse(e.extraction_json):e.extraction_json;}catch(err){}
-    var date=e.date_realisation?new Date(e.date_realisation).toLocaleDateString('fr-FR'):(e.created_at?new Date(e.created_at).toLocaleDateString('fr-FR'):'');
-    if(!ext||!ext.valeurs||!ext.valeurs.length) return e.nom+' ('+date+'): résultat reçu';
-    var valeursStr=ext.valeurs.slice(0,4).map(function(v){
-      return v.parametre+': '+v.valeur+(v.unite?' '+v.unite:'')+' ['+(v.statut||'?')+']';
-    }).join(', ');
-    return e.nom+' ('+date+'): '+valeursStr+(ext.interpretation?' → '+ext.interpretation.slice(0,80):'');
-  });
-
-  return '[RÉSULTATS EXAMENS BIOLOGIQUES RÉCENTS DU PATIENT: '+lignes.join(' || ')+
-         '. Prends en compte ces valeurs dans ton analyse et demande des précisions si nécessaire.]';
-}
-
-
-// ══════════════════════════════
-// VOIR FICHIER EXAMEN — cherche dans dossier_medical via note=examenId
-// ══════════════════════════════
-async function voirFichierExamen(examenId){
-  toast('⏳ Chargement...');
-  try{
-    // Chercher le document lié dans dossier_medical (note = examenId)
-    var r=await fetch(DB_URL+'?table=dossier_medical&filter=note=eq.'+encodeURIComponent(examenId)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var data=await r.json();
-    var rows=Array.isArray(data)?data:(data.data||[]);
-    if(!rows.length){toast('Fichier non trouvé');return;}
-    var doc=rows[0];
-    var b64=doc.contenu_base64||'';
-    var mime=doc.mime_type||'image/jpeg';
-    if(!b64){toast('Fichier non dispo
+  var tousSymptomes = recentes.map(function(h){ ret
