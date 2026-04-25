@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.22
-     DATE    : 2026-04-25 08:55:17
+     VERSION : V4.23
+     DATE    : 2026-04-25 09:02:19
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1359,6 +1359,7 @@ function genConsultId(patientId){
 // ══════════════════════════════
 var DOKITA_KEY='dk-2026-prod-x9f7m';
 var DOKITA_ENV='dev'; // Passer à 'prod' avant go-live via Vercel env var ou ici
+var FEATURE_DISTANCE=false; // Désactivé phase 1 — réactiver pour Dokita Hubs zones rurales
 var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
 var SAVE_URL     ='https://heydoc-mu.vercel.app/api/save';
 var DB_URL       ='https://heydoc-mu.vercel.app/api/db';
@@ -2389,10 +2390,12 @@ async function loadMeds(){
         };
       });
       MEDS_LOADED=true;
-      // Trier par distance si géoloc disponible
-      trierMedsParDistance(NOTION_MEDS, function(sorted){
-        renderMeds(sorted);
-      });
+      // Trier par distance uniquement si FEATURE_DISTANCE actif
+      if(FEATURE_DISTANCE){
+        trierMedsParDistance(NOTION_MEDS, function(sorted){ renderMeds(sorted); });
+      } else {
+        renderMeds(NOTION_MEDS);
+      }
     }
   }catch(e){dbg('loadMeds erreur: '+e.message);}
 }
@@ -2427,7 +2430,7 @@ function renderMeds(list){
     return '<div class="r-card'+(i===0?' best':'')+'">'+
       (i===0?'<div style="font-size:9px;font-weight:700;color:var(--accent);margin-bottom:3px;">✓ MEILLEUR CHOIX</div>':'')+
       '<div class="r-nom">'+m.nom+'</div>'+
-      '<div class="r-spec">'+m.specialite+(m.note?' · ⭐'+m.note:'')+(m.tarif?' · '+m.tarif:'')+(m._distKm&&m._distKm<9999?' · 📍 '+(m._distKm<1?(m._distKm*1000).toFixed(0)+'m':m._distKm.toFixed(1)+'km'):'')+'</div>'+
+      '<div class="r-spec">'+m.specialite+(m.note?' · ⭐'+m.note:'')+(m.tarif?' · '+m.tarif:'')+(FEATURE_DISTANCE&&m._distKm&&m._distKm<9999?' · 📍 '+(m._distKm<1?(m._distKm*1000).toFixed(0)+'m':m._distKm.toFixed(1)+'km'):'')+'</div>'+
       '<div class="r-btns">'+
         (tel?'<button class="rb call" onclick="window.location.href=\'tel:'+tel+'\'">📞 Appeler</button>':'')+
         '<button class="rb dos" id="btnDossier" onclick="envoyerDossier(\''+es+'\',\''+ns+'\',\''+(m.supabaseId||'')+'\')">📋 Dossier</button>'+
@@ -5700,15 +5703,15 @@ async function ouvrirOffres(){
       var totalMeds=o.items.length;
       var disponibles=o.items.filter(function(i){return i.disponible;}).length;
       var prixMeds=o.items.reduce(function(s,i){return s+(i.total||0);},0);
-      var dist=(patLat&&patLon&&o.gps)?distKm(patLat,patLon,o.gps.lat,o.gps.lon)*2:o.rayon*2; // aller-retour
-      var coutTrajet=Math.round(dist*PRIX_KM);
+      // FEATURE_DISTANCE=false : score basé sur prix uniquement (phase 1 Brazzaville)
+      var coutTrajet=FEATURE_DISTANCE&&patLat&&patLon&&o.gps ? Math.round(distKm(patLat,patLon,o.gps.lat,o.gps.lon)*2*PRIX_KM) : 0;
       o.complete=(disponibles===totalMeds);
       o.nbDispo=disponibles;
       o.nbTotal=totalMeds;
       o.prixMeds=prixMeds;
       o.coutTrajet=coutTrajet;
       o.prixTotal=prixMeds+coutTrajet;
-      o.dist=Math.round(dist/2*10)/10; // distance one-way
+      o.dist=FEATURE_DISTANCE&&patLat&&patLon&&o.gps ? Math.round(distKm(patLat,patLon,o.gps.lat,o.gps.lon)*10)/10 : null;
       dbg('Score '+o.pharmNom+': complete='+o.complete+' dispo='+disponibles+'/'+totalMeds+' prix='+prixMeds+' FCFA');
     });
 
@@ -5718,10 +5721,9 @@ async function ouvrirOffres(){
       .sort(function(a,b){return a.prixTotal-b.prixTotal;});
     var meilleureComplete=completes[0]||null;
 
-    // ── Algo 2 stops ──
-    // Trouver la meilleure combinaison de 2 pharmacies qui couvre tous les médicaments
-    var meilleur2stops=trouver2Stops(offresRepondues,patLat,patLon);
-    dbg('2stops: '+(meilleur2stops?meilleur2stops.a.pharmNom+' + '+meilleur2stops.b.pharmNom+' total='+meilleur2stops.total:'null'));
+    // ── Algo 2 stops (désactivé si FEATURE_DISTANCE=false) ──
+    var meilleur2stops=FEATURE_DISTANCE ? trouver2Stops(offresRepondues,patLat,patLon) : null;
+    dbg('2stops: '+(meilleur2stops?meilleur2stops.a.pharmNom+' + '+meilleur2stops.b.pharmNom+' total='+meilleur2stops.total:'désactivé'));
 
     // Si une offre est déjà acceptée → afficher directement le code de retrait
     var dejaAccepte=offres.find(function(o){return o.statut==='accepte'&&o.codeRetrait;});
@@ -7341,11 +7343,4 @@ function getContexteEpidemio(ville) {
     'Tuberculose : si toux > 2 semaines + amaigrissement ou fievre nocturne',
     'Hepatite B : verifier statut vaccinal — vacciner si non immunise',
     'Drepanocytose : depistage neonatal prioritaire',
-    'Hypertension et Diabete : mesure TA et glycemie a chaque consultation'
-  ];
-
-  // ── Contexte final injecte dans AfriBot ──────────────────────
-  var ctx='[CONTEXTE EPIDEMIOLOGIQUE AU '+new Date().toLocaleDateString('fr-FR')+': ';
-  ctx+='Pays: '+pays+' | Zone: '+zone;
-  ctx+=' | Saison: '+saison;
-  ctx+=' | ALERTES SAISONNIERES: '+alerte
+    'Hypertension et Diabete : mesure TA
