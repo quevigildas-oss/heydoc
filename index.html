@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.24
-     DATE    : 2026-04-26 09:13:49
+     VERSION : V4.27
+     DATE    : 2026-04-26 10:00:44
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -748,6 +748,12 @@ select.finput option{background:var(--bg3);}
           <div class="doss-tile-title">Prévention</div>
           <div class="doss-tile-sub">Dépistage & Vaccins</div>
         </div>
+
+        <div class="doss-tile" onclick="ouvrirParrainage()">
+          <div class="doss-tile-ico" style="background:rgba(245,158,11,.12);">💌</div>
+          <div class="doss-tile-title">Parrainage</div>
+          <div class="doss-tile-sub">Partagez & économisez</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1180,6 +1186,15 @@ async function seConnecter(){
     if(!rows.length){err.textContent='Aucun compte trouvé pour cet email';err.classList.add('on');return;}
     var p=rows[0];
     if(p.code_patient!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
+    // Vérifier statut du compte — surveillance abus
+    if(p.statut_compte==='suspendu'){
+      err.textContent='Votre compte a été suspendu suite à des abus. Contactez support@dokita.health';
+      err.classList.add('on');return;
+    }
+    if(p.statut_compte==='radie'){
+      err.textContent='Votre accès a été révoqué. Contactez support@dokita.health pour toute contestation.';
+      err.classList.add('on');return;
+    }
     SESSION_EMAIL=email;
     SESSION_PATIENT_ID=p.patient_id||p.id;
     var profilPrincipal={
@@ -3193,28 +3208,32 @@ function voirRecuFacture(i){
   var medNom=s.ordonnance&&s.ordonnance.medecin?s.ordonnance.medecin:(s.medecin_nom||'Médecin Dokita');
   var spec=s.ordonnance&&s.ordonnance.specialite?s.ordonnance.specialite:'';
   var ref='DOK-'+((s.supabaseId||s.id||'').slice(0,8).toUpperCase());
+  var consultId=s.supabaseId||s.id||'';
   var patNom=(p?((p.prenom||'')+' '+(p.nom||'')).trim():'Patient');
   var ttc=PRIX_CONSULT;
   var tva=TVA_RATE>0?Math.round(ttc*(TVA_RATE/(1+TVA_RATE))):0;
   var ht=ttc-tva;
   var dateEmission=new Date().toLocaleDateString('fr-FR');
 
+  // Logique remboursement
+  var aOrdonnance=!!(s.ordonnance&&s.ordonnance.medecin);
+  var dateConsult=s.date?new Date(s.date):null;
+  var moins24h=dateConsult&&(new Date()-dateConsult)<24*60*60*1000;
+  var peutRembourser=!aOrdonnance&&moins24h;
+
   var recu=
     '<button onclick="ouvrirFacturation()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
-    '<div style="background:var(--card);border:2px solid var(--border);border-radius:16px;padding:20px;font-family:\'DM Sans\',sans-serif;">'+
-      // Header
+    '<div style="background:var(--card);border:2px solid var(--border);border-radius:16px;padding:20px;font-family:\'DM Sans\',sans-serif;margin-bottom:14px;">'+
       '<div style="text-align:center;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">'+
         '<div style="font-size:28px;margin-bottom:6px;">🧾</div>'+
         '<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:800;color:var(--text);">Reçu de paiement</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Dokita — Plateforme de santé digitale</div>'+
       '</div>'+
-      // Référence
       '<div style="background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center;">'+
         '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Référence de transaction</div>'+
         '<div style="font-family:monospace;font-size:16px;font-weight:800;color:var(--text);">'+ref+'</div>'+
         '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Émis le '+dateEmission+'</div>'+
       '</div>'+
-      // Parties
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'+
         '<div style="background:var(--bg3);border-radius:10px;padding:10px;">'+
           '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Patient</div>'+
@@ -3223,9 +3242,9 @@ function voirRecuFacture(i){
         '<div style="background:var(--bg3);border-radius:10px;padding:10px;">'+
           '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Praticien</div>'+
           '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(medNom)+'</div>'+
-          (spec?'<div style="font-size:11px;color:var(--text3);">'+escHtml(spec)+'</div>':'')+'</div>'+
+          (spec?'<div style="font-size:11px;color:var(--text3);">'+escHtml(spec)+'</div>':'')+
+        '</div>'+
       '</div>'+
-      // Détails consultation
       '<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px;">'+
         '<div style="background:var(--bg3);padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Détail</div>'+
         '<div style="padding:12px;">'+
@@ -3240,15 +3259,268 @@ function voirRecuFacture(i){
           '<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="font-size:13px;font-weight:700;color:var(--text);">Total payé</span><span style="font-size:15px;font-weight:800;color:var(--accent);">'+ttc.toLocaleString()+' FCFA</span></div>'+
         '</div>'+
       '</div>'+
-      // Disclaimer
       '<div style="font-size:10px;color:var(--text3);text-align:center;line-height:1.5;">'+
-        'Ce reçu ne constitue pas un document médical.<br>'+
-        'Aucune information diagnostique n\'y figure.<br>'+
-        'Dokita — contact@dokita.health'+
+        'Ce reçu ne constitue pas un document médical.<br>Aucune information diagnostique n\'y figure.<br>Dokita — contact@dokita.health'+
       '</div>'+
+    '</div>'+
+
+    // Boutons actions
+    '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">'+
+      // Laisser un avis — toujours disponible
+      '<button onclick="ouvrirModalAvis(\''+consultId+'\',\''+escHtml(medNom)+'\')" style="width:100%;padding:12px;background:rgba(0,168,120,.1);border:1px solid rgba(0,168,120,.3);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">⭐ Laisser un avis</button>'+
+      // Remboursement — seulement si pas d'ordonnance ET < 24h
+      (peutRembourser?
+        '<button onclick="signalerProblemeConsult(\''+ref+'\',\''+consultId+'\')" style="width:100%;padding:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:12px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:#ef4444;cursor:pointer;">💰 Demander un remboursement</button>'
+      :
+        (aOrdonnance?
+          '<div style="font-size:10px;color:var(--text3);text-align:center;padding:6px;">Ordonnance émise — aucun remboursement possible</div>'
+        :
+          '<div style="font-size:10px;color:var(--text3);text-align:center;padding:6px;">Délai de remboursement expiré (24h)</div>'
+        )
+      )+
+      // Signaler un problème — toujours disponible (sans remboursement)
+      '<button onclick="signalerProblemeConsult(\''+ref+'\',\''+consultId+'\',true)" style="width:100%;padding:10px;background:none;border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--text3);cursor:pointer;">📋 Signaler un problème (sans remboursement)</button>'+
     '</div>';
 
   el.innerHTML=recu;
+}
+
+function ouvrirModalAvis(consultId, medNom){
+  var old=document.getElementById('modalAvis');if(old)old.remove();
+  window._avisNoteMed=0; window._avisNoteBot=0;
+
+  function stars(id, label){
+    return '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;">'+label+'</div>'+
+      '<div id="stars_'+id+'" style="display:flex;gap:8px;margin-bottom:4px;">'+
+        [1,2,3,4,5].map(function(n){
+          return '<span onclick="selEtoile(\''+id+'\','+n+')" style="font-size:30px;cursor:pointer;opacity:0.3;transition:opacity .15s;">⭐</span>';
+        }).join('')+
+      '</div>'+
+    '</div>';
+  }
+
+  var m=document.createElement('div');
+  m.id='modalAvis';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+  m.innerHTML=
+    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">Donnez votre avis</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:20px;">Votre avis aide à améliorer Dokita</div>'+
+      stars('med','🩺 Note du médecin — '+escHtml(medNom))+
+      stars('bot','🤖 Note d\'AfriBot')+
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Commentaire (optionnel)</div>'+
+        '<textarea id="avisComment" placeholder="Votre expérience en quelques mots..." style="width:100%;height:70px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:10px;font-size:12px;color:var(--text);resize:none;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;"></textarea>'+
+      '</div>'+
+      '<button onclick="envoyerAvis(\''+consultId+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">Envoyer mon avis</button>'+
+      '<button onclick="document.getElementById(\'modalAvis\').remove()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;">Annuler</button>'+
+    '</div>';
+  document.body.appendChild(m);
+}
+
+function selEtoile(id, n){
+  window['_avisNote'+id.charAt(0).toUpperCase()+id.slice(1)]=n;
+  var container=document.getElementById('stars_'+id);
+  if(!container)return;
+  var spans=container.querySelectorAll('span');
+  spans.forEach(function(s,i){s.style.opacity=i<n?'1':'0.3';});
+}
+
+async function envoyerAvis(consultId){
+  var noteMed=window._avisNoteMed||0;
+  var noteBot=window._avisNoteBot||0;
+  if(!noteMed&&!noteBot){toast('⚠️ Donnez au moins une note');return;}
+  var comment=(document.getElementById('avisComment').value||'').trim();
+  try{
+    await fetch(DB_URL+'?table=consultations&id='+encodeURIComponent(consultId),{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        note_medecin:noteMed||null,
+        note_afribot:noteBot||null,
+        commentaire_patient:comment||null
+      })
+    });
+    document.getElementById('modalAvis').remove();
+    toast('⭐ Merci pour votre avis !');
+  }catch(e){toast('⚠️ Erreur: '+e.message);}
+}
+
+async function ouvrirParrainage(){
+  var p=PROFILS[SEL];
+  if(!p)return;
+
+  // Générer code parrainage si pas encore existant
+  var code=p.code_parrainage;
+  if(!code){
+    code=(p.prenom||'DOK').slice(0,3).toUpperCase()+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+    try{
+      await fetch(DB_URL+'?table=patients&id='+encodeURIComponent(p.supabaseId),{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({code_parrainage:code})
+      });
+      p.code_parrainage=code;
+    }catch(e){dbgWarn('Parrainage code err: '+e.message);}
+  }
+
+  var credit=p.credit_reduction||0;
+  var msg='🏥 Consultez un médecin avec Dokita ! Utilisez mon code *'+code+'* pour -10% sur votre première consultation. Téléchargez l\'app : https://heydoc-mu.vercel.app';
+
+  var old=document.getElementById('modalParrainage');if(old)old.remove();
+  var m=document.createElement('div');
+  m.id='modalParrainage';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+  m.innerHTML=
+    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">💌 Parrainez vos amis</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Partagez votre code — vous gagnez tous les deux</div>'+
+      '<div style="background:linear-gradient(135deg,rgba(0,168,120,.15),rgba(99,102,241,.1));border:1px solid rgba(0,168,120,.3);border-radius:16px;padding:16px;text-align:center;margin-bottom:14px;">'+
+        '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Votre code parrainage</div>'+
+        '<div style="font-family:monospace;font-size:24px;font-weight:900;color:var(--accent);letter-spacing:3px;">'+code+'</div>'+
+        (credit>0?'<div style="font-size:12px;color:var(--accent);margin-top:8px;font-weight:700;">🎉 Vous avez '+credit+'% de réduction disponible !</div>':'<div style="font-size:11px;color:var(--text3);margin-top:6px;">Dès qu\'un ami consulte, vous recevez -10%</div>')+
+      '</div>'+
+      '<div style="background:var(--bg3);border-radius:12px;padding:12px;font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:14px;">'+
+        '✅ Ami utilise votre code → <strong>-10% pour lui</strong><br>'+
+        '✅ Ami réalise sa 1ère consultation → <strong>-10% pour vous</strong>'+
+      '</div>'+
+      '<button onclick="partagerParrainage(\''+code+'\',\''+encodeURIComponent(msg)+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,#25D366,#128C7E);border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;"><span>📱</span> Partager via WhatsApp</button>'+
+      '<button onclick="document.getElementById(\'modalParrainage\').remove()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;">Fermer</button>'+
+    '</div>';
+  document.body.appendChild(m);
+}
+
+function partagerParrainage(code, msgEncoded){
+  var url='https://wa.me/?text='+msgEncoded;
+  window.open(url,'_blank');
+}
+
+function signalerProblemeConsult(ref, consultId, sansPossibiliteRemboursement){
+  var old=document.getElementById('modalSignalement');
+  if(old)old.remove();
+
+  var m=document.createElement('div');
+  m.id='modalSignalement';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+  m.innerHTML=
+    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;max-height:85vh;overflow-y:auto;">'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">Signaler un problème</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Réf: '+ref+'</div>'+
+
+      // Type de signalement
+      '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;">Quel est le problème ?</div>'+
+      '<div id="typeSignalChoix" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">'+
+        (!sansPossibiliteRemboursement?'<div onclick="selTypeSignal(this,\'remboursement\')" style="padding:12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:13px;color:var(--text);">💰 Demander un remboursement</div>':'')+
+        '<div onclick="selTypeSignal(this,\'medecin\')" style="padding:12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:13px;color:var(--text);">🩺 Problème avec le médecin</div>'+
+        '<div onclick="selTypeSignal(this,\'afribot\')" style="padding:12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:13px;color:var(--text);">🤖 AfriBot n\'a pas bien compris mes symptômes</div>'+
+        '<div onclick="selTypeSignal(this,\'autre\')" style="padding:12px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:13px;color:var(--text);">📋 Autre problème</div>'+
+      '</div>'+
+
+      // Raison (si remboursement)
+      '<div id="raisonRemboursement" style="display:none;margin-bottom:16px;">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;">Raison du remboursement</div>'+
+        '<div id="raisonChoix" style="display:flex;flex-direction:column;gap:8px;">'+
+          '<div onclick="selRaison(this,\'absent\')" style="padding:10px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:12px;color:var(--text);">Médecin absent ou indisponible</div>'+
+          '<div onclick="selRaison(this,\'incomplete\')" style="padding:10px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:12px;color:var(--text);">Consultation incomplète ou insatisfaisante</div>'+
+          '<div onclick="selRaison(this,\'technique\')" style="padding:10px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:12px;color:var(--text);">Problème technique (coupure, bug)</div>'+
+          '<div onclick="selRaison(this,\'autre_remb\')" style="padding:10px;border:1.5px solid var(--border);border-radius:12px;cursor:pointer;font-size:12px;color:var(--text);">Autre raison</div>'+
+        '</div>'+
+      '</div>'+
+
+      // Message libre
+      '<div style="margin-bottom:16px;">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">Détails (optionnel)</div>'+
+        '<textarea id="signalMessage" placeholder="Décrivez le problème..." style="width:100%;height:70px;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:10px;font-size:12px;color:var(--text);resize:none;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;"></textarea>'+
+      '</div>'+
+
+      '<button onclick="envoyerSignalement(\''+ref+'\',\''+consultId+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">Envoyer le signalement</button>'+
+      '<button onclick="document.getElementById(\'modalSignalement\').remove()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;">Annuler</button>'+
+    '</div>';
+
+  document.body.appendChild(m);
+  window._signalType=null;
+  window._signalRaison=null;
+}
+
+function selTypeSignal(el, type){
+  document.querySelectorAll('#typeSignalChoix > div').forEach(function(d){
+    d.style.border='1.5px solid var(--border)';
+    d.style.background='';
+  });
+  el.style.border='1.5px solid var(--accent)';
+  el.style.background='rgba(0,168,120,.08)';
+  window._signalType=type;
+  document.getElementById('raisonRemboursement').style.display=
+    type==='remboursement'?'block':'none';
+  if(type!=='remboursement') window._signalRaison=null;
+}
+
+function selRaison(el, raison){
+  document.querySelectorAll('#raisonChoix > div').forEach(function(d){
+    d.style.border='1.5px solid var(--border)';
+    d.style.background='';
+  });
+  el.style.border='1.5px solid var(--accent)';
+  el.style.background='rgba(0,168,120,.08)';
+  window._signalRaison=raison;
+}
+
+async function envoyerSignalement(ref, consultId){
+  var type=window._signalType;
+  if(!type){toast('⚠️ Choisissez un type de problème');return;}
+  if(type==='remboursement'&&!window._signalRaison){toast('⚠️ Choisissez une raison de remboursement');return;}
+
+  var message=(document.getElementById('signalMessage').value||'').trim();
+  var p=PROFILS[SEL];
+  if(!p)return;
+
+  try{
+    // 1. Créer le signalement dans la table remboursements
+    await fetch(DB_URL+'?table=remboursements',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify({
+        patient_id:p.supabaseId,
+        consultation_ref:ref,
+        type_signalement:type,
+        raison:window._signalRaison||message||'Non précisé',
+        statut:'en_attente'
+      })
+    });
+
+    // 2. Si remboursement → marquer la consultation
+    if(type==='remboursement'&&consultId&&consultId!=='undefined'){
+      await fetch(DB_URL+'?table=consultations&id='+encodeURIComponent(consultId),{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({rembourse:true})
+      });
+    }
+
+    // 3. Incrémenter nb_remboursements et vérifier abus
+    var rGet=await fetch(DB_URL+'?table=patients&filter=id=eq.'+encodeURIComponent(p.supabaseId)+'&select=nb_remboursements&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var dGet=await rGet.json();
+    var rows=Array.isArray(dGet)?dGet:(dGet.data||[]);
+    var nb=(rows[0]&&rows[0].nb_remboursements||0)+1;
+
+    var patch={nb_remboursements:nb};
+    if(nb>=3) patch.alerte_abus=true; // Admin alerté via Metabase
+
+    await fetch(DB_URL+'?table=patients&id='+encodeURIComponent(p.supabaseId),{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+      body:JSON.stringify(patch)
+    });
+
+    document.getElementById('modalSignalement').remove();
+    toast('✅ Signalement envoyé. Notre équipe vous contacte dans les 24h.');
+
+  }catch(e){
+    toast('⚠️ Erreur: '+e.message);
+  }
 }
 
 async function marquerExamenFait(examenId){
@@ -6905,352 +7177,4 @@ async function partagerOrdoBio(i){
   var bioEl=document.getElementById('ordBioSection');
   var txt='🔬 ORDONNANCE BIOLOGIQUE — DOKITA PRO\n\n'+
     'Prescripteur : '+(ord.medecin||'-')+'\n'+
-    'Patient : '+patNom+'\n'+
-    'Date : '+dateAff+'\n\n'+
-    'Veuillez faire pratiquer les examens complémentaires suivants.\n\n'+
-    'Résultats à apporter lors de la prochaine consultation.\n\n'+
-    'Document généré par Dokita Pro';
-
-  if(navigator.share){
-    try{await navigator.share({title:'Ordonnance Biologique Dokita',text:txt});}catch(e){}
-  } else {
-    try{await navigator.clipboard.writeText(txt);toast('📋 Copié dans le presse-papier');}catch(e){}
-  }
-}
-
-function reouvriConsultation(i){
-  if(!PROFILS[SEL])return;
-  PREV_SCREEN='historiqueScreen';
-  CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false,_reprise:true});
-  var s=HISTO_CACHE[i];
-  // Nouvelle conversation Relevance AI (pas de CID pour forcer un nouveau contexte)
-  CID=null;
-  msgs=[];BEST_MED=null;NOTION_MEDS=[];MEDS_LOADED=false;
-  document.getElementById('msgsList').innerHTML='';
-  document.getElementById('recoBox').style.display='none';
-  document.getElementById('chatInp').value='';
-  var p=CURRENT;
-  var nom=p.prenom+(p.nom?' '+p.nom:'');
-  document.getElementById('chatPBar').style.display='flex';
-  var av=document.getElementById('chatPAv');
-  av.textContent=p.prenom.charAt(0).toUpperCase();
-  av.className='cp-av '+(p._idx>=0?AVC[p._idx%8]:'av0');
-  document.getElementById('chatPNom').textContent=nom;
-  document.getElementById('chatPInfo').textContent='Nouvelle consultation';
-  document.getElementById('chatSub').textContent='Nouvelle consultation';
-  // Afficher le contexte de la consultation précédente
-  if(s){
-    var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
-    var ctx=document.createElement('div');
-    ctx.className='msg ai';
-    ctx.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);font-size:12px;">'+
-      '<strong>📋 Reprise — consultation du '+dateAff+'</strong><br>'+
-      (s.symptomes?'Symptômes précédents : '+escHtml(s.symptomes)+'<br>':'')+
-      (s.diagnostic?'Diagnostic IA : '+escHtml(s.diagnostic.slice(0,150))+'...':'')+
-      '<br><br><em>Décrivez vos nouveaux symptômes ou l\'évolution de votre état.</em>'+
-    '</div>';
-    document.getElementById('msgsList').appendChild(ctx);
-  } else {
-    var d=document.createElement('div');
-    d.className='msg ai';
-    d.innerHTML='<div class="msg-b" style="background:rgba(74,158,255,.08);border:1px dashed var(--accent2);"><em>Nouvelle consultation ouverte. Décrivez vos symptômes actuels.</em></div>';
-    document.getElementById('msgsList').appendChild(d);
-  }
-  nav('chatScreen');
-}
-
-// ══════════════════════════════
-// CONFIG NOTION
-// ══════════════════════════════
-// NOTION — STUBS V4.2 (migration en cours)
-// Les fonctions secondaires (transfert, création famille, sélection AO)
-// seront migrées vers Supabase en session suivante.
-// En attendant elles retournent vide sans crasher.
-// ══════════════════════════════
-var DOKITA_PROXY=''; // obsolète V4.2
-var NOTION_MEDECINS_DB='314dce21-e1d3-802e-88a1-fc736fb3bde9'; // obsolète
-var NOTION_PATIENTS_DB='31cdce21-e1d3-80b4-a74e-e0a6417ee0fb'; // obsolète
-var NOTION_CONSULT_DB='319dce21-e1d3-8094-a601-fe3bb4abff3a';  // obsolète
-
-async function notionConsultRequest(endpoint,method,body){
-  dbgWarn('notionConsultRequest — migration pending: '+endpoint.slice(0,50));
-  return {results:[]};
-}
-
-async function notionPatientRequest(endpoint,method,body){
-  dbgWarn('notionPatientRequest — migration pending: '+endpoint.slice(0,50));
-  return {results:[]};
-}
-
-async function chargerDossierPatientNotion(nom,patId){
-  try{
-    var filter=patId
-      ?{property:'ID Patient',rich_text:{equals:patId}}
-      :{property:'Nom complet',title:{contains:nom}};
-    var data=await notionPatientRequest('/databases/'+NOTION_PATIENTS_DB+'/query','POST',{
-      filter:filter,
-      page_size:1
-    });
-    if(data.results&&data.results.length>0){
-      var p=data.results[0];
-      var props=p.properties||{};
-      function txt(k){
-        if(!props[k])return '';
-        var t=props[k].type;
-        if(t==='title')return (props[k].title||[]).map(function(x){return x.plain_text;}).join('');
-        if(t==='rich_text')return (props[k].rich_text||[]).map(function(x){return x.plain_text;}).join('');
-        return '';
-      }
-      return {
-        notionId:p.id,
-        ordonnances:txt('Ordonnances')
-      };
-    }
-  }catch(e){console.log('Notion patient err:',e.message);}
-  return null;
-}
-
-// ══════════════════════════════
-// THÈME
-// ══════════════════════════════
-var THEMES={
-  dark:{
-    '--bg':'#0D1B2A','--bg2':'#162232','--bg3':'#1E2E40','--card':'#1A2B3C',
-    '--border':'#253D54','--accent':'#00C896','--accent2':'#4A9EFF',
-    '--warn':'#F5A623','--danger':'#FF4D4D',
-    '--text':'#F0F6FF','--text2':'#8BA8C4','--text3':'#4A6A8A',
-    '--grad':'linear-gradient(135deg,#00C896,#4A9EFF)'
-  },
-  light:{
-    '--bg':'#EEF4F0','--bg2':'#FFFFFF','--bg3':'#F4F8F5','--card':'#FFFFFF',
-    '--border':'#D6E8DF','--accent':'#00A878','--accent2':'#2D7DD2',
-    '--warn':'#E8920A','--danger':'#D93025',
-    '--text':'#0D2318','--text2':'#4A6B5A','--text3':'#9DBDAD',
-    '--grad':'linear-gradient(135deg,#00A878,#2D7DD2)'
-  }
-};
-function initTheme(){
-  var t=localStorage.getItem('dokita_theme')||'light';
-  applyThemeVars(t);
-}
-function setTheme(t){
-  localStorage.setItem('dokita_theme',t);
-  applyThemeVars(t);
-  syncToggles(t);
-}
-function toggleTheme(){
-  var cur=localStorage.getItem('dokita_theme')||'light';
-  setTheme(cur==='light'?'dark':'light');
-}
-function applyThemeVars(t){
-  var vars=THEMES[t]||THEMES.light;
-  var root=document.documentElement;
-  for(var k in vars)root.style.setProperty(k,vars[k]);
-}
-function syncToggles(t){
-  var tog=document.getElementById('toggleTheme');
-  var ico=document.getElementById('themeIco');
-  var lbl=document.getElementById('themeLabel');
-  if(tog){if(t==='dark'){tog.classList.add('on');}else{tog.classList.remove('on');}}
-  if(ico)ico.textContent=t==='dark'?'🌙':'☀️';
-  if(lbl)lbl.textContent=t==='dark'?'Mode sombre':'Mode clair';
-}
-function applyTheme(){}
-function openParametres(){
-  var n=PROFILS.length;
-  var el=document.getElementById('paramProfilCount');
-  if(el)el.textContent=n+' profil'+(n>1?'s':'')+(n?' : '+PROFILS.map(function(p){return p.prenom;}).join(', '):'');
-  nav('parametresScreen');
-  syncToggles(localStorage.getItem('dokita_theme')||'light');
-  var el2=document.getElementById('paramEmail');if(el2)el2.textContent=SESSION_EMAIL||'';
-}
-function clearAllData(){
-  if(!confirm('Effacer TOUTES les données Dokita ?\nProfils, historique, dossiers médicaux.\nCette action est irréversible.'))return;
-  localStorage.clear();
-  PROFILS=[];SEL=-1;CURRENT=null;
-  toast('🗑 Toutes les données effacées');
-  setTimeout(function(){nav('accueilScreen');},1000);
-}
-initTheme();
-
-// ══════════════════════════════
-// DICTÉE VOCALE
-// ══════════════════════════════
-var recognition=null,isListening=false;
-function toggleVoice(){
-  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('⚠️ Dictée vocale non supportée sur ce navigateur');return;}
-  if(isListening){stopVoice();return;}
-  startVoice();
-}
-function startVoice(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  recognition=new SR();
-  recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=true;
-  recognition.onstart=function(){
-    isListening=true;
-    document.getElementById('micBtn').classList.add('on');
-    document.getElementById('chatInp').placeholder='🎙 Parlez maintenant...';
-  };
-  recognition.onresult=function(e){
-    var t='';
-    for(var i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;
-    document.getElementById('chatInp').value=t;
-    autoH(document.getElementById('chatInp'));
-  };
-  recognition.onend=function(){stopVoice();};
-  recognition.onerror=function(e){stopVoice();if(e.error!=='aborted')toast('⚠️ Erreur micro: '+e.error);};
-  recognition.start();
-}
-function stopVoice(){
-  isListening=false;
-  if(recognition){try{recognition.stop();}catch(e){}}
-  var btn=document.getElementById('micBtn');if(btn)btn.classList.remove('on');
-  var inp=document.getElementById('chatInp');if(inp)inp.placeholder='Décrivez vos symptômes...';
-}
-
-function toast(msg){
-  var t=document.createElement('div');t.className='toast';t.textContent=msg;
-  document.body.appendChild(t);
-  setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(function(){t.remove();},300);},2500);
-}
-</script>
-
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('/sw.js').then(function(reg){
-      // Vérifier les mises à jour à chaque ouverture
-      reg.update();
-    });
-  });
-}
-
-// ══════════════════════════════
-// PRÉVENTION & DÉPISTAGE
-// ══════════════════════════════
-function ouvrirPrevention(){
-  var p = PROFILS[SEL]||{};
-  var age = p._age || calcAge(p.naiss) || 0;
-  var sexe = p.sx || ''; // 'H' ou 'F'
-
-  // Construire la liste selon l'âge et le sexe
-  var items = getPreventionItems(age, sexe);
-
-  var body = document.getElementById('preventionBody');
-  var sub  = document.getElementById('preventionSub');
-
-  var tranche = age < 2 ? '0-23 mois' : age < 10 ? '2-9 ans' : age < 15 ? '10-14 ans' : age < 25 ? '15-24 ans' : age < 50 ? '25-49 ans' : '50 ans et plus';
-  sub.textContent = 'Pour ' + (p.prenom||'vous') + ' · ' + age + ' ans · ' + tranche;
-
-  if(!items.length){
-    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">Aucune recommandation disponible pour ce profil.</div>';
-    nav('preventionScreen');
-    return;
-  }
-
-  // Regrouper par type
-  var groupes = {};
-  items.forEach(function(it){
-    if(!groupes[it.type]) groupes[it.type] = [];
-    groupes[it.type].push(it);
-  });
-
-  var typeOrder = ['🟢 Systématique','🟡 Recommandé','🔵 À risque'];
-  var typeColors = {'🟢 Systématique':'#059669','🟡 Recommandé':'#D97706','🔵 À risque':'#0284C7'};
-  var typeBg = {'🟢 Systématique':'rgba(5,150,105,.08)','🟡 Recommandé':'rgba(217,151,6,.08)','🔵 À risque':'rgba(2,132,199,.08)'};
-
-  var html = '';
-  typeOrder.forEach(function(type){
-    if(!groupes[type]) return;
-    html += '<div style="margin-bottom:20px;">';
-    html += '<div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:' + typeColors[type] + ';text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">' + type + '</div>';
-    groupes[type].forEach(function(it){
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">';
-      html += '<div style="font-size:22px;flex-shrink:0;">' + it.ico + '</div>';
-      html += '<div style="flex:1;">';
-      html += '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">' + it.maladie + '</div>';
-      html += '<div style="font-size:11px;color:var(--text2);margin-bottom:2px;">' + it.acte + '</div>';
-      if(it.note) html += '<div style="font-size:10px;color:var(--text3);font-style:italic;">' + it.note + '</div>';
-      html += '</div>';
-      html += '<div style="font-size:9px;font-weight:700;padding:3px 7px;border-radius:6px;background:' + typeBg[type] + ';color:' + typeColors[type] + ';white-space:nowrap;flex-shrink:0;">' + it.freq + '</div>';
-      html += '</div>';
-    });
-    html += '</div>';
-  });
-
-  html += '<div style="background:var(--bg3);border-radius:12px;padding:12px;margin-top:8px;font-size:10px;color:var(--text3);text-align:center;line-height:1.6;">';
-  html += '📚 Source : OMS AFRO · GBD 2023 · Recommandations Afrique subsaharienne<br>';
-  html += 'Ces recommandations sont indicatives — consultez votre médecin Dokita pour un bilan personnalisé.';
-  html += '</div>';
-
-  body.innerHTML = html;
-  nav('preventionScreen');
-}
-
-function getPreventionItems(age, sexe){
-  var items = [];
-  var H = sexe === 'H';
-  var F = sexe === 'F';
-  var tous = true;
-
-  // ── 0-23 MOIS ──────────────────────────────────────────────────
-  if(age < 2){
-    items = [
-      {ico:'💉',maladie:'Tuberculose',acte:'BCG',type:'🟢 Systématique',freq:'Naissance',note:''},
-      {ico:'💉',maladie:'Poliomyélite',acte:'VPO0 + VPO1/2/3 + IPV',type:'🟢 Systématique',freq:'Naissance + 6-10-14 sem',note:''},
-      {ico:'💉',maladie:'Hépatite B',acte:'HepB naissance + Pentavalent',type:'🟢 Systématique',freq:'Naissance + 6-10-14 sem',note:''},
-      {ico:'💉',maladie:'DTC (Diphtérie/Tétanos/Coqueluche)',acte:'Pentavalent',type:'🟢 Systématique',freq:'6-10-14 semaines',note:''},
-      {ico:'💉',maladie:'Pneumonie',acte:'PCV (pneumocoque)',type:'🟢 Systématique',freq:'6-10-14 semaines',note:''},
-      {ico:'💉',maladie:'Paludisme',acte:'RTS,S vaccin',type:'🟢 Systématique',freq:'6-9-12-18 mois',note:''},
-      {ico:'💉',maladie:'Rougeole',acte:'MCV1 + MCV2',type:'🟢 Systématique',freq:'9 mois + 15 mois',note:''},
-      {ico:'💉',maladie:'Fièvre jaune',acte:'Vaccin YF',type:'🟢 Systématique',freq:'9 mois',note:''},
-      {ico:'🛡️',maladie:'Malnutrition',acte:'Vitamine A + MUAC',type:'🟢 Systématique',freq:'6 mois puis /6 mois',note:''},
-      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanent',note:''},
-      {ico:'🔬',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
-      {ico:'🔬',maladie:'Drépanocytose',acte:'Électrophorèse Hb',type:'🟡 Recommandé',freq:'Naissance ou < 1 an',note:''},
-    ];
-  }
-
-  // ── 2-9 ANS ────────────────────────────────────────────────────
-  else if(age < 10){
-    items = [
-      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanente',note:''},
-      {ico:'🔬',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
-      {ico:'🛡️',maladie:'Paludisme',acte:'CPS (chimioprévention saisonnière)',type:'🟢 Systématique',freq:'Saison de transmission < 5 ans',note:''},
-      {ico:'🛡️',maladie:'Malnutrition',acte:'Vitamine A + MUAC',type:'🟢 Systématique',freq:'Tous les 6 mois jusqu\'a 5 ans',note:''},
-      {ico:'💊',maladie:'Parasites intestinaux',acte:'Albendazole 400mg',type:'🟢 Systématique',freq:'2×/an',note:''},
-      {ico:'💉',maladie:'Méningite',acte:'MenAfriVac (méningocoque A)',type:'🟢 Systématique',freq:'9 mois — zone ceinture',note:''},
-      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage si symptômes',type:'🟡 Recommandé',freq:'Si toux > 2 sem + fièvre',note:''},
-    ];
-  }
-
-  // ── 10-14 ANS ──────────────────────────────────────────────────
-  else if(age < 15){
-    items = [
-      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA',type:'🟢 Systématique',freq:'Permanent',note:''},
-      {ico:'🔬',maladie:'VIH',acte:'Dépistage',type:'🟡 Recommandé',freq:'Proposé dès 12 ans',note:''},
-      {ico:'💉',maladie:'Tétanos/Diphtérie',acte:'Rappel Td',type:'🟢 Systématique',freq:'1 rappel',note:''},
-      {ico:'💊',maladie:'Parasites/MTN',acte:'Albendazole + Praziquantel',type:'🟡 Recommandé',freq:'Programme scolaire',note:''},
-    ];
-    if(F) items.unshift({ico:'💉',maladie:'Cancer col utérin (HPV)',acte:'Vaccin HPV (1 dose)',type:'🟢 Systématique',freq:'9-14 ans — priorité OMS AFRO',note:''});
-  }
-
-  // ── 15-24 ANS ──────────────────────────────────────────────────
-  else if(age < 25){
-    items = [
-      {ico:'🔬',maladie:'VIH',acte:'Test + counseling',type:'🟢 Systématique',freq:'Annuel · Semestriel si risque eleve',note:''},
-      {ico:'🦟',maladie:'Paludisme',acte:'Moustiquaire MILDA + TDR',type:'🟢 Systématique',freq:'Permanent',note:''},
-      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
-      {ico:'🔬',maladie:'Hépatite B',acte:'AgHBs',type:'🟡 Recommandé',freq:'1 fois si statut inconnu',note:''},
-      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage clinique',type:'🟡 Recommandé',freq:'Si toux > 2 sem + AEG',note:''},
-      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟡 Recommandé',freq:'Chaque consultation',note:'Opportuniste'},
-    ];
-    if(F) items.push({ico:'💉',maladie:'Cancer col utérin (HPV)',acte:'HPV rattrapage (2 doses)',type:'🟡 Recommandé',freq:'Jusqu\'a 26 ans si non vaccinée',note:''});
-    if(H) items.push({ico:'🛡️',maladie:'VIH',acte:'Circoncision (VMMC)',type:'🔵 À risque',freq:'Si non circoncis',note:'Réduction risque ~60%'});
-  }
-
-  // ── 25-49 ANS ──────────────────────────────────────────────────
-  else if(age < 50){
-    items = [
-      {ico:'🔬',maladie:'VIH',acte:'Test',type:'🟢 Systématique',freq:'Annuel',note:''},
-      {ico:'🔬',mala
+    'Pat
