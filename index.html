@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.23
-     DATE    : 2026-04-25 09:02:19
+     VERSION : V4.24
+     DATE    : 2026-04-26 09:13:49
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2914,6 +2914,10 @@ async function chargerDossierDokita(){
       antecedents?'<span style="font-size:10px;color:#ef4444;">'+escHtml(antecedents.slice(0,30)+(antecedents.length>30?'...':''))+'</span>'
       :'<span style="font-size:11px;color:var(--text3);">Aucun</span>'
     )+
+    tuileGrille('ouvrirFacturation()',
+      'var(--border)','🧾','Facturation',
+      '<span style="font-size:11px;color:var(--text3);">Reçus & paiements</span>'
+    )+
     '</div>'+
     '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--text2);line-height:1.5;text-align:center;">'+
       '⚠️ Les documents ajoutés seront vérifiés par votre médecin. Vous certifiez qu\'ils vous appartiennent et sont authentiques.'+
@@ -3115,6 +3119,137 @@ function ouvrirDossierAntecedents(){
   el.innerHTML=html;
 }
 
+function ouvrirFacturation(){
+  var el=document.getElementById('dossierMedBody');
+  var p=PROFILS[SEL];
+  if(!p){el.innerHTML='<div class="detail-empty">Sélectionnez un profil</div>';return;}
+
+  // Construire liste depuis HISTO_CACHE (consultations terminées)
+  var consultsPaye=(HISTO_CACHE||[]).filter(function(s){
+    return s.statut==='valide'||s.statut==='valide_override'||s.statut==='cloture';
+  });
+
+  var TVA_RATE=0; // À mettre à jour avec le vrai taux après avis comptable (ex: 0.18)
+  var PRIX_CONSULT=5000; // FCFA
+
+  var html=
+    '<button onclick="chargerDossierDokita()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">🧾 Facturation</div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Reçus de vos consultations Dokita</div>';
+
+  if(!consultsPaye.length){
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:30px;text-align:center;color:var(--text3);">'+
+      '<div style="font-size:32px;margin-bottom:10px;">🧾</div>'+
+      '<div style="font-size:13px;">Aucune consultation facturée</div>'+
+      '<div style="font-size:11px;margin-top:6px;color:var(--text3);">Le module paiement sera disponible au lancement</div>'+
+    '</div>';
+  } else {
+    consultsPaye.forEach(function(s,i){
+      var date=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'—';
+      var medNom=s.ordonnance&&s.ordonnance.medecin?s.ordonnance.medecin:(s.medecin_nom||'Médecin Dokita');
+      var spec=s.ordonnance&&s.ordonnance.specialite?s.ordonnance.specialite:'';
+      var ref='DOK-'+((s.supabaseId||s.id||'').slice(0,8).toUpperCase());
+      var ttc=PRIX_CONSULT;
+      var tva=TVA_RATE>0?Math.round(ttc*(TVA_RATE/(1+TVA_RATE))):0;
+      var ht=ttc-tva;
+
+      html+=
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px;">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+            '<div>'+
+              '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text);">Consultation du '+date+'</div>'+
+              '<div style="font-size:11px;color:var(--text3);">'+escHtml(medNom)+(spec?' · '+escHtml(spec):'')+'</div>'+
+            '</div>'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--accent);">'+ttc.toLocaleString()+' FCFA</div>'+
+          '</div>'+
+          '<div style="background:var(--bg3);border-radius:10px;padding:10px;font-size:11px;color:var(--text2);margin-bottom:10px;">'+
+            '<div style="display:flex;justify-content:space-between;"><span>Référence</span><span style="font-weight:600;font-family:monospace;">'+ref+'</span></div>'+
+            (TVA_RATE>0?
+              '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>Montant HT</span><span>'+ht.toLocaleString()+' FCFA</span></div>'+
+              '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>TVA ('+Math.round(TVA_RATE*100)+'%)</span><span>'+tva.toLocaleString()+' FCFA</span></div>'+
+              '<div style="display:flex;justify-content:space-between;margin-top:4px;font-weight:700;color:var(--text);"><span>Total TTC</span><span>'+ttc.toLocaleString()+' FCFA</span></div>'
+            :
+              '<div style="display:flex;justify-content:space-between;margin-top:4px;font-weight:700;color:var(--text);"><span>Montant payé</span><span>'+ttc.toLocaleString()+' FCFA</span></div>'
+            )+
+          '</div>'+
+          '<button onclick="voirRecuFacture('+i+')" style="width:100%;padding:10px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:10px;font-family:\'Syne\',sans-serif;font-size:12px;font-weight:700;color:#818cf8;cursor:pointer;">📄 Voir le reçu</button>'+
+        '</div>';
+    });
+  }
+
+  el.innerHTML=html;
+  el._consultsFacture=consultsPaye;
+}
+
+function voirRecuFacture(i){
+  var el=document.getElementById('dossierMedBody');
+  var s=el._consultsFacture&&el._consultsFacture[i];
+  if(!s)return;
+
+  var p=PROFILS[SEL];
+  var TVA_RATE=0;
+  var PRIX_CONSULT=5000;
+  var date=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'—';
+  var medNom=s.ordonnance&&s.ordonnance.medecin?s.ordonnance.medecin:(s.medecin_nom||'Médecin Dokita');
+  var spec=s.ordonnance&&s.ordonnance.specialite?s.ordonnance.specialite:'';
+  var ref='DOK-'+((s.supabaseId||s.id||'').slice(0,8).toUpperCase());
+  var patNom=(p?((p.prenom||'')+' '+(p.nom||'')).trim():'Patient');
+  var ttc=PRIX_CONSULT;
+  var tva=TVA_RATE>0?Math.round(ttc*(TVA_RATE/(1+TVA_RATE))):0;
+  var ht=ttc-tva;
+  var dateEmission=new Date().toLocaleDateString('fr-FR');
+
+  var recu=
+    '<button onclick="ouvrirFacturation()" style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:0;margin-bottom:14px;">← Retour</button>'+
+    '<div style="background:var(--card);border:2px solid var(--border);border-radius:16px;padding:20px;font-family:\'DM Sans\',sans-serif;">'+
+      // Header
+      '<div style="text-align:center;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">'+
+        '<div style="font-size:28px;margin-bottom:6px;">🧾</div>'+
+        '<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:800;color:var(--text);">Reçu de paiement</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Dokita — Plateforme de santé digitale</div>'+
+      '</div>'+
+      // Référence
+      '<div style="background:var(--bg3);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center;">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Référence de transaction</div>'+
+        '<div style="font-family:monospace;font-size:16px;font-weight:800;color:var(--text);">'+ref+'</div>'+
+        '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Émis le '+dateEmission+'</div>'+
+      '</div>'+
+      // Parties
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'+
+        '<div style="background:var(--bg3);border-radius:10px;padding:10px;">'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Patient</div>'+
+          '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(patNom)+'</div>'+
+        '</div>'+
+        '<div style="background:var(--bg3);border-radius:10px;padding:10px;">'+
+          '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Praticien</div>'+
+          '<div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(medNom)+'</div>'+
+          (spec?'<div style="font-size:11px;color:var(--text3);">'+escHtml(spec)+'</div>':'')+'</div>'+
+      '</div>'+
+      // Détails consultation
+      '<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:14px;">'+
+        '<div style="background:var(--bg3);padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Détail</div>'+
+        '<div style="padding:12px;">'+
+          '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span style="font-size:12px;color:var(--text2);">Consultation médicale Dokita</span><span style="font-size:12px;font-weight:600;color:var(--text);">'+ttc.toLocaleString()+' FCFA</span></div>'+
+          '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span style="font-size:12px;color:var(--text2);">Date de consultation</span><span style="font-size:12px;color:var(--text);">'+date+'</span></div>'+
+          (TVA_RATE>0?
+            '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span style="font-size:12px;color:var(--text2);">Montant HT</span><span style="font-size:12px;color:var(--text);">'+ht.toLocaleString()+' FCFA</span></div>'+
+            '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span style="font-size:12px;color:var(--text2);">TVA ('+Math.round(TVA_RATE*100)+'%)</span><span style="font-size:12px;color:var(--text);">'+tva.toLocaleString()+' FCFA</span></div>'
+          :
+            '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);"><span style="font-size:12px;color:var(--text2);">Exonéré de TVA</span><span style="font-size:12px;color:var(--text3);">Prestation médicale</span></div>'
+          )+
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;"><span style="font-size:13px;font-weight:700;color:var(--text);">Total payé</span><span style="font-size:15px;font-weight:800;color:var(--accent);">'+ttc.toLocaleString()+' FCFA</span></div>'+
+        '</div>'+
+      '</div>'+
+      // Disclaimer
+      '<div style="font-size:10px;color:var(--text3);text-align:center;line-height:1.5;">'+
+        'Ce reçu ne constitue pas un document médical.<br>'+
+        'Aucune information diagnostique n\'y figure.<br>'+
+        'Dokita — contact@dokita.health'+
+      '</div>'+
+    '</div>';
+
+  el.innerHTML=recu;
+}
 
 async function marquerExamenFait(examenId){
   try{
@@ -7118,229 +7253,4 @@ function getPreventionItems(age, sexe){
   else if(age < 50){
     items = [
       {ico:'🔬',maladie:'VIH',acte:'Test',type:'🟢 Systématique',freq:'Annuel',note:''},
-      {ico:'🔬',maladie:'Tuberculose',acte:'Dépistage clinique',type:'🟡 Recommandé',freq:'Si toux ≥ 2 sem',note:'Sueurs nocturnes, amaigrissement'},
-      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟢 Systématique',freq:'Chaque consultation',note:''},
-      {ico:'🩸',maladie:'Diabète type 2',acte:'Glycemie a jeun',type:'🟡 Recommandé',freq:'Tous les 3 ans si risque eleve',note:''},
-      {ico:'🔬',maladie:'Hépatite B',acte:'AgHBs',type:'🟡 Recommandé',freq:'1 fois si inconnu',note:''},
-      {ico:'🦟',maladie:'Paludisme',acte:'TDR si fièvre',type:'🟢 Systématique',freq:'Systématique si fièvre',note:''},
-      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
-    ];
-    if(F){
-      items.push({ico:'🔬',maladie:'Cancer col utérin',acte:'VIA ou HPV DNA',type:'🟢 Systématique',freq:'Tous les 5-10 ans dès 25 ans',note:'Tous les 3-5 ans si VIH+'});
-      items.push({ico:'🩺',maladie:'Cancer sein',acte:'Examen clinique',type:'🟡 Recommandé',freq:'Annuel + autopalpation mensuelle',note:''});
-    }
-  }
-
-  // ── 50 ANS ET PLUS ─────────────────────────────────────────────
-  else {
-    items = [
-      {ico:'🔬',maladie:'VIH',acte:'Test',type:'🟢 Systématique',freq:'Annuel',note:''},
-      {ico:'🩺',maladie:'Hypertension',acte:'Tension artérielle',type:'🟢 Systématique',freq:'Chaque consultation',note:''},
-      {ico:'🩸',maladie:'Diabète type 2',acte:'Glycémie',type:'🟢 Systématique',freq:'Tous les 2 ans',note:''},
-      {ico:'👁️',maladie:'Cataracte',acte:'Examen ophtalmologique',type:'🟡 Recommandé',freq:'Annuel',note:'1ère cause cécité Afrique'},
-      {ico:'🔬',maladie:'Tuberculose',acte:'Rx pulmonaire / crachats',type:'🟡 Recommandé',freq:'Si toux chronique',note:''},
-      {ico:'💉',maladie:'Tétanos',acte:'Rappel Td',type:'🟢 Systématique',freq:'Tous les 10 ans',note:''},
-      {ico:'🩺',maladie:'Insuffisance rénale',acte:'Créatinine + protéinurie',type:'🟡 Recommandé',freq:'Annuel si HTA ou diabète',note:''},
-    ];
-    if(F){
-      items.push({ico:'🔬',maladie:'Cancer col utérin',acte:'VIA / HPV DNA',type:'🟢 Systématique',freq:'Jusqu\'a 65 ans — tous les 5 ans',note:''});
-      items.push({ico:'🩺',maladie:'Cancer sein',acte:'Examen clinique',type:'🟡 Recommandé',freq:'Annuel',note:''});
-    }
-    if(H) items.push({ico:'🔬',maladie:'Cancer prostate',acte:'PSA + TR',type:'🔵 À risque',freq:'Dès 50 ans (45 si ATCD)',note:''});
-  }
-
-  return items;
-}
-
-
-// Calcul IMC en temps réel dans le formulaire profil
-function majIMC(){
-  var taille=parseFloat(document.getElementById('fTaille').value);
-  var poids=parseFloat(document.getElementById('fPoids').value);
-  var el=document.getElementById('imcDisplay');
-  if(!el)return;
-  if(taille>0&&poids>0){
-    var imc=Math.round(poids/Math.pow(taille/100,2)*10)/10;
-    var label=imc<18.5?'Maigreur':imc<25?'Normal':imc<30?'Surpoids':'Obésité';
-    var color=imc<18.5?'#D97706':imc<25?'#059669':imc<30?'#F59E0B':'#EF4444';
-    el.textContent=imc+' — '+label;
-    el.style.color=color;
-  }else{
-    el.textContent='—';
-    el.style.color='var(--text2)';
-  }
-}
-
-
-// ══════════════════════════════
-// CONTEXTE ÉPIDÉMIOLOGIQUE TEMPS RÉEL
-// Source : GBD 2023 · OMS AFRO · WHO AFRO Guidelines
-// Basé sur mois actuel + ville/pays du patient
-// ══════════════════════════════
-function getContexteEpidemio(ville) {
-  var mois = new Date().getMonth() + 1;
-  var v = (ville || '').toLowerCase();
-
-  // ── Zone géographique ────────────────────────────────────────
-  var pays = 'Afrique subsaharienne';
-  var zone = 'centrale';
-
-  if(v.match(/brazzaville|pointe.noire|dolisie|nkayi/)){
-    pays='Congo-Brazzaville'; zone='centrale';
-  } else if(v.match(/kinshasa|lubumbashi|goma|bukavu|kisangani/)){
-    pays='RDC'; zone='centrale';
-  } else if(v.match(/abidjan|yamoussoukro|bouak|daloa|korhogo/)){
-    pays="Cote d'Ivoire"; zone='ouest';
-  } else if(v.match(/douala|yaounde|garoua|maroua/)){
-    pays='Cameroun'; zone='centrale';
-  } else if(v.match(/libreville|port.gentil/)){
-    pays='Gabon'; zone='centrale';
-  } else if(v.match(/dakar|thies|kaolack|ziguinchor/)){
-    pays='Senegal'; zone='sahel';
-  } else if(v.match(/bamako|sikasso|mopti/)){
-    pays='Mali'; zone='sahel';
-  } else if(v.match(/ouagadougou|bobo.dioulasso/)){
-    pays='Burkina Faso'; zone='sahel';
-  } else if(v.match(/niamey|zinder|maradi/)){
-    pays='Niger'; zone='sahel';
-  } else if(v.match(/ndjamena|moundou/)){
-    pays='Tchad'; zone='sahel';
-  } else if(v.match(/lome|sokode/)){
-    pays='Togo'; zone='ouest';
-  } else if(v.match(/cotonou|porto.novo|parakou/)){
-    pays='Benin'; zone='ouest';
-  } else if(v.match(/accra|kumasi|tamale/)){
-    pays='Ghana'; zone='ouest';
-  } else if(v.match(/lagos|abuja|kano|ibadan/)){
-    pays='Nigeria'; zone='ouest';
-  } else if(v.match(/nairobi|mombasa/)){
-    pays='Kenya'; zone='est';
-  } else if(v.match(/dar.es.salaam|dodoma/)){
-    pays='Tanzanie'; zone='est';
-  } else if(v.match(/kampala/)){
-    pays='Ouganda'; zone='est';
-  } else if(v.match(/luanda/)){
-    pays='Angola'; zone='australe';
-  }
-
-  // ── Saison et alertes selon zone + mois ──────────────────────
-  var saison='';
-  var alertes=[];
-  var inArray=function(v,arr){return arr.indexOf(v)>=0;};
-
-  if(zone==='centrale'){
-    if(inArray(mois,[3,4,5,6])){
-      saison='Grande saison des pluies (mars-juin)';
-      alertes=[
-        'Paludisme TRES ELEVE — TDR systematique si fievre — diagnostic prioritaire absolu',
-        'Cholera et gastro-enterites augmentes — eau traitee obligatoire',
-        'Dengue et Chikungunya en circulation urbaine',
-        'Typhoide augmentee (contamination hydrique)',
-        'Infections respiratoires basses frequentes enfants < 5 ans',
-        'Helminthiases et schistosomiase augmentees apres pluies'
-      ];
-    } else if(inArray(mois,[9,10,11])){
-      saison='Petite saison des pluies (sept-nov)';
-      alertes=[
-        'Paludisme ELEVE — TDR si fievre',
-        'Cholera et diarrhees en surveillance',
-        'Arbovirus (dengue) en circulation'
-      ];
-    } else if(inArray(mois,[12,1,2])){
-      saison='Grande saison seche (dec-fev)';
-      alertes=[
-        'Paludisme MODERE — maintenir moustiquaire MILDA',
-        'Meningite bacterienne augmentee en saison seche',
-        'Pneumonies et infections respiratoires plus frequentes',
-        'Conjonctivites et trachome en zones rurales',
-        'Rougeole — epidemies possibles si couverture vaccinale insuffisante'
-      ];
-    } else {
-      saison='Petite saison seche (juil-aout)';
-      alertes=[
-        'Paludisme MODERE — maintenir moustiquaire MILDA',
-        'Periode de transition — surveiller fievres inexpliquees'
-      ];
-    }
-  } else if(zone==='ouest'){
-    if(inArray(mois,[4,5,6,7,8,9,10])){
-      saison='Saison des pluies (avr-oct)';
-      alertes=[
-        'Paludisme TRES ELEVE — premier diagnostic a eliminer si fievre',
-        'Cholera en alerte — eau traitee obligatoire',
-        'Fievre jaune endemique — verifier statut vaccinal (YF obligatoire)',
-        'Dengue en circulation zones urbaines cotieres',
-        'Rougeole — verifier carnet vaccination enfants',
-        'Helminthiases et schistosomiase augmentees'
-      ];
-    } else {
-      saison='Saison seche Harmattan (nov-mars)';
-      alertes=[
-        'Paludisme MODERE — TDR si fievre',
-        'ALERTE MENINGITE a meningocoque — harmattan = air sec = risque augmente',
-        'Infections respiratoires et rhinites augmentees avec harmattan',
-        'Conjonctivites frequentes avec poussiere',
-        'Rougeole — periode epidemique possible'
-      ];
-    }
-  } else if(zone==='sahel'){
-    if(inArray(mois,[6,7,8,9])){
-      saison='Saison des pluies (juin-sept)';
-      alertes=[
-        'Paludisme TRES ELEVE — pic de transmission — TDR systematique',
-        'Chimioprevention saisonniere (CPS) obligatoire : enfants 3 mois - 5 ans',
-        'Cholera en alerte zones rurales — eau potable critique',
-        'Typhoide augmentee — hygiene alimentaire',
-        'Rougeole — surveillance epidemique'
-      ];
-    } else if(inArray(mois,[11,12,1,2,3])){
-      saison='Harmattan — Saison seche (nov-mars)';
-      alertes=[
-        'ALERTE MENINGITE ELEVEE — Ceinture africaine : risque TRES ELEVE en harmattan',
-        'Vaccin MenACWY recommande si non vaccine en zone de ceinture',
-        'Paludisme FAIBLE — mais TDR si fievre inexpliquee',
-        'Infections respiratoires et pneumonies tres frequentes avec harmattan',
-        'Conjonctivites massives avec vent de sable',
-        'Rougeole — epidemies frequentes en saison seche'
-      ];
-    } else {
-      saison='Transition (avr-mai / oct)';
-      alertes=[
-        'Paludisme en hausse — debut de transmission',
-        'Preparer chimioprevention saisonniere pour enfants < 5 ans'
-      ];
-    }
-  } else if(zone==='est'){
-    if(inArray(mois,[3,4,5])){
-      saison='Longues pluies (mars-mai)';
-      alertes=[
-        'Paludisme ELEVE zones basse altitude',
-        'Rift Valley Fever possible apres fortes pluies (contact animal)',
-        'Cholera en alerte zones cotieres'
-      ];
-    } else if(inArray(mois,[10,11,12])){
-      saison='Courtes pluies (oct-dec)';
-      alertes=[
-        'Paludisme MODERE a ELEVE',
-        'Dengue en circulation zones urbaines'
-      ];
-    } else {
-      saison='Saison seche';
-      alertes=[
-        'Paludisme FAIBLE a MODERE selon altitude',
-        'Infections respiratoires en hausse',
-        'Meningite en surveillance'
-      ];
-    }
-  } else {
-    saison='Voir contexte local';
-    alertes=['Paludisme endemique — TDR si fievre'];
-  }
-
-  // ── Alertes permanentes Afrique subsaharienne ─────────────────
-  var permanentes=[
-    'VIH : depistage annuel recommande pour tous les adultes',
-    'Tuberculose : si toux > 2 semaines + amaigrissement ou fievre nocturne',
-    'Hepatite B : verifier statut vaccinal — vacciner si non immunise',
-    'Drepanocytose : depistage neonatal prioritaire',
-    'Hypertension et Diabete : mesure TA
+      {ico:'🔬',mala
