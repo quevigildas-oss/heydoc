@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.27
-     DATE    : 2026-04-26 10:00:44
+     VERSION : V4.29
+     DATE    : 2026-04-27 20:38:22
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -6136,18 +6136,27 @@ async function ouvrirOffres(){
     var dejaAccepte=offres.find(function(o){return o.statut==='accepte'&&o.codeRetrait;});
     if(dejaAccepte){
       var shareKey='reload_'+dejaAccepte.codeRetrait;
-      SHARE_MSGS[shareKey]='Mon code de retrait Dokita : '+dejaAccepte.codeRetrait+'\nPharmacie : '+dejaAccepte.pharmNom;
+      var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():'';
+      var tel=dejaAccepte.pharmTel||'';
+      SHARE_MSGS[shareKey]='Mon code de retrait Dokita : '+dejaAccepte.codeRetrait+'\nPharmacie : '+dejaAccepte.pharmNom+'\nCommande AO-'+aoNum;
       el.innerHTML=
         '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:20px;margin-bottom:16px;">'+
           '<div style="font-size:32px;text-align:center;margin-bottom:12px;">✅</div>'+
-          '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);text-align:center;margin-bottom:4px;">Pharmacie choisie</div>'+
-          '<div style="font-size:13px;color:var(--text2);text-align:center;margin-bottom:20px;">'+escHtml(dejaAccepte.pharmNom)+'</div>'+
+          '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--text);text-align:center;margin-bottom:4px;">Pharmacie choisie</div>'+
+          '<div style="font-size:13px;color:var(--text2);text-align:center;margin-bottom:4px;">'+escHtml(dejaAccepte.pharmNom)+'</div>'+
+          '<div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:16px;">Commande n° AO-'+aoNum+'</div>'+
           '<div style="background:var(--bg);border-radius:10px;padding:16px;text-align:center;margin-bottom:14px;">'+
             '<div style="font-size:10px;color:var(--text3);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:2px;">🔐 Votre code de retrait</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:36px;font-weight:800;letter-spacing:10px;color:var(--accent);">'+dejaAccepte.codeRetrait+'</div>'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:36px;font-weight:800;letter-spacing:10px;color:var(--accent);">'+dejaAccepte.codeRetrait+'</div>'+
             '<div style="font-size:12px;color:var(--text2);margin-top:10px;line-height:1.5;">Communiquez ce code au pharmacien<br>pour récupérer votre commande</div>'+
           '</div>'+
-          '<button onclick="partagerCodeStop(\''+shareKey+'\')" style="width:100%;padding:12px;background:rgba(0,200,150,.15);border:1px solid var(--accent);border-radius:10px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">📤 Partager le code</button>'+
+          (tel?
+            '<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;text-align:center;margin-bottom:12px;">'+
+              '<div style="font-size:11px;color:#d97706;font-weight:700;margin-bottom:6px;">⚠️ Appelez avant de vous déplacer</div>'+
+              '<a href="tel:'+tel+'" style="font-size:14px;font-weight:800;color:var(--accent);text-decoration:none;">📞 '+tel+'</a>'+
+            '</div>'
+          :'')+
+          '<button onclick="partagerCodeStop(\''+shareKey+'\')" style="width:100%;padding:12px;background:rgba(0,200,150,.15);border:1px solid var(--accent);border-radius:10px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;">📤 Partager le code</button>'+
         '</div><div style="height:30px;"></div>';
       return;
     }
@@ -6210,130 +6219,61 @@ function trouver2Stops(offres,patLat,patLon){
 
 function renderOffres(complete,stops2,toutes){
   var el=document.getElementById('offresBody');
-  var html='';
+  var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():'';
+  var html=
 
-  // ── Offre complète ──
-  if(complete){
-    html+=
-      '<div style="background:linear-gradient(135deg,rgba(0,200,150,.1),rgba(14,165,233,.08));border:1.5px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:14px;">'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
-          '<span style="background:var(--accent);color:var(--bg);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:800;">🥇 MEILLEURE OFFRE COMPLÈTE</span>'+
-        '</div>'+
-        '<div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px;">'+escHtml(complete.pharmNom)+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">'+complete.nbDispo+'/'+complete.nbTotal+' médicaments · '+complete.dist+'km</div>'+
-        '<div style="margin-bottom:12px;">'+complete.items.filter(function(x){return x.disponible;}).map(function(x){
-          return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.medicament)+(x.total?' — <strong style="color:var(--text);">'+x.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
-        }).join('')+'</div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Médicaments</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--text);">'+complete.prixMeds.toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Trajet</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--warn);">'+complete.coutTrajet.toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;border:1.5px solid var(--accent);">'+
-            '<div style="font-size:10px;color:var(--accent);margin-bottom:4px;">TOTAL</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--accent);">'+complete.prixTotal.toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-        '</div>'+
-        '<button onclick="choisirOffre(\''+complete.supabaseId+'\',\''+escHtml(complete.pharmNom)+'\')" style="width:100%;background:var(--accent);border:none;border-radius:12px;padding:13px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--bg);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
-      '</div>';
+    // Bannière AO numéro
+    '<div style="background:linear-gradient(135deg,rgba(0,168,120,.12),rgba(99,102,241,.08));border:1.5px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:16px;text-align:center;">'+
+      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Numéro de votre commande</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:24px;font-weight:900;color:var(--accent);letter-spacing:4px;">AO-'+aoNum+'</div>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5;">'+
+        '⚠️ <strong>Appelez avant de vous déplacer</strong><br>'+
+        'Mentionnez le numéro <strong>AO-'+aoNum+'</strong> au pharmacien'+
+      '</div>'+
+    '</div>';
+
+  // Offres disponibles
+  var offresAfficher=toutes&&toutes.length?toutes:[];
+  if(!offresAfficher.length){
+    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;color:var(--text2);">Aucune pharmacie disponible pour le moment</div>';
   } else {
-    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;text-align:center;color:var(--text2);">Aucune pharmacie ne dispose de l\'ordonnance complète</div>';
-  }
+    offresAfficher.forEach(function(o,idx){
+      var pharmaInfo=ETABLISSEMENTS.find(function(e){return e.nom===o.pharmNom;})||null;
+      var tel=o.pharmTel||(pharmaInfo&&pharmaInfo.telephone)||'';
+      var isComplete=o.complete;
 
-  // ── Meilleure offre 2 stops ──
-  if(stops2){
-    // Listes médicaments par stop
-    var medsAHtml=stops2.medsA.map(function(x){
-      return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.med)+(x.item.total?' — <strong>'+x.item.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
-    }).join('');
-    var medsBHtml=stops2.medsB.map(function(x){
-      return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.med)+(x.item.total?' — <strong>'+x.item.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
-    }).join('');
-
-    html+=
-      '<div style="background:rgba(14,165,233,.06);border:1.5px solid var(--accent2);border-radius:16px;padding:16px;margin-bottom:14px;">'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
-          '<span style="background:var(--accent2);color:#fff;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:800;">🥈 MEILLEURE OFFRE 2 STOPS</span>'+
-        '</div>'+
-        '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">'+
-          // Stop 1
-          '<div style="background:var(--card);border-radius:10px;padding:12px;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">STOP 1</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">'+escHtml(stops2.a.pharmNom)+'</div>'+
-            medsAHtml+
-            '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text2);">'+
-              '<span>'+stops2.a.dist+'km · trajet '+stops2.a.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
-              '<strong style="color:var(--text);">'+stops2.prixA.toLocaleString('fr-FR')+' FCFA</strong>'+
-            '</div>'+
-          '</div>'+
-          // Stop 2
-          '<div style="background:var(--card);border-radius:10px;padding:12px;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">STOP 2</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;">'+escHtml(stops2.b.pharmNom)+'</div>'+
-            medsBHtml+
-            '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text2);">'+
-              '<span>'+stops2.b.dist+'km · trajet '+stops2.b.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
-              '<strong style="color:var(--text);">'+stops2.prixB.toLocaleString('fr-FR')+' FCFA</strong>'+
-            '</div>'+
-          '</div>'+
-        '</div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Médicaments</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--text);">'+(stops2.prixA+stops2.prixB).toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;">'+
-            '<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">Trajets</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--warn);">'+(stops2.coutTrajetA+stops2.coutTrajetB).toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-          '<div style="background:var(--card);border-radius:10px;padding:10px;text-align:center;border:1.5px solid var(--accent2);">'+
-            '<div style="font-size:10px;color:var(--accent2);margin-bottom:4px;">TOTAL</div>'+
-            '<div style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;color:var(--accent2);">'+stops2.total.toLocaleString('fr-FR')+'</div>'+
-            '<div style="font-size:9px;color:var(--text3);">FCFA</div>'+
-          '</div>'+
-        '</div>'+
-        '<button id="btn2stops" style="width:100%;padding:13px;background:var(--accent2);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">✅ Choisir ces 2 pharmacies</button>'+
-      '</div>';
-  } // fin if(stops2)
-
-  html+='<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px;">'+
-    '💡 Trajet calculé à '+PRIX_KM+' FCFA/km (aller-retour)'+
-  '</div>';
-
-  // ── Toutes les offres reçues ──
-  if(toutes&&toutes.length>1){
-    html+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;">Toutes les offres ('+toutes.length+')</div>';
-    toutes.forEach(function(o){
       html+=
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">'+
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
-            '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text);">'+escHtml(o.pharmNom)+'</div>'+
-            '<span style="font-size:10px;font-weight:700;color:'+(o.complete?'var(--accent)':'var(--warn)')+';">'+o.nbDispo+'/'+o.nbTotal+' méd.</span>'+
+        '<div style="background:var(--card);border:1.5px solid '+(isComplete?'var(--accent)':'var(--border)')+';border-radius:16px;padding:16px;margin-bottom:12px;">'+
+          // Badge + nom
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+            '<div>'+
+              (isComplete?'<span style="background:var(--accent);color:#fff;border-radius:8px;padding:2px 8px;font-size:10px;font-weight:800;margin-bottom:4px;display:inline-block;">✅ Tous les médicaments</span><br>':'<span style="background:rgba(245,158,11,.15);color:#d97706;border-radius:8px;padding:2px 8px;font-size:10px;font-weight:800;margin-bottom:4px;display:inline-block;">⚠️ Partiel — '+o.nbDispo+'/'+o.nbTotal+'</span><br>')+
+              '<span style="font-family:\'Syne\',sans-serif;font-size:15px;font-weight:800;color:var(--text);">'+escHtml(o.pharmNom)+'</span>'+
+            '</div>'+
+            '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:800;color:var(--accent);">'+o.prixMeds.toLocaleString('fr-FR')+' <span style="font-size:10px;">FCFA</span></div>'+
           '</div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:10px;">'+
-            '<span>💊 '+o.prixMeds.toLocaleString('fr-FR')+' FCFA</span>'+
-            '<span>🚗 '+o.coutTrajet.toLocaleString('fr-FR')+' FCFA</span>'+
-            '<span>Total : <strong style="color:var(--text);">'+o.prixTotal.toLocaleString('fr-FR')+' FCFA</strong></span>'+
+
+          // Liste médicaments
+          '<div style="margin-bottom:12px;">'+
+            o.items.filter(function(x){return x.disponible;}).map(function(x){
+              return '<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);">💊 '+escHtml(x.medicament)+(x.total?' — <strong style="color:var(--text);">'+x.total.toLocaleString('fr-FR')+' FCFA</strong>':'')+'</div>';
+            }).join('')+
           '</div>'+
-          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom)+'\')" style="width:100%;padding:10px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:10px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">✅ Choisir cette pharmacie</button>'+
+
+          // Bouton appel + choisir
+          (tel?
+            '<a href="tel:'+tel+'" style="display:block;width:100%;padding:11px;background:rgba(0,168,120,.1);border:1px solid rgba(0,168,120,.3);border-radius:10px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-align:center;text-decoration:none;margin-bottom:8px;box-sizing:border-box;">📞 '+tel+' — Appeler avant de vous déplacer</a>'
+          :'')+
+          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'+
         '</div>';
     });
   }
 
-  html+='<div style="height:30px;"></div>';
+  html+='<div style="font-size:10px;color:var(--text3);text-align:center;padding:8px;line-height:1.5;">'+
+    'Pensez à appeler la pharmacie avant de vous déplacer.<br>Mentionnez le numéro <strong>AO-'+aoNum+'</strong>.'+
+  '</div>';
 
   el.innerHTML=html;
-  var btn2=document.getElementById('btn2stops');
-  if(btn2)btn2.onclick=function(){choisir2Stops(DERNIERS_STOPS2);};
 }
 
 async function choisir2Stops(stops){
@@ -6403,7 +6343,7 @@ function renderCarteCode(code,pharmNom,meds,num){
   '</div>';
 }
 
-async function choisirOffre(supabaseId,pharmNom){
+async function choisirOffre(supabaseId,pharmNom,pharmTel){
   toast('⏳ Confirmation en cours...');
   try{
     // Vérifier si un code existe déjà
