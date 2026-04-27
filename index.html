@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.29
-     DATE    : 2026-04-27 20:38:22
+     VERSION : V4.30
+     DATE    : 2026-04-27 20:48:16
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -433,6 +433,11 @@ select.finput option{background:var(--bg3);}
         <div class="field"><label class="flabel">Email</label><input class="finput" id="cEmail" type="email" placeholder="votre@email.com" autocomplete="off"/></div>
         <div class="field" style="margin-top:12px"><label class="flabel">Code secret (4 chiffres)</label><input class="finput" id="cCode" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
         <div class="field" style="margin-top:12px"><label class="flabel">Confirmer le code</label><input class="finput" id="cCode2" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"/></div>
+        <div class="field" style="margin-top:12px">
+          <label class="flabel">Code de parrainage <span style="color:var(--text3);font-weight:400;">(optionnel)</span></label>
+          <input class="finput" id="cParrain" type="text" placeholder="ex: GIL-X9F7" autocomplete="off" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"/>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Vous bénéficiez de -10% sur votre 1ère consultation</div>
+        </div>
         <div class="login-err" id="cErr"></div>
         <button class="btn-p" style="margin-top:20px;width:100%" onclick="creerCompte()">Créer mon compte</button>
       </div>
@@ -1293,6 +1298,7 @@ async function creerCompte(){
   var email=(document.getElementById('cEmail').value||'').trim().toLowerCase();
   var code=(document.getElementById('cCode').value||'').trim();
   var code2=(document.getElementById('cCode2').value||'').trim();
+  var codeParrain=(document.getElementById('cParrain').value||'').trim().toUpperCase();
   var err=document.getElementById('cErr');
   err.className='login-err';
   if(!email||!code||!code2){err.textContent='Tous les champs sont requis';err.classList.add('on');return;}
@@ -1307,14 +1313,32 @@ async function creerCompte(){
     var check=await r.json();
     var existing=Array.isArray(check)?check:(check.data||[]);
     if(existing.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
+
+    // Vérifier le code parrain si renseigné
+    var parrainId=null;
+    if(codeParrain){
+      var rParrain=await fetch(DB_URL+'?table=patients&filter=code_parrainage=eq.'+encodeURIComponent(codeParrain)+'&select=id&limit=1',{
+        headers:{'x-dokita-key':DOKITA_KEY}
+      });
+      var dParrain=await rParrain.json();
+      var rowsParrain=Array.isArray(dParrain)?dParrain:(dParrain.data||[]);
+      if(rowsParrain.length){
+        parrainId=rowsParrain[0].id;
+        dbg('Parrain trouvé: '+parrainId);
+      } else {
+        err.textContent='Code de parrainage invalide';err.classList.add('on');return;
+      }
+    }
+
     SESSION_EMAIL=email;
     SESSION_PATIENT_ID='';
     SESSION_CODE_TEMP=code;
+    SESSION_PARRAIN_ID=parrainId; // Stocké pour utilisation à la création du profil
     PROFILS=[{prenom:'',nom:'',email:email,naiss:'',tel:'',ville:'',poids:'',sx:'',patientId:'',supabaseId:''}];
     SEL=0;
     err.className='login-err';
     nav('addProfilScreen');
-    toast('Complétez votre profil 👤');
+    toast(parrainId?'Code parrainage validé 🎉 -10% sur votre 1ère consultation !':'Complétez votre profil 👤');
   }catch(e){err.textContent='Erreur: '+e.message;err.classList.add('on');}
 }
 
@@ -1384,7 +1408,7 @@ var EXTRACT_URL  ='https://heydoc-mu.vercel.app/api/extract-examen';
 // STATE
 // ══════════════════════════════
 var CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
-var SESSION_EMAIL='',SESSION_PATIENT_ID='',SESSION_CODE_TEMP='';
+var SESSION_EMAIL='',SESSION_PATIENT_ID='',SESSION_CODE_TEMP='',SESSION_PARRAIN_ID=null;
 var PREV_SCREEN='profilsScreen';
 var PROFILS=[],SEL=-1,CURRENT=null,SX='',ESX='',EDIT_I=-1;
 var USER_LAT=null,USER_LNG=null;
@@ -1953,7 +1977,9 @@ function saveProfil(){
         langue_preferee:p.langue||null,
         patient_id:p.patientId,
         code_patient:SESSION_CODE_TEMP,
-        lien_familial:'moi'
+        lien_familial:'moi',
+        parrain_id:SESSION_PARRAIN_ID||null,
+        credit_reduction:SESSION_PARRAIN_ID?10:0  // -10% sur 1ère consultation si parrain
       };
       fetch(DB_URL+'?table=patients',{
         method:'POST',
@@ -1973,10 +1999,12 @@ function saveProfil(){
           dbg('saveProfil INSERT err: '+JSON.stringify(data).slice(0,100));
         }
         SESSION_CODE_TEMP='';
+        SESSION_PARRAIN_ID=null;
       }).catch(function(e){
         toast('⚠️ Erreur réseau');
         dbg('saveProfil ERR: '+e.message);
         SESSION_CODE_TEMP='';
+        SESSION_PARRAIN_ID=null;
       });
 
     } else {
