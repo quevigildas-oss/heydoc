@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.30
-     DATE    : 2026-04-27 20:48:16
+     VERSION : V4.31
+     DATE    : 2026-04-27 20:59:16
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1210,6 +1210,7 @@ async function seConnecter(){
       allergies:p.allergies||'',antecedents:p.antecedents||'',
       traitements:p.traitements_reguliers||'',
       patientId:SESSION_PATIENT_ID,supabaseId:p.id,
+      parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
       lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
     };
     PROFILS=[profilPrincipal];SEL=0;
@@ -1476,6 +1477,7 @@ async function rechargerSessionNotion(){
       allergies:p.allergies||'',antecedents:p.antecedents||'',
       traitements:p.traitements_reguliers||'',
       patientId:SESSION_PATIENT_ID,supabaseId:p.id,
+      parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
       lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
     };
     // Chercher membres famille via compte_parent_id (UUID)
@@ -2722,6 +2724,35 @@ async function envoyerDossier(email,nomMed,medId){
       nav('historiqueScreen');
       renderHistorique().catch(function(){});
     },2000);
+
+    // ── Créditer le parrain si c'est la 1ère consultation du filleul ──
+    if(p&&p.supabaseId&&p.parrain_id){
+      try{
+        // Vérifier si c'est bien la 1ère consultation (count = 1 après cette sauvegarde)
+        var rCount=await fetch(DB_URL+'?table=consultations&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId)+'&select=id&limit=2',{
+          headers:{'x-dokita-key':DOKITA_KEY}
+        });
+        var dCount=await rCount.json();
+        var nbConsult=(Array.isArray(dCount)?dCount:(dCount.data||[])).length;
+
+        if(nbConsult<=1){
+          // 1ère consultation → créditer le parrain de 10%
+          var rParrain=await fetch(DB_URL+'?table=patients&filter=id=eq.'+encodeURIComponent(p.parrain_id)+'&select=credit_reduction&limit=1',{
+            headers:{'x-dokita-key':DOKITA_KEY}
+          });
+          var dParrain=await rParrain.json();
+          var rowsParrain=Array.isArray(dParrain)?dParrain:(dParrain.data||[]);
+          var creditActuel=(rowsParrain[0]&&rowsParrain[0].credit_reduction)||0;
+
+          await fetch(DB_URL+'?table=patients&id='+encodeURIComponent(p.parrain_id),{
+            method:'PATCH',
+            headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+            body:JSON.stringify({credit_reduction:creditActuel+10})
+          });
+          dbg('Parrain '+p.parrain_id+' crédité +10% (filleul '+p.supabaseId+' 1ère consultation)');
+        }
+      }catch(e){dbg('Crédit parrain err: '+e.message);}
+    }
   }
 
   // ── ÉTAPE 6 : onboarding nouveau patient — proposer upload ordonnance ──
