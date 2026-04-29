@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.32
-     DATE    : 2026-04-28 18:48:58
+     VERSION : V4.33
+     DATE    : 2026-04-29 09:54:55
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -5157,6 +5157,7 @@ var NOTION_AO_DB='321dce21-e1d3-8002-a444-eb58cc33287f';
 var PHARMA_URL='https://heydoc-mu.vercel.app/pharmacie';
 var AO_ITEMS=[]; // état global du modal AO en cours
 var AO_SESSION_ID=''; // consultation_id de la session AO en cours
+var AO_TIMER=null; // timer fallback 15min modèle Uber
 
 // Labels affichage pour statuts AO (valeurs Supabase sans accents → labels UI)
 var STATUT_AO_LABELS={
@@ -6725,11 +6726,10 @@ async function aoTermine(){
   if(m)m.remove();
 
   var envoyes=AO_ITEMS.filter(function(a){return a.statut==='envoye';});
-  // Marquer les non-envoyés comme ignorés (griser dans un futur affichage)
   AO_ITEMS.forEach(function(a){if(a.statut==='attente')a.statut='ignore';});
 
   if(envoyes.length>0){
-    // Marquer ao_soumis dans Supabase (plus de localStorage)
+    // Marquer ao_soumis dans Supabase
     if(AO_SESSION_ID){
       try{
         await fetch(DB_URL+'?table=ordonnances&id='+AO_SESSION_ID,{
@@ -6739,13 +6739,64 @@ async function aoTermine(){
         });
       }catch(e){dbg('ao_soumis patch err: '+e.message);}
     }
-    toast('✅ '+envoyes.length+' pharmacie(s) contactée(s)');
+    toast('✅ '+envoyes.length+' pharmacie(s) contactée(s) — 15 min pour répondre');
     var btn=document.querySelector('button[onclick*="lancerAppelOffre"]');
-    if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
+    if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres (15 min)</div>';
     mettreAJourBadgeOffres();
+
+    // ── Timer fallback 15min (modèle Uber) ──
+    var consultIdForTimer=AO_SESSION_ID;
+    var itemsForFallback=envoyes.slice(); // copie
+    if(AO_TIMER)clearTimeout(AO_TIMER);
+    AO_TIMER=setTimeout(async function(){
+      dbg('AO fallback 15min déclenché pour consultation '+consultIdForTimer);
+      var accepted=await checkAOAccepted(consultIdForTimer);
+      if(!accepted&&itemsForFallback.length>0){
+        await genererCodeRetraitFallback(consultIdForTimer,itemsForFallback);
+      }
+      AO_TIMER=null;
+    },15*60*1000); // 15 minutes
   }
 
   AO_ITEMS=[];
+}
+
+async function checkAOAccepted(consultId){
+  try{
+    var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.accepte&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    return rows.length>0;
+  }catch(e){return false;}
+}
+
+async function genererCodeRetraitFallback(consultId,items){
+  // Trouver pharmacie #2 (index 1) ou la première non-annulée
+  var fallback=items.length>1?items[1]:items[0];
+  if(!fallback)return;
+  var code=String(Math.floor(100000+Math.random()*900000));
+  dbg('AO fallback — génération code retrait auto pour '+fallback.nom+' : '+code);
+  try{
+    // Trouver l'AO de la pharmacie fallback
+    var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=pharmacie_nom=eq.'+encodeURIComponent(fallback.nom)+'&limit=1',{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    });
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(rows.length){
+      await fetch(DB_URL+'?table=appels_offres&id='+rows[0].id,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({statut:'accepte',code_retrait:code,fallback_auto:true})
+      });
+    }
+    // Notifier le patient
+    toast('⏳ 15 min écoulées — commande orientée vers '+fallback.nom);
+    // Rafraîchir les offres si l'écran est visible
+    mettreAJourBadgeOffres();
+  }catch(e){dbg('Fallback err: '+e.message);}
 }
 
 async function compterReponses(consultId){
