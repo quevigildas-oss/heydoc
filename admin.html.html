@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<!-- ============================================
+     DOKITA ADMIN — Interface saisie livraisons LABOREX
+     VERSION : V1.0
+     DATE    : 2026-04-29
+     ACCÈS   : Protégé par mot de passe admin
+============================================ -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dokita Admin — Livraisons LABOREX</title>
+<style>
+:root{--bg:#0A0F1E;--card:#111827;--border:#1E2D45;--accent:#00C896;--danger:#EF4444;--warn:#F59E0B;--text:#F0F4FF;--text2:#8B9EC7;--text3:#4A5A7A;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.hdr{background:var(--card);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;}
+.hdr-ico{width:36px;height:36px;background:linear-gradient(135deg,#00C896,#0EA5E9);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.container{max-width:700px;margin:0 auto;padding:20px 16px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;}
+.sec-title{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;}
+.flabel{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;}
+.finput{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--text);outline:none;}
+.finput:focus{border-color:var(--accent);}
+.finput::placeholder{color:var(--text3);}
+.frow{margin-bottom:14px;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0EA5E9);border:none;border-radius:12px;padding:13px 20px;font-size:13px;font-weight:700;color:#0A0F1E;cursor:pointer;}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;}
+.btn-secondary{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;}
+.btn-danger{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--danger);cursor:pointer;}
+.med-row{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.grid4{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13px;color:var(--text);z-index:999;display:none;}
+.badge{border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;}
+.badge-ok{background:rgba(0,200,150,.12);color:var(--accent);border:1px solid rgba(0,200,150,.3);}
+.badge-warn{background:rgba(245,158,11,.12);color:var(--warn);border:1px solid rgba(245,158,11,.3);}
+.badge-danger{background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.3);}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;padding:8px;text-align:left;border-bottom:1px solid var(--border);}
+.tbl td{padding:9px 8px;border-bottom:1px solid var(--border);color:var(--text2);}
+.tbl tr.alerte td{background:rgba(239,68,68,.04);}
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab{flex:1;padding:12px;text-align:center;font-size:12px;font-weight:700;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);}
+.tc{display:none;}
+.tc.on{display:block;}
+.login-box{max-width:360px;margin:80px auto;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-box">
+    <div style="font-size:32px;margin-bottom:12px;">🏥</div>
+    <div style="font-size:20px;font-weight:800;margin-bottom:6px;">Dokita Admin</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:24px;">Accès réservé à l'équipe Dokita</div>
+    <div class="frow">
+      <label class="flabel">Mot de passe admin</label>
+      <input class="finput" type="password" id="adminPwd" placeholder="••••••••"/>
+    </div>
+    <div id="loginErr" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none;">Mot de passe incorrect</div>
+    <button class="btn-primary" style="width:100%;" onclick="checkLogin()">Accéder →</button>
+  </div>
+</div>
+
+<div id="adminApp" style="display:none;">
+  <div class="hdr">
+    <div class="hdr-ico">📦</div>
+    <div style="flex:1;">
+      <div style="font-size:16px;font-weight:800;">Dokita Admin</div>
+      <div style="font-size:11px;color:var(--text3);">Gestion livraisons LABOREX</div>
+    </div>
+    <button class="btn-secondary" onclick="doLogout()">Déconnexion</button>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab on" id="tabLivraison" onclick="switchTab('livraison')">📦 Nouvelle livraison</div>
+      <div class="tab" id="tabReconciliation" onclick="switchTab('reconciliation')">📊 Réconciliation</div>
+      <div class="tab" id="tabHistorique" onclick="switchTab('historique')">📋 Historique</div>
+    </div>
+
+    <!-- LIVRAISON -->
+    <div class="tc on" id="tcLivraison">
+      <div class="card">
+        <div class="sec-title">Informations de livraison</div>
+        <div class="frow">
+          <label class="flabel">Pharmacie destinataire</label>
+          <select class="finput" id="pharmSelect" onchange="majResume()">
+            <option value="">⏳ Chargement...</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="frow">
+            <label class="flabel">Référence bon de livraison</label>
+            <input class="finput" id="bonRef" placeholder="ex: BL-2026-04-001" oninput="majResume()"/>
+          </div>
+          <div class="frow">
+            <label class="flabel">Date de livraison</label>
+            <input class="finput" id="dateLivraison" type="date"/>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div class="sec-title" style="margin-bottom:0;">Médicaments livrés</div>
+          <button class="btn-secondary" onclick="ajouterMed()">＋ Ajouter</button>
+        </div>
+        <div id="medsList"></div>
+        <div id="emptyMeds" style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">Aucun médicament — cliquez sur ＋ Ajouter</div>
+      </div>
+
+      <div id="resumeCard" style="display:none;" class="card">
+        <div class="sec-title">Résumé</div>
+        <div id="resumeContent"></div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;padding:16px;" id="btnEnregistrer" onclick="enregistrerLivraison()" disabled>
+        ✅ Enregistrer la livraison
+      </button>
+      <div style="height:30px;"></div>
+    </div>
+
+    <!-- RÉCONCILIATION -->
+    <div class="tc" id="tcReconciliation">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="sec-title" style="margin-bottom:0;">Réconciliation stock</div>
+          <button class="btn-secondary" onclick="chargerReconciliation()">↻ Actualiser</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:14px;">Ventes hors Dokita = Reçu − Réservé − Déclaré restant · <span style="color:var(--danger);">Alerte si &gt; 15%</span></div>
+        <div id="reconcContent"><div style="text-align:center;padding:30px;color:var(--text3);">Cliquez sur Actualiser</div></div>
+      </div>
+    </div>
+
+    <!-- HISTORIQUE -->
+    <div class="tc" id="tcHistorique">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="sec-title" style="margin-bottom:0;">Livraisons enregistrées</div>
+          <button class="btn-secondary" onclick="chargerHistorique()">↻ Actualiser</button>
+        </div>
+        <div id="histContent"><div style="text-align:center;padding:30px;color:var(--text3);">Cliquez sur Actualiser</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var DB_URL='https://heydoc-medecin.vercel.app/api/db';
+var DOKITA_KEY='dk-2026-prod-x9f7m';
+var ADMIN_PWD='dokita-admin-2026'; // ⚠️ À changer avant go-live
+var ETABLISSEMENTS=[];
+var MED_IDX=0;
+var MEDS_IDX_LIST=[];
+
+function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(function(){t.style.display='none';},2500);}
+function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── AUTH ──
+function checkLogin(){
+  var pwd=(document.getElementById('adminPwd').value||'');
+  if(pwd===ADMIN_PWD){
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('adminApp').style.display='block';
+    sessionStorage.setItem('dk_admin','1');
+    init();
+  } else {
+    var err=document.getElementById('loginErr');
+    err.style.display='block';
+    document.getElementById('adminPwd').value='';
+  }
+}
+function doLogout(){
+  sessionStorage.removeItem('dk_admin');
+  document.getElementById('adminApp').style.display='none';
+  document.getElementById('loginScreen').style.display='block';
+}
+document.getElementById('adminPwd').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
+if(sessionStorage.getItem('dk_admin')==='1'){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('adminApp').style.display='block';
+  window.addEventListener('DOMContentLoaded',init);
+}
+
+// ── INIT ──
+async function init(){
+  document.getElementById('dateLivraison').value=new Date().toISOString().split('T')[0];
+  await chargerEtablissements();
+}
+
+async function chargerEtablissements(){
+  try{
+    var r=await fetch(DB_URL+'?table=etablissements&filter=type=eq.pharmacie&order=nom.asc&limit=100',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var data=await r.json();
+    ETABLISSEMENTS=Array.isArray(data)?data:(data.data||[]);
+    var sel=document.getElementById('pharmSelect');
+    sel.innerHTML='<option value="">-- Sélectionner une pharmacie --</option>'+
+      ETABLISSEMENTS.map(function(e){
+        return '<option value="'+e.id+'|'+escHtml(e.nom)+'">'+escHtml(e.nom)+(e.ville?' — '+escHtml(e.ville):'')+'</option>';
+      }).join('');
+  }catch(ex){toast('❌ Erreur pharmacies: '+ex.message);}
+}
+
+// ── ONGLETS ──
+function switchTab(t){
+  ['Livraison','Reconciliation','Historique'].forEach(function(n){
+    var low=n.toLowerCase();
+    document.getElementById('tab'+n).classList.toggle('on',low===t);
+    document.getElementById('tc'+n).classList.toggle('on',low===t);
+  });
+  if(t==='reconciliation')chargerReconciliation();
+  if(t==='historique')chargerHistorique();
+}
+
+// ── MÉDICAMENTS ──
+function ajouterMed(){
+  document.getElementById('emptyMeds').style.display='none';
+  var i=MED_IDX++;
+  MEDS_IDX_LIST.push(i);
+  var div=document.createElement('div');
+  div.className='med-row';div.id='med_'+i;
+  div.innerHTML='<div class="grid4">'+
+    '<div><label class="flabel">Médicament</label><input class="finput" id="mN_'+i+'" placeholder="ex: Amoxicilline 500mg" oninput="majResume()"/></div>'+
+    '<div><label class="flabel">Qté (boîtes)</label><input class="finput" id="mQ_'+i+'" type="number" min="1" placeholder="0" oninput="majResume()"/></div>'+
+    '<div><label class="flabel">Prix/boîte FCFA</label><input class="finput" id="mP_'+i+'" type="number" min="0" placeholder="0" oninput="majResume()"/></div>'+
+    '<div style="padding-top:18px;"><button class="btn-danger" onclick="suppMed('+i+')">✕</button></div>'+
+  '</div>';
+  document.getElementById('medsList').appendChild(div);
+  majResume();
+}
+
+function suppMed(i){
+  var el=document.getElementById('med_'+i);if(el)el.remove();
+  MEDS_IDX_LIST=MEDS_IDX_LIST.filter(function(x){return x!==i;});
+  if(!MEDS_IDX_LIST.length)document.getElementById('emptyMeds').style.display='block';
+  majResume();
+}
+
+function getMeds(){
+  return MEDS_IDX_LIST.map(function(i){
+    return {
+      nom:(document.getElementById('mN_'+i)&&document.getElementById('mN_'+i).value||'').trim(),
+      qte:parseInt((document.getElementById('mQ_'+i)&&document.getElementById('mQ_'+i).value)||'0')||0,
+      prix:parseInt((document.getElementById('mP_'+i)&&document.getElementById('mP_'+i).value)||'0')||0
+    };
+  }).filter(function(m){return m.nom&&m.qte>0;});
+}
+
+function majResume(){
+  var meds=getMeds();
+  var pharmVal=document.getElementById('pharmSelect').value;
+  var bonRef=(document.getElementById('bonRef').value||'').trim();
+  document.getElementById('btnEnregistrer').disabled=!(pharmVal&&bonRef&&meds.length>0);
+  var rc=document.getElementById('resumeCard');
+  var rcBody=document.getElementById('resumeContent');
+  if(!meds.length){rc.style.display='none';return;}
+  rc.style.display='block';
+  var total=meds.reduce(function(s,m){return s+m.qte*m.prix;},0);
+  rcBody.innerHTML=meds.map(function(m){
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+
+      '<span>'+escHtml(m.nom)+'</span>'+
+      '<span style="color:var(--accent);">'+m.qte+' boîtes × '+m.prix.toLocaleString('fr-FR')+' = <strong>'+(m.qte*m.prix).toLocaleString('fr-FR')+' FCFA</strong></span>'+
+    '</div>';
+  }).join('')+
+  '<div style="display:flex;justify-content:space-between;padding:10px 0 0;font-size:13px;font-weight:700;">'+
+    '<span>Total</span><span style="color:var(--accent);">'+total.toLocaleString('fr-FR')+' FCFA</span>'+
+  '</div>';
+}
+
+// ── ENREGISTRER ──
+async function enregistrerLivraison(){
+  var pharmVal=document.getElementById('pharmSelect').value;
+  if(!pharmVal){toast('⚠️ Sélectionnez une pharmacie');return;}
+  var parts=pharmVal.split('|');
+  var pharmId=parts[0];
+  var pharmNom=parts.slice(1).join('|');
+  var bonRef=(document.getElementById('bonRef').value||'').trim();
+  var dateLiv=document.getElementById('dateLivraison').value;
+  var meds=getMeds();
+  if(!bonRef){toast('⚠️ Renseignez la référence bon');return;}
+  if(!meds.length){toast('⚠️ Ajoutez au moins un médicament');return;}
+
+  var btn=document.getElementById('btnEnregistrer');
+  btn.disabled=true;btn.textContent='⏳ Enregistrement...';
+  var ok=0;var errs=[];
+
+  for(var i=0;i<meds.length;i++){
+    var m=meds[i];
+    try{
+      var r=await fetch(DB_URL+'?table=stock_pharmacie',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify({
+          pharmacie_id:pharmId,
+          pharmacie_nom:pharmNom,
+          medicament:m.nom,
+          quantite_recue:m.qte,
+          quantite_reservee:0,
+          quantite_restante:null,
+          prix_unitaire_dokita:m.prix||null,
+          date_livraison:dateLiv||null,
+          date_declaration:new Date().toISOString().split('T')[0],
+          bon_livraison_ref:bonRef
+        })
+      });
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      ok++;
+    }catch(ex){errs.push(m.nom);}
+  }
+
+  btn.disabled=false;btn.textContent='✅ Enregistrer la livraison';
+  if(errs.length){toast('⚠️ '+ok+' OK, '+errs.length+' erreur(s)');}
+  else{
+    toast('✅ Livraison enregistrée — '+ok+' médicament(s)');
+    document.getElementById('bonRef').value='';
+    document.getElementById('pharmSelect').value='';
+    document.getElementById('medsList').innerHTML='';
+    document.getElementById('emptyMeds').style.display='block';
+    document.getElementById('resumeCard').style.display='none';
+    MEDS_IDX_LIST=[];MED_IDX=0;
+    majResume();
+  }
+}
+
+// ── RÉCONCILIATION ──
+async function chargerReconciliation(){
+  var el=document.getElementById('reconcContent');
+  el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);">⏳ Chargement...</div>';
+  try{
+    var r=await fetch(DB_URL+'?table=vw_reconciliation_stock&order=pct_hors_dokita.desc.nullslast&limit=200',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Aucune donnée</div>';return;}
+    var alertes=rows.filter(function(r){return (parseFloat(r.pct_hors_dokita)||0)>15;});
+    var html='';
+    if(alertes.length){
+      html+='<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--danger);">🚨 '+alertes.length+' ligne(s) avec écart &gt; 15%</div>';
+    }
+    html+='<div style="overflow-x:auto;"><table class="tbl">'+
+      '<tr><th>Pharmacie</th><th>Médicament</th><th>Reçu</th><th>Réservé</th><th>Déclaré</th><th>Hors Dokita</th><th>%</th><th>Statut</th></tr>'+
+      rows.map(function(row){
+        var pct=parseFloat(row.pct_hors_dokita)||0;
+        var bc=pct===0?'badge-ok':pct<=15?'badge-warn':'badge-danger';
+        var bl=pct===0?'✅ OK':pct<=15?'⚠️ Faible':'🚨 Alerte';
+        return '<tr class="'+(pct>15?'alerte':'')+'">'+
+          '<td style="font-weight:600;color:var(--text);">'+escHtml(row.pharmacie_nom||'—')+'</td>'+
+          '<td>'+escHtml(row.medicament||'—')+'</td>'+
+          '<td>'+(row.quantite_recue||0)+'</td>'+
+          '<td>'+(row.quantite_reservee||0)+'</td>'+
+          '<td>'+(row.quantite_declaree!=null?row.quantite_declaree:'—')+'</td>'+
+          '<td style="font-weight:700;color:'+(pct>15?'var(--danger)':pct>0?'var(--warn)':'var(--accent)')+';">'+(row.ventes_hors_dokita||0)+'</td>'+
+          '<td>'+(pct?pct+'%':'—')+'</td>'+
+          '<td><span class="badge '+bc+'">'+bl+'</span></td>'+
+        '</tr>';
+      }).join('')+
+    '</table></div>';
+    el.innerHTML=html;
+  }catch(ex){el.innerHTML='<div style="color:var(--danger);padding:20px;">❌ '+escHtml(ex.message)+'</div>';}
+}
+
+// ── HISTORIQUE ──
+async function chargerHistorique(){
+  var el=document.getElementById('histContent');
+  el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);">⏳ Chargement...</div>';
+  try{
+    var r=await fetch(DB_URL+'?table=stock_pharmacie&order=created_at.desc&limit=200',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Aucune livraison</div>';return;}
+    // Grouper par bon_livraison_ref
+    var byBon={};
+    rows.forEach(function(row){
+      var key=(row.bon_livraison_ref||'—')+'||'+(row.pharmacie_nom||'—')+'||'+(row.date_livraison||'—');
+      if(!byBon[key])byBon[key]={ref:row.bon_livraison_ref,pharma:row.pharmacie_nom,date:row.date_livraison,meds:[]};
+      byBon[key].meds.push(row);
+    });
+    el.innerHTML='<div style="font-size:11px;color:var(--text3);margin-bottom:12px;">'+rows.length+' ligne(s)</div>'+
+      Object.keys(byBon).map(function(key){
+        var b=byBon[key];
+        var dateAff=b.date?new Date(b.date+'T00:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}):'—';
+        var totalQte=b.meds.reduce(function(s,m){return s+(m.quantite_recue||0);},0);
+        return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;">'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:8px;">'+
+            '<div><div style="font-size:13px;font-weight:700;color:var(--text);">'+escHtml(b.pharma||'—')+'</div>'+
+            '<div style="font-size:11px;color:var(--text3);">'+dateAff+(b.ref?' — Réf: '+escHtml(b.ref):'')+'</div></div>'+
+            '<span style="font-size:11px;font-weight:700;color:var(--accent);">'+b.meds.length+' méd. / '+totalQte+' boîtes</span>'+
+          '</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+            b.meds.map(function(m){
+              return '<div style="background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.2);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--accent);">'+
+                escHtml(m.medicament)+' ×'+m.quantite_recue+'</div>';
+            }).join('')+
+          '</div>'+
+        '</div>';
+      }).join('');
+  }catch(ex){el.innerHTML='<div style="color:var(--danger);padding:20px;">❌ '+escHtml(ex.message)+'</div>';}
+}
+
+window.addEventListener('DOMContentLoaded',function(){
+  if(sessionStorage.getItem('dk_admin')==='1')init();
+});
+</script>
+</body>
+</html>
