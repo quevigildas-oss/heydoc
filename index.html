@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.33
-     DATE    : 2026-04-29 09:54:55
+     VERSION : V4.37
+     DATE    : 2026-05-02 23:13:03
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1183,73 +1183,67 @@ async function seConnecter(){
   if(!/^\d{4}$/.test(code)){err.textContent='Le code doit contenir 4 chiffres';err.classList.add('on');return;}
   err.textContent='Connexion en cours...';err.classList.add('on');
   try{
-    var r=await fetch(DB_URL+'?table=patients&filter=email=eq.'+encodeURIComponent(email)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
+    // ── Appel JWT /api/auth ──
+    var r=await fetch('https://heydoc-mu.vercel.app/api/auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:'patient',email:email,code:code})
     });
     var data=await r.json();
-    var rows=Array.isArray(data)?data:(data.data||[]);
-    if(!rows.length){err.textContent='Aucun compte trouvé pour cet email';err.classList.add('on');return;}
-    var p=rows[0];
-    if(p.code_patient!==code){err.textContent='Code incorrect';err.classList.add('on');return;}
-    // Vérifier statut du compte — surveillance abus
-    if(p.statut_compte==='suspendu'){
-      err.textContent='Votre compte a été suspendu suite à des abus. Contactez support@dokita.health';
-      err.classList.add('on');return;
-    }
-    if(p.statut_compte==='radie'){
-      err.textContent='Votre accès a été révoqué. Contactez support@dokita.health pour toute contestation.';
-      err.classList.add('on');return;
-    }
+    if(!r.ok){err.textContent=data.error||'Erreur connexion';err.classList.add('on');return;}
+
+    // Sauvegarder JWT
+    sauvegarderJWT(data.token);
     SESSION_EMAIL=email;
-    SESSION_PATIENT_ID=p.patient_id||p.id;
-    var profilPrincipal={
-      prenom:p.prenom||'',nom:p.nom||'',naiss:p.date_naissance||'',
-      tel:p.telephone||'',email:email,ville:p.ville||'',
-      poids:p.poids?String(p.poids):'',
-      sx:p.sexe==='M'?'H':p.sexe==='F'?'F':'',
-      allergies:p.allergies||'',antecedents:p.antecedents||'',
-      traitements:p.traitements_reguliers||'',
-      patientId:SESSION_PATIENT_ID,supabaseId:p.id,
-      parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
-      lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
-    };
-    PROFILS=[profilPrincipal];SEL=0;
+    SESSION_PATIENT_ID=data.patientId;
+
+    // Mapper les profils depuis la réponse JWT
+    var profils=data.profils||[];
+    if(!profils.length){err.textContent='Aucun profil trouvé';err.classList.add('on');return;}
+
+    PROFILS=profils.map(function(p){
+      return {
+        prenom:p.prenom||'',nom:p.nom||'',naiss:p.naiss||p.date_naissance||'',
+        tel:p.telephone||'',email:email,ville:p.ville||'',
+        poids:p.poids?String(p.poids):'',
+        sx:p.sexe==='M'?'H':p.sexe==='F'?'F':p.sexe||'',
+        allergies:p.allergies||'',antecedents:p.antecedents||'',
+        traitements:p.traitements_reguliers||'',
+        patientId:p.patient_id||p.id,supabaseId:p.id,
+        parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
+        lien:p.lien_familial||'moi',compteParent:'',
+        transfere:!!(p.compte_parent_id),
+        ia_consent:p.ia_consent||false,
+        statut_compte:p.statut_compte||'actif'
+      };
+    });
+    SEL=0;
+
+    // Vérifier statut compte principal
+    var principal=PROFILS[0];
+    if(principal&&principal.statut_compte==='suspendu'){
+      err.textContent='Compte suspendu suite à des abus. Contactez support@dokita.health';
+      err.classList.add('on');supprimerJWT();return;
+    }
+    if(principal&&principal.statut_compte==='radie'){
+      err.textContent='Accès révoqué. Contactez support@dokita.health';
+      err.classList.add('on');supprimerJWT();return;
+    }
+
     err.className='login-err';
     try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:SESSION_PATIENT_ID}));}catch(e){}
-    syncTraitementsDepuisNotion(profilPrincipal);
-    mettreAJourBadgeRDV(profilPrincipal);
-    toast('Bienvenue '+profilPrincipal.prenom+' 👋');
-    // Charger établissements en arrière-plan dès le login
+    syncTraitementsDepuisNotion(principal);
+    mettreAJourBadgeRDV(principal);
+    toast('Bienvenue '+principal.prenom+' 👋');
     chargerEtablissements();
+
     // Vérifier consentement IA
-    if(!p.ia_consent){
-      setTimeout(function(){afficherConsentementIA(p.id);},800);
+    if(!data.ia_consent){
+      setTimeout(function(){afficherConsentementIA(data.patientId);},800);
     } else {
       renderProfils();nav('profilsScreen');
     }
-    // Membres famille via compte_parent_id (UUID)
-    fetch(DB_URL+'?table=patients&filter=compte_parent_id=eq.'+encodeURIComponent(p.id)+'&limit=10',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    }).then(function(rf){return rf.json();}).then(function(dataF){
-      var famille=Array.isArray(dataF)?dataF:(dataF.data||[]);
-      if(!famille.length)return;
-      var membres=famille.map(function(mp){
-        return {
-          prenom:mp.prenom||'',nom:mp.nom||'',naiss:mp.date_naissance||'',
-          tel:mp.telephone||'',email:'',ville:mp.ville||'',
-          poids:mp.poids?String(mp.poids):'',
-          sx:mp.sexe==='M'?'H':mp.sexe==='F'?'F':'',
-          allergies:mp.allergies||'',antecedents:mp.antecedents||'',
-          traitements:mp.traitements_reguliers||'',
-          patientId:mp.patient_id||mp.id,supabaseId:mp.id,
-          lien:mp.lien_familial||'autre',compteParent:email
-        };
-      });
-      PROFILS=[profilPrincipal].concat(membres);
-      saveProfils();
-      renderProfils();
-      dbg('Membres famille chargés: '+membres.length);
-    }).catch(function(e){dbg('Membres ERR: '+e.message);});
+    dbg('Login JWT OK — '+PROFILS.length+' profil(s) chargés');
   }catch(e){err.textContent='Erreur de connexion: '+e.message;err.classList.add('on');}
 }
 
@@ -1364,6 +1358,7 @@ function logout(){if(confirm('Se déconnecter ?'))seDeconnecter();}
 function seDeconnecter(){
   SESSION_EMAIL='';SESSION_PATIENT_ID='';
   PROFILS=[];SEL=-1;CURRENT=null;
+  supprimerJWT();
   try{localStorage.removeItem('dk_session');}catch(e){}
   nav('loginScreen');
   toast('Déconnecté');
@@ -1410,6 +1405,27 @@ var EXTRACT_URL  ='https://heydoc-mu.vercel.app/api/extract-examen';
 // ══════════════════════════════
 var CID=null,msgs=[],BEST_MED=null,NOTION_MEDS=[],MEDS_LOADED=false;
 var SESSION_EMAIL='',SESSION_PATIENT_ID='',SESSION_CODE_TEMP='',SESSION_PARRAIN_ID=null;
+
+// ── HELPERS JWT ──
+var JWT_TOKEN=null;
+function sauvegarderJWT(token){JWT_TOKEN=token;try{localStorage.setItem('dk_jwt',token);}catch(e){}}
+function chargerJWT(){if(JWT_TOKEN)return JWT_TOKEN;try{JWT_TOKEN=localStorage.getItem('dk_jwt');}catch(e){}return JWT_TOKEN;}
+function supprimerJWT(){JWT_TOKEN=null;try{localStorage.removeItem('dk_jwt');}catch(e){}}
+async function fetchAPI(url,options){
+  options=options||{};
+  options.headers=options.headers||{};
+  var token=chargerJWT();
+  if(token)options.headers['Authorization']='Bearer '+token;
+  if(!options.headers['Content-Type']&&!(options.body instanceof FormData))options.headers['Content-Type']='application/json';
+  var r=await fetch(url,options);
+  if(r.status===401){
+    supprimerJWT();
+    nav('loginScreen');
+    toast('Session expirée — reconnectez-vous');
+    throw new Error('Session expirée');
+  }
+  return r;
+}
 var PREV_SCREEN='profilsScreen';
 var PROFILS=[],SEL=-1,CURRENT=null,SX='',ESX='',EDIT_I=-1;
 var USER_LAT=null,USER_LNG=null;
@@ -1978,7 +1994,7 @@ function saveProfil(){
         groupe_sanguin:p.groupe_sanguin||null,
         langue_preferee:p.langue||null,
         patient_id:p.patientId,
-        code_patient:SESSION_CODE_TEMP,
+        code_acces:SESSION_CODE_TEMP,
         lien_familial:'moi',
         parrain_id:SESSION_PARRAIN_ID||null,
         credit_reduction:SESSION_PARRAIN_ID?10:0  // -10% sur 1ère consultation si parrain
@@ -2086,14 +2102,10 @@ function lancerEph(){
 async function rafraichirProfilSupabase(patientId){
   if(!patientId)return;
   try{
-    // 1. Recharger profil patient
-    var rp=await fetch(DB_URL+'?table=patients&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var dp=await rp.json();
-    var pat=Array.isArray(dp)?dp[0]:(dp.data?dp.data[0]:null);
-    if(pat){
-      // Mettre à jour CURRENT avec les données fraîches — TOUS les champs
+    // 1. Recharger profil patient via JWT /api/patient
+    var rp=await fetchAPI(API_URL+'/patient?action=profil');
+    var pat=rp.ok?await rp.json():null;
+    if(pat&&!pat.error){
       if(CURRENT&&CURRENT.patientId===patientId){
         CURRENT.prenom     = pat.prenom||CURRENT.prenom||'';
         CURRENT.nom        = pat.nom||CURRENT.nom||'';
@@ -2110,7 +2122,6 @@ async function rafraichirProfilSupabase(patientId){
         CURRENT.langue     = pat.langue_preferee||CURRENT.langue||'';
         CURRENT._age       = calcAge(CURRENT.naiss);
       }
-      // Mettre à jour aussi PROFILS[SEL]
       if(SEL>=0&&PROFILS[SEL]&&PROFILS[SEL].patientId===patientId){
         PROFILS[SEL].prenom      = pat.prenom||PROFILS[SEL].prenom||'';
         PROFILS[SEL].nom         = pat.nom||PROFILS[SEL].nom||'';
@@ -2126,26 +2137,21 @@ async function rafraichirProfilSupabase(patientId){
         PROFILS[SEL].groupe_sanguin = pat.groupe_sanguin||PROFILS[SEL].groupe_sanguin||'';
         PROFILS[SEL].langue      = pat.langue_preferee||PROFILS[SEL].langue||'';
       }
-      dbg('Profil rafraîchi depuis Supabase ✅ '+patientId+' | '+pat.prenom+' '+pat.nom);
+      dbg('Profil rafraîchi JWT ✅ '+patientId+' | '+pat.prenom+' '+pat.nom);
     }
 
-    // 2. Recharger médicaments actifs (dossier_medical)
-    var rm=await fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&filter2=statut=eq.actif&filter3=type=eq.medicament_cours&limit=20',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var dm=await rm.json();
-    var meds=Array.isArray(dm)?dm:(dm.data||[]);
+    // 2+3. Recharger médicaments actifs + ALD via JWT /api/patient?action=dossier
+    var rd=await fetchAPI(API_URL+'/patient?action=dossier');
+    var dd=rd.ok?await rd.json():[];
+    var docs=Array.isArray(dd)?dd:(dd.data||[]);
+
+    var meds=docs.filter(function(m){return m.type==='medicament_cours'&&m.statut==='actif';});
     if(meds.length&&CURRENT&&CURRENT.patientId===patientId){
       CURRENT._medsEncours=meds.map(function(m){return {nom:m.valeur||m.nom,dose:m.dose||''};});
       dbg('Médicaments actifs rechargés: '+CURRENT._medsEncours.length);
     }
 
-    // 3. Recharger ALD (dossier_medical type=ald)
-    var ra=await fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patientId)+'&filter2=statut=eq.actif&filter3=type=eq.ald&limit=10',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var da=await ra.json();
-    var alds=Array.isArray(da)?da:(da.data||[]);
+    var alds=docs.filter(function(a){return a.type==='ald'&&a.statut==='actif';});
     if(alds.length&&CURRENT&&CURRENT.patientId===patientId){
       CURRENT._aldsStr=alds.map(function(a){return a.valeur||a.nom;}).join(', ');
       dbg('ALD rechargés: '+CURRENT._aldsStr);
