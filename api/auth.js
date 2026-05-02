@@ -20,22 +20,23 @@ module.exports = async function handler(req, res) {
 
     const { data: patients, error } = await supabase
       .from('patients')
-      .select('id, prenom, nom, email, code_acces, ia_consent')
+      .select('id, prenom, nom, email, code_acces, ia_consent, statut_compte')
       .eq('email', email.toLowerCase().trim())
       .limit(10);
 
     if (error) return res.status(500).json({ error: error.message });
     if (!patients || !patients.length) return res.status(401).json({ error: 'Email non trouvé' });
 
-    // Vérifier le code — peut y avoir plusieurs profils famille avec le même email
     const patient = patients.find(p => p.code_acces === code);
     if (!patient) return res.status(401).json({ error: 'Code incorrect' });
 
     // Charger tous les profils famille associés à cet email
-    const { data: profils } = await supabase
+    const { data: profils, error: errProfils } = await supabase
       .from('patients')
-      .select('id, prenom, nom, sexe, naiss, poids, taille, groupe_sanguin, langue_preferee, ville, antecedents, allergies, lien_familial, ia_consent')
+      .select('id, patient_id, prenom, nom, nom_complet, sexe, date_naissance, poids, taille, groupe_sanguin, langue_preferee, ville, telephone, antecedents, allergies, traitements_reguliers, lien_familial, ia_consent, parrain_id, credit_reduction, statut_compte, compte_parent_id, code_parrainage')
       .eq('email', email.toLowerCase().trim());
+
+    if (errProfils) return res.status(500).json({ error: errProfils.message });
 
     const token = signerToken({
       id: patient.id,
@@ -57,7 +58,7 @@ module.exports = async function handler(req, res) {
 
     const { data: medecins, error } = await supabase
       .from('medecins')
-      .select('id, prenom, nom, nom_complet, specialite, email, numero_ordre, signature_base64, statut, partenaire_dokita')
+      .select('id, prenom, nom, nom_complet, specialite, email, numero_ordre, signature_base64, statut, partenaire_dokita, essai_gratuit_jusqu_au, code_acces')
       .eq('numero_ordre', ordre.trim())
       .eq('statut', 'Actif')
       .limit(1);
@@ -67,15 +68,8 @@ module.exports = async function handler(req, res) {
 
     const med = medecins[0];
 
-    // Vérifier le code d'accès
-    const { data: check } = await supabase
-      .from('medecins')
-      .select('id')
-      .eq('id', med.id)
-      .eq('code_acces', code)
-      .limit(1);
-
-    if (!check || !check.length) return res.status(401).json({ error: 'Code incorrect' });
+    if (!med.partenaire_dokita) return res.status(401).json({ error: 'Compte non partenaire Dokita' });
+    if (med.code_acces !== code) return res.status(401).json({ error: 'Code incorrect' });
 
     const token = signerToken({
       id: med.id,
@@ -93,7 +87,8 @@ module.exports = async function handler(req, res) {
         email: med.email,
         ordre: med.numero_ordre,
         signature_base64: med.signature_base64,
-        partenaire: med.partenaire_dokita
+        partenaire: med.partenaire_dokita,
+        essai_gratuit_jusqu_au: med.essai_gratuit_jusqu_au || null
       }
     });
   }
