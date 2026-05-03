@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.38
-     DATE    : 2026-05-03 00:09:55
+     VERSION : V4.39
+     DATE    : 2026-05-03 00:19:57
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1206,6 +1206,9 @@ async function seConnecter(){
         prenom:p.prenom||'',nom:p.nom||'',naiss:p.naiss||p.date_naissance||'',
         tel:p.telephone||'',email:email,ville:p.ville||'',
         poids:p.poids?String(p.poids):'',
+        taille:p.taille?String(p.taille):'',
+        groupe_sanguin:p.groupe_sanguin||'',
+        langue:p.langue_preferee||'',
         sx:p.sexe==='M'?'H':p.sexe==='F'?'F':p.sexe||'',
         allergies:p.allergies||'',antecedents:p.antecedents||'',
         traitements:p.traitements_reguliers||'',
