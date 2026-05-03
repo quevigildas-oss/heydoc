@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.37
-     DATE    : 2026-05-02 23:13:03
+     VERSION : V4.38
+     DATE    : 2026-05-03 00:09:55
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -5023,6 +5023,9 @@ async function mettreAJourProfilNotion(p){
   if(p.tel)body.telephone=p.tel;
   if(p.ville)body.ville=p.ville;
   if(p.poids)body.poids=parseFloat(p.poids)||null;
+  if(p.taille)body.taille=parseFloat(p.taille)||null;
+  if(p.groupe_sanguin)body.groupe_sanguin=p.groupe_sanguin;
+  if(p.langue)body.langue_preferee=p.langue;
   if(p.sx)body.sexe=p.sx==='H'?'M':p.sx==='F'?'F':null;
   try{
     await fetch(DB_URL+'?table=patients&filter=id=eq.'+p.supabaseId,{
@@ -5030,7 +5033,7 @@ async function mettreAJourProfilNotion(p){
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
       body:JSON.stringify(body)
     });
-    dbg('Profil Supabase mis à jour');
+    dbg('Profil Supabase mis à jour ✅');
   }catch(e){dbg('Erreur MAJ profil: '+e.message);}
 }
 
