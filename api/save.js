@@ -192,6 +192,7 @@ Dokita — Outil d'aide à la décision médicale`;
       console.warn('⚠️ RESEND_KEY non configurée — email médecin non envoyé');
     }
 
+    /*
     // ── Créer les examens si obligatoires ──
     // Extraction simple depuis le texte examens_recommandes
     if (consultId && payload.examens_recommandes) {
@@ -231,6 +232,7 @@ Dokita — Outil d'aide à la décision médicale`;
         }
       }
     }
+    */
 
     // ── Retourner succès ──
     return res.status(200).json({
