@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
-     DOKITA — App Patient 
-     VERSION : V4.39
-     DATE    : 2026-05-03 00:19:57
+     DOKITA — App Patient
+     VERSION : V4.40
+     DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -2529,6 +2529,15 @@ async function enregistrerTraitementDetecte(traitement,btn){
 }
 
 async function envoyerDossier(email,nomMed,medId){
+  // ── Désactiver immédiatement pour éviter les double-clics ──
+  var btnDosImmediat=document.getElementById('btnDossier');
+  if(btnDosImmediat){
+    if(btnDosImmediat.disabled)return; // déjà en cours — ignorer
+    btnDosImmediat.disabled=true;
+    btnDosImmediat.textContent='⏳ Envoi...';
+    btnDosImmediat.style.opacity='0.5';
+    btnDosImmediat.style.cursor='not-allowed';
+  }
   var p=CURRENT;
   var a=p._age||calcAge(p.naiss);
   var nom=p.prenom+(p.nom?' '+p.nom:'');
