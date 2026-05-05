@@ -56,12 +56,12 @@ export default async function handler(req, res) {
 
       // Recommandations OMS depuis Supabase pgvector
       // ⚠️ Ces champs sont masqués au médecin jusqu'à soumission prescription
-      examens_recommandes:  body.examens            || '',
-      recommandations_oms:  body.recommandations    || '',
+      examens_recommandes:  body.examens_recommandes || body.examens || '',
+      recommandations_oms:  body.recommandations_oms || body.recommandations || '',
       medicaments_oms:      body.medicaments_oms    || '',
       contre_indications:   body.contre_indications || '',
       note_historique:      body.note_historique     || '',
-      sources_oms:          body.sources            || '',
+      sources_oms:          body.sources_oms         || body.sources || '',
 
       medecin_id:           body.medecin_id || null,
 
