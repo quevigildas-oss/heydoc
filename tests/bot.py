@@ -334,13 +334,19 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
     reponse_resume = data.get("answer", "")
     messages.append({"role": "assistant", "content": reponse_resume})
 
-    # Parser JSON
+    # Parser JSON — extraction robuste par regex
     resume = None
     try:
-        clean = reponse_resume.replace("```json", "").replace("```", "").strip()
-        resume = json.loads(clean)
-    except Exception:
-        pass
+        import re
+        # Chercher le premier objet JSON dans la réponse
+        match = re.search(r'\{[\s\S]*\}', reponse_resume)
+        if match:
+            resume = json.loads(match.group(0))
+        else:
+            clean = reponse_resume.replace("```json", "").replace("```", "").strip()
+            resume = json.loads(clean)
+    except Exception as e:
+        print(f"    ⚠️ RESUME parse error: {e} | raw[:200]: {reponse_resume[:200]}")
 
     return messages, resume, total_ms, diagnostic_ok, ms
 
@@ -497,6 +503,7 @@ def sauvegarder_prescription(consultation_uuid, prescription):
 
 def lancer_validation_ia(consultation, prescription):
     """Lance la validation IA sur la prescription"""
+    import re
     examens_oms     = consultation.get("examens_recommandes", "")
     medicaments_oms = consultation.get("medicaments_oms", "")
     diag            = consultation.get("diagnostic_ia", "")
@@ -514,8 +521,11 @@ Diagnostic posé : {prescription.get('diagnostic', '')}
 Examens prescrits : {', '.join(prescription.get('examens_prescrits', []))}
 Médicaments : {json.dumps(prescription.get('medicaments', []))}
 
-Réponds UNIQUEMENT avec ce JSON :
-{{"statut":"CONFORME"|"NON_CONFORME","score":0-100,"details":"explication","examens_manquants":[],"posologie_ok":true|false,"ecart_posologie":""}}"""
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
+Exemple de réponse attendue :
+{{"statut": "CONFORME", "score": 85, "details": "Prescription correcte selon OMS", "examens_manquants": [], "posologie_ok": true, "ecart_posologie": ""}}
+
+Si des examens obligatoires manquent ou si la posologie est incorrecte, utilise "NON_CONFORME" et liste les problèmes dans "details"."""
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
         "model": "claude-sonnet-4-6",
@@ -530,10 +540,15 @@ Réponds UNIQUEMENT avec ce JSON :
     if status == 200:
         raw = (data.get("content", [{}])[0].get("text", "")).strip()
         try:
+            match = re.search(r'\{[\s\S]*\}', raw)
+            if match:
+                return json.loads(match.group(0)), ms
             clean = raw.replace("```json", "").replace("```", "").strip()
             return json.loads(clean), ms
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"    ⚠️ Validation parse error: {e} | raw[:200]: {raw[:200]}")
+    else:
+        print(f"    ⚠️ Validation API error: HTTP {status} | {data}")
     return {"statut": "ERREUR", "score": 0, "details": "Validation IA échouée"}, ms
 
 def creer_ordonnance(consultation_uuid, prescription):
