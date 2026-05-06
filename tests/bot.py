@@ -419,7 +419,7 @@ def medecin_ouvrir_consultation(consultation_uuid):
     rows = data2 if isinstance(data2, list) else (data2.get("data") or [])
     return (rows[0] if rows else None), ms + ms2
 
-def generer_prescription(disease, consultation, mode="1ere", oublier_examen=False):
+def generer_prescription(disease, consultation, profil=None, mode="1ere", oublier_examen=False):
     """
     Génère une prescription via Claude basée sur les données Supabase.
     mode: 1ere | 2eme | complet | incomplet
