@@ -250,6 +250,7 @@ Historique : {hist}
         "anthropic-version": "2023-06-01"
     })
 
+    time.sleep(1.5)  # Tier 1 rate limit — 50 req/min
     if status == 200:
         return data.get("content", [{}])[0].get("text", "").strip(), ms
     return f"J'ai de la fièvre et des symptômes depuis plusieurs jours. Je me sens mal.", ms
@@ -291,6 +292,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
         }, headers={"x-dokita-key": DOKITA_KEY}, timeout=45)
 
         total_ms += ms
+        time.sleep(2)  # Tier 1 rate limit
 
         if status != 200:
             return messages, None, total_ms, False, None
@@ -323,6 +325,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
         "patient": profil_context
     }, headers={"x-dokita-key": DOKITA_KEY}, timeout=45)
     total_ms += ms
+    time.sleep(2)  # Tier 1 rate limit
 
     if status != 200:
         return messages, None, total_ms, diagnostic_ok, None
@@ -464,6 +467,7 @@ Retourne UNIQUEMENT ce JSON :
         "anthropic-version": "2023-06-01"
     })
 
+    time.sleep(1.5)  # Tier 1 rate limit
     if status == 200:
         raw = data.get("content", [{}])[0].get("text", "").strip()
         try:
@@ -521,8 +525,9 @@ Réponds UNIQUEMENT avec ce JSON :
         "anthropic-version": "2023-06-01"
     })
 
+    time.sleep(1.5)  # Tier 1 rate limit
     if status == 200:
-        raw = data.get("content", [{}])[0].get("text", "").strip()
+        raw = (data.get("content", [{}])[0].get("text", "")).strip()
         try:
             clean = raw.replace("```json", "").replace("```", "").strip()
             return json.loads(clean), ms
