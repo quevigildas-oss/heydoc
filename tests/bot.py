@@ -558,18 +558,38 @@ Si des examens obligatoires manquent ou si la posologie est incorrecte, utilise 
     return {"statut": "ERREUR", "score": 0, "details": "Validation IA échouée"}, ms
 
 def creer_ordonnance(consultation_uuid, prescription):
-    """Crée une ordonnance dans Supabase"""
+    """Crée une ordonnance dans Supabase — insert direct"""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        # Fallback via /api/db
+        body = {
+            "consultation_id": consultation_uuid,
+            "patient_id": PATIENT_ID,
+            "medecin_id": MEDECIN_UUID,
+            "medicaments": json.dumps(prescription.get("medicaments", [])),
+            "examens": json.dumps(prescription.get("examens_prescrits", [])),
+            "statut": "active",
+            "is_test": True
+        }
+        url = f"{API_URL}/db?table=ordonnances"
+        st, data, ms = http_post(url, body, headers={"x-dokita-key": DOKITA_KEY})
+        if st != 200:
+            print(f"    ⚠️ creer_ordonnance /api/db error: HTTP {st} | {data}")
+        return st, data, ms
+
+    # Insert direct Supabase (plus fiable)
     body = {
         "consultation_id": consultation_uuid,
         "patient_id": PATIENT_ID,
         "medecin_id": MEDECIN_UUID,
         "medicaments": json.dumps(prescription.get("medicaments", [])),
-        "examens": json.dumps(prescription.get("examens_prescrits", [])),
+        "examens_prescrits": json.dumps(prescription.get("examens_prescrits", [])),
         "statut": "active",
         "is_test": True
     }
-    url = f"{API_URL}/db?table=ordonnances"
-    return http_post(url, body, headers={"x-dokita-key": DOKITA_KEY})
+    st, data, ms = supabase_insert("ordonnances", body)
+    if st not in (200, 201):
+        print(f"    ⚠️ creer_ordonnance Supabase error: HTTP {st} | {str(data)[:200]}")
+    return st, data, ms
 
 def valider_consultation(consultation_uuid):
     """Passe le statut à valide"""
@@ -914,6 +934,9 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     result_E1 = "PASS" if stat_E1 == "CONFORME" else "FAIL"
     print(f" {result_E1} ({stat_E1} score={val_E1.get('score',0)}%)")
 
+    # Phase 3 — vérification Supabase
+    p3_result_E1, p3_ok_E1, p3_ko_E1, snap_E1 = verifier_consultation_supabase(consultation_uuid, d)
+
     stocker_resultat({
         "disease": d["nom"], "test_type": f"doctor_1ere_{label}",
         "patient_age": profil["age"], "patient_sexe": profil["sexe"],
@@ -932,6 +955,9 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "examens_oms": consultation.get("examens_recommandes",""),
         "examens_manquants": ", ".join(val_E1.get("examens_manquants",[])),
         "duration_api_rag_ms": ms_v1,
+        "duration_total_ms": ms_v1,
+        "champs_ok": p3_ok_E1, "champs_ko": p3_ko_E1,
+        "consultation_snapshot": snap_E1 or consultation,
         "explication_ko": val_E1.get("details","") if result_E1 == "FAIL" else "",
     })
 
@@ -956,6 +982,8 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "validation_ia_correcte": stat_E2 == "CONFORME",
         "medicaments_prescrits": json.dumps(pres_E2.get("medicaments",[])),
         "duration_api_rag_ms": ms_v2,
+        "duration_total_ms": ms_v2,
+        "consultation_snapshot": consultation,
     })
 
     # ── E3 — Tous examens + 1ère intention (PARFAITE) ──
@@ -969,9 +997,11 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
 
     # Créer ordonnance E3
     st_ord, data_ord, ms_ord = creer_ordonnance(consultation_uuid, pres_E3)
-    if st_ord == 200:
+    if st_ord in (200, 201):
         rows_ord = data_ord if isinstance(data_ord, list) else (data_ord.get("data") or [])
         ordonnance_E3_uuid = rows_ord[0].get("id") if rows_ord else None
+        if not ordonnance_E3_uuid:
+            print(f"    ⚠️ ordonnance créée mais UUID non retourné | data: {str(data_ord)[:100]}")
 
     valider_consultation(consultation_uuid)
     print(f" {result_E3} ({stat_E3} {score_E3}% | ordonnance: {'✅' if ordonnance_E3_uuid else '❌'})")
@@ -1027,6 +1057,8 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "examens_manquants": d.get("examen_a_oublier",""),
         "explication_ko": f"Validation IA n'a pas détecté l'oubli de {examen_oublie}" if result_E4 == "FAIL" else "",
         "duration_api_rag_ms": ms_v4,
+        "duration_total_ms": ms_v4,
+        "consultation_snapshot": consultation,
     })
 
     return ordonnance_E3_uuid if conserver_ordonnance else None
