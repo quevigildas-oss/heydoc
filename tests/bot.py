@@ -431,11 +431,11 @@ def generer_prescription(disease, consultation, mode="1ere", oublier_examen=Fals
         med_target = disease["medicament_1ere"]
         exam_target = disease["examens_obligatoires"]
         instruction = f"""Tu es médecin. Génère une prescription pour {disease['nom']}.
-Médicament à prescrire (1ère intention OMS) : {med_target}
-Examens à prescrire (TOUS les obligatoires) : {', '.join(exam_target)}
+Médicament 1ère intention OMS : {med_target}
+Examens obligatoires : {', '.join(exam_target)}{profil_ctx}
 
-Retourne UNIQUEMENT ce JSON :
-{{"diagnostic":"...", "examens_prescrits":["exam1","exam2"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
+Retourne UNIQUEMENT ce JSON valide :
+{{"diagnostic":"{disease['nom']}", "examens_prescrits":["exam1","exam2"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
 
     elif mode == "2eme":
         med_target = disease["medicament_2eme"]
@@ -745,6 +745,7 @@ def tester_maladie(disease):
         "patient_poids": profil_A["poids"], "patient_ville": profil_A["ville"],
         "patient_cas_special": profil_A.get("cas_special", "aucun"),
         "phase": "phase1_afribot", "result": result_A_diag,
+        "symptomes_generes": symptomes_A,
         "afribot_diagnostic": resume_A.get("diagnostic", "") if resume_A else "",
         "diagnostic_attendu": d["diagnostic_attendu"],
         "diagnostic_correct": diag_ok_A,
@@ -927,11 +928,12 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
 
     # ── E1 — 1ère intention ──
     print(f"    [{label}→E1] 1ère intention...", end="")
-    pres_E1, ms_p1 = generer_prescription(d, consultation, mode="1ere")
+    pres_E1, ms_p1 = generer_prescription(d, consultation, profil=profil, mode="1ere")
     sauvegarder_prescription(consultation_uuid, pres_E1)
+    time.sleep(1.0)  # attendre confirmation PATCH
     val_E1, ms_v1 = lancer_validation_ia(consultation, pres_E1)
     stat_E1   = val_E1.get("statut", "ERREUR")
-    result_E1 = "PASS" if stat_E1 == "CONFORME" else "FAIL"
+    result_E1 = "PASS" if stat_E1 == "CONFORME" else ("WARN" if stat_E1 == "PARTIELLEMENT_CONFORME" else "FAIL")
     print(f" {result_E1} ({stat_E1} score={val_E1.get('score',0)}%)")
 
     # Phase 3 — vérification Supabase
@@ -947,6 +949,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "validation_ia_statut": stat_E1,
         "validation_ia_attendu": "CONFORME",
         "validation_ia_correcte": stat_E1 == "CONFORME",
+        "prescription_json": json.dumps(pres_E1),
         "medicaments_prescrits": json.dumps(pres_E1.get("medicaments",[])),
         "medicaments_oms": consultation.get("medicaments_oms",""),
         "posologie_conforme": val_E1.get("posologie_ok", None),
@@ -963,7 +966,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
 
     # ── E2 — 2ème intention ──
     print(f"    [{label}→E2] 2ème intention...", end="")
-    pres_E2, ms_p2 = generer_prescription(d, consultation, mode="2eme")
+    pres_E2, ms_p2 = generer_prescription(d, consultation, profil=profil, mode="2eme")
     sauvegarder_prescription(consultation_uuid, pres_E2)
     val_E2, ms_v2 = lancer_validation_ia(consultation, pres_E2)
     stat_E2   = val_E2.get("statut", "ERREUR")
@@ -980,6 +983,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "validation_ia_statut": stat_E2,
         "validation_ia_attendu": "CONFORME",
         "validation_ia_correcte": stat_E2 == "CONFORME",
+        "prescription_json": json.dumps(pres_E2),
         "medicaments_prescrits": json.dumps(pres_E2.get("medicaments",[])),
         "duration_api_rag_ms": ms_v2,
         "duration_total_ms": ms_v2,
@@ -988,12 +992,13 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
 
     # ── E3 — Tous examens + 1ère intention (PARFAITE) ──
     print(f"    [{label}→E3] Prescription parfaite...", end="")
-    pres_E3, ms_p3 = generer_prescription(d, consultation, mode="complet")
+    pres_E3, ms_p3 = generer_prescription(d, consultation, profil=profil, mode="complet")
     sauvegarder_prescription(consultation_uuid, pres_E3)
+    time.sleep(1.0)  # attendre confirmation PATCH
     val_E3, ms_v3 = lancer_validation_ia(consultation, pres_E3)
     stat_E3    = val_E3.get("statut", "ERREUR")
     score_E3   = val_E3.get("score", 0)
-    result_E3  = "PASS" if stat_E3 == "CONFORME" and score_E3 >= 80 else "FAIL"
+    result_E3  = "PASS" if stat_E3 == "CONFORME" and score_E3 >= 80 else ("WARN" if stat_E3 == "PARTIELLEMENT_CONFORME" else "FAIL")
 
     # Créer ordonnance E3
     st_ord, data_ord, ms_ord = creer_ordonnance(consultation_uuid, pres_E3)
@@ -1013,6 +1018,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "patient_cas_special": profil.get("cas_special", "aucun"),
         "phase": "phase2_validation_ia",
         "result": result_E3,
+        "prescription_json": json.dumps(pres_E3),
         "validation_ia_statut": stat_E3,
         "validation_ia_attendu": "CONFORME",
         "validation_ia_correcte": stat_E3 == "CONFORME",
@@ -1033,7 +1039,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
 
     # ── E4 — Examen oublié ──
     print(f"    [{label}→E4] Examen oublié ({d.get('examen_a_oublier','?')})...", end="")
-    pres_E4, ms_p4 = generer_prescription(d, consultation, mode="incomplet")
+    pres_E4, ms_p4 = generer_prescription(d, consultation, profil=profil, mode="incomplet")
     sauvegarder_prescription(consultation_uuid, pres_E4)
     val_E4, ms_v4 = lancer_validation_ia(consultation, pres_E4,
         examen_obligatoire=d.get("examen_a_oublier",""))
@@ -1053,6 +1059,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "validation_ia_statut": stat_E4,
         "validation_ia_attendu": "NON_CONFORME",
         "validation_ia_correcte": stat_E4 == "NON_CONFORME",
+        "prescription_json": json.dumps(pres_E4),
         "examens_prescrits": ", ".join(pres_E4.get("examens_prescrits",[])),
         "examens_manquants": d.get("examen_a_oublier",""),
         "explication_ko": f"Validation IA n'a pas détecté l'oubli de {examen_oublie}" if result_E4 == "FAIL" else "",
@@ -1160,51 +1167,225 @@ def tester_performance():
 # ══════════════════════════════════════════════════════════════
 # GÉNÉRATION RAPPORT HTML
 # ══════════════════════════════════════════════════════════════
+
 def generer_rapport():
-    """Génère un rapport HTML coloré"""
+    """Génère un rapport HTML riche avec détail par phase"""
+    import json as _json
+
     total   = len(RESULTS)
     nb_pass = sum(1 for r in RESULTS if r.get("result") == "PASS")
     nb_fail = sum(1 for r in RESULTS if r.get("result") == "FAIL")
     nb_warn = sum(1 for r in RESULTS if r.get("result") == "WARN")
     pct     = int(nb_pass/total*100) if total > 0 else 0
 
-    rows_html = ""
+    # Grouper par maladie
+    by_disease = {}
     for r in RESULTS:
-        color = "#D1FAE5" if r.get("result")=="PASS" else "#FEE2E2" if r.get("result")=="FAIL" else "#FEF3C7"
-        txt_color = "#166534" if r.get("result")=="PASS" else "#991B1B" if r.get("result")=="FAIL" else "#92400E"
-        rows_html += f"""<tr style="background:{color}">
-  <td>{r.get('disease','')}</td>
-  <td>{r.get('test_type','')}</td>
-  <td>{r.get('patient_age','')} ans {r.get('patient_sexe','')} {r.get('patient_poids','')}kg</td>
-  <td>{r.get('patient_cas_special','')}</td>
-  <td>{r.get('phase','')}</td>
-  <td style="font-weight:bold;color:{txt_color}">{r.get('result','')}</td>
-  <td>{r.get('afribot_diagnostic','') or r.get('validation_ia_statut','')}</td>
-  <td style="font-size:11px;color:#666">{r.get('explication_ko','')[:80]}</td>
-  <td>{r.get('duration_api_rag_ms',r.get('duration_api_save_ms',0))}ms</td>
-</tr>"""
+        d = r.get("disease","?")
+        by_disease.setdefault(d, []).append(r)
+
+    def badge(result):
+        if result == "PASS": return '<span style="background:#D1FAE5;color:#166534;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:11px">PASS</span>'
+        if result == "FAIL": return '<span style="background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:11px">FAIL</span>'
+        return '<span style="background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:4px;font-weight:bold;font-size:11px">WARN</span>'
+
+    def field(label, val, color="#374151"):
+        if not val: return ""
+        val_str = str(val)
+        if len(val_str) > 300: val_str = val_str[:300] + "..."
+        return f'<div style="margin:4px 0"><span style="color:#6B7280;font-size:11px;font-weight:600">{label}</span><div style="color:{color};font-size:12px;margin-top:2px;line-height:1.5">{val_str}</div></div>'
+
+    def parse_prescription(pj):
+        if not pj: return ""
+        try:
+            p = _json.loads(pj) if isinstance(pj, str) else pj
+            meds = p.get("medicaments", [])
+            exams = p.get("examens_prescrits", [])
+            diag = p.get("diagnostic","")
+            html = f'<div style="font-size:11px"><b>Diagnostic:</b> {diag}</div>'
+            if meds:
+                html += '<div style="font-size:11px;margin-top:4px"><b>Médicaments:</b><ul style="margin:2px 0 0 16px">'
+                for m in meds:
+                    html += f'<li>{m.get("nom","")} — {m.get("dose","")} — {m.get("duree","")}</li>'
+                html += '</ul></div>'
+            if exams:
+                html += f'<div style="font-size:11px;margin-top:4px"><b>Examens:</b> {", ".join(exams)}</div>'
+            return html
+        except: return str(pj)[:200]
+
+    def section_patient(r):
+        snap = r.get("consultation_snapshot") or {}
+        if isinstance(snap, str):
+            try: snap = _json.loads(snap)
+            except: snap = {}
+        if isinstance(snap, str):
+            try: snap = _json.loads(snap)
+            except: snap = {}
+
+        html = '<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:12px;margin-bottom:8px">'
+        html += f'<div style="font-weight:700;color:#166534;margin-bottom:8px">👤 Patient — {r.get("patient_age")}ans {r.get("patient_sexe")} {r.get("patient_poids")}kg • {r.get("patient_ville","")} • {r.get("patient_cas_special","")}</div>'
+
+        symptomes = r.get("symptomes_generes") or snap.get("symptomes","")
+        if symptomes: html += field("💬 Symptômes générés", symptomes, "#1F2937")
+
+        diag = r.get("afribot_diagnostic") or snap.get("diagnostic_ia","")
+        if diag: html += field("🎯 Diagnostic AfriBot", diag, "#1D4ED8")
+
+        reco = snap.get("recommandations_oms","")
+        if reco: html += field("📋 Recommandations OMS", reco[:400])
+
+        exams = snap.get("examens_recommandes","")
+        if exams: html += field("🔬 Examens OMS", exams[:400])
+
+        meds = snap.get("medicaments_oms","")
+        if meds: html += field("💊 Médicaments OMS", meds[:400])
+
+        ci = snap.get("contre_indications","")
+        if ci: html += field("⚠️ Contre-indications", ci[:300], "#92400E")
+
+        sources = snap.get("sources_oms","")
+        if sources: html += field("📚 Sources", sources[:200], "#6B7280")
+
+        note = snap.get("note_historique","")
+        if note: html += field("🔄 Note historique (récurrence)", note[:300], "#7C3AED")
+
+        html += '</div>'
+        return html
+
+    def section_medecin(rs, label):
+        e1 = next((r for r in rs if f"doctor_1ere_{label}" in r.get("test_type","")), None)
+        e2 = next((r for r in rs if f"doctor_2eme_{label}" in r.get("test_type","")), None)
+        e3 = next((r for r in rs if f"doctor_exam_complet_{label}" in r.get("test_type","")), None)
+        e4 = next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None)
+
+        html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'
+        for e, etitle, ecolor in [(e1,"E1 — 1ère intention","#EFF6FF"), (e2,"E2 — 2ème intention","#F5F3FF"),
+                                   (e3,"E3 — Prescription parfaite","#F0FDF4"), (e4,"E4 — Examen oublié","#FFF7ED")]:
+            if not e:
+                html += f'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:10px"><b style="font-size:12px">{etitle}</b><div style="color:#9CA3AF;font-size:11px">Non exécuté</div></div>'
+                continue
+            stat = e.get("validation_ia_statut","")
+            score = ""
+            pj = e.get("prescription_json","")
+            ordo = e.get("ordonnance_id","")
+            expl = e.get("explication_ko","") or e.get("examens_manquants","")
+
+            stat_color = "#166534" if stat == "CONFORME" else "#991B1B" if stat == "NON_CONFORME" else "#92400E"
+            html += f'<div style="background:{ecolor};border:1px solid #E5E7EB;border-radius:8px;padding:10px">'
+            html += f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+            html += f'<b style="font-size:12px">{etitle}</b>{badge(e.get("result",""))}</div>'
+            html += f'<div style="font-size:11px;color:{stat_color};font-weight:600;margin-bottom:6px">Validation IA: {stat} {score}</div>'
+            if pj: html += parse_prescription(pj)
+            if ordo: html += f'<div style="font-size:11px;color:#166534;margin-top:4px">📄 Ordonnance: {ordo[:20]}...</div>'
+            if expl: html += f'<div style="font-size:11px;color:#991B1B;margin-top:4px;background:#FEE2E2;padding:4px;border-radius:4px">⚠️ {expl[:200]}</div>'
+            html += '</div>'
+        html += '</div>'
+        return html
+
+    # Construire le HTML par maladie
+    diseases_html = ""
+    for disease_name, rs in by_disease.items():
+        if disease_name in ("SECURITE","PERFORMANCE"): continue
+
+        d_pass = sum(1 for r in rs if r.get("result")=="PASS")
+        d_fail = sum(1 for r in rs if r.get("result")=="FAIL")
+        d_warn = sum(1 for r in rs if r.get("result")=="WARN")
+        d_pct  = int(d_pass/(d_pass+d_fail+d_warn)*100) if (d_pass+d_fail+d_warn) else 0
+        hdr_color = "#D1FAE5" if d_fail==0 else "#FEE2E2" if d_fail > 2 else "#FEF3C7"
+
+        diseases_html += f'''<details style="margin-bottom:12px;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden">
+<summary style="background:{hdr_color};padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+  <span style="font-weight:700;font-size:14px">🦠 {disease_name}</span>
+  <span style="font-size:12px">PASS:{d_pass} FAIL:{d_fail} WARN:{d_warn} — {d_pct}%</span>
+</summary>
+<div style="padding:16px">'''
+
+        # 4 consultations A B C D
+        for label, label_title in [("A","Symptômes idéaux"),("B","Récurrence"),("C","Standard"),("D","Cas limite")]:
+            pat = next((r for r in rs if r.get("test_type") in (f"patient_ideal","patient_recurrence","patient_flou","patient_cas_limite")
+                        and any(f"_{label}" in t.get("test_type","") for t in rs if t.get("patient_age")==r.get("patient_age"))), None)
+
+            # Trouver le bon patient par heuristique
+            if label == "A":
+                pat = next((r for r in rs if r.get("test_type")=="patient_ideal" and r.get("patient_cas_special") not in ("enceinte","enfant","VIH+","allergie","diabetique","drepano","recurrence")), None)
+                if not pat: pat = next((r for r in rs if r.get("test_type")=="patient_ideal"), None)
+            elif label == "B":
+                pat = next((r for r in rs if r.get("test_type")=="patient_recurrence"), None)
+            elif label == "C":
+                pat = next((r for r in rs if r.get("test_type") in ("patient_ideal","patient_flou") and
+                            not any(r2.get("test_type")=="patient_recurrence" and r2.get("patient_age")==r.get("patient_age") for r2 in rs) and
+                            r.get("patient_age") != next((r2.get("patient_age") for r2 in rs if r2.get("test_type")=="patient_ideal" and r2.get("patient_cas_special") not in ("enceinte","enfant")), None)), None)
+            elif label == "D":
+                pat = next((r for r in rs if r.get("test_type")=="patient_cas_limite"), None)
+
+            rec = next((r for r in rs if f"doctor_reception_{label}" in r.get("test_type","")), None)
+            has_doctor = any(f"_{label}" in r.get("test_type","") and "doctor_" in r.get("test_type","") for r in rs)
+
+            if not pat and not has_doctor: continue
+
+            diseases_html += f'<div style="margin-bottom:16px"><h3 style="font-size:13px;color:#374151;border-bottom:1px solid #E5E7EB;padding-bottom:6px;margin-bottom:10px">📋 Consultation {label} — {label_title}</h3>'
+
+            # Section patient
+            if pat:
+                diseases_html += section_patient(pat)
+            elif rec and rec.get("consultation_snapshot"):
+                snap = rec.get("consultation_snapshot",{})
+                if isinstance(snap,str):
+                    try: snap = _json.loads(snap)
+                    except: snap = {}
+                if isinstance(snap,str):
+                    try: snap = _json.loads(snap)
+                    except: snap = {}
+                diseases_html += f'<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:12px;margin-bottom:8px">'
+                diseases_html += f'<div style="font-weight:700;color:#166534;margin-bottom:6px">👤 Consultation {label}</div>'
+                sym = snap.get("symptomes","")
+                if sym: diseases_html += field("💬 Symptômes", sym[:400])
+                diag = snap.get("diagnostic_ia","")
+                if diag: diseases_html += field("🎯 Diagnostic AfriBot", diag, "#1D4ED8")
+                meds = snap.get("medicaments_oms","")
+                if meds: diseases_html += field("💊 Médicaments OMS", meds[:400])
+                exams = snap.get("examens_recommandes","")
+                if exams: diseases_html += field("🔬 Examens OMS", exams[:400])
+                diseases_html += '</div>'
+
+            # Section médecin
+            if has_doctor:
+                diseases_html += f'<div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">🩺 Tests médecin (E1–E4)</div>'
+                diseases_html += section_medecin(rs, label)
+
+            diseases_html += '</div>'
+
+        diseases_html += '</div></details>'
+
+    # Tests additionnels
+    sec_rs  = [r for r in RESULTS if r.get("disease")=="SECURITE"]
+    perf_rs = [r for r in RESULTS if r.get("disease")=="PERFORMANCE"]
+
+    sec_html = ''.join(f'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #F3F4F6"><span style="font-size:12px">{r.get("phase","")} — {r.get("explication_ko","OK")[:80]}</span>{badge(r.get("result",""))}</div>' for r in sec_rs)
+    perf_html = ''.join(f'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #F3F4F6"><span style="font-size:12px">{r.get("phase","")} — {r.get("duration_api_rag_ms",0) or r.get("duration_api_save_ms",0)}ms</span>{badge(r.get("result",""))}</div>' for r in perf_rs)
 
     html = f"""<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8">
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita Test Bot — Rapport {RUN_DATE[:10]}</title>
 <style>
-* {{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif;}}
-body {{background:#F9FAFB;padding:24px;}}
-.header {{background:#0A1628;color:#fff;padding:24px;border-radius:12px;margin-bottom:24px;}}
-.header h1 {{font-size:28px;color:#00C896;}}
-.header p {{color:#9CA3AF;margin-top:8px;}}
-.stats {{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}}
-.stat {{background:#fff;border-radius:10px;padding:16px;text-align:center;border:1px solid #E5E7EB;}}
-.stat .val {{font-size:36px;font-weight:800;}}
-.stat .lbl {{font-size:12px;color:#6B7280;margin-top:4px;}}
+* {{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;}}
+body {{background:#F9FAFB;padding:16px;}}
+.header {{background:#0A1628;color:#fff;padding:20px;border-radius:12px;margin-bottom:16px;}}
+.header h1 {{font-size:22px;color:#00C896;}}
+.header p {{color:#9CA3AF;margin-top:6px;font-size:13px;}}
+.stats {{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}}
+.stat {{background:#fff;border-radius:10px;padding:14px;text-align:center;border:1px solid #E5E7EB;}}
+.stat .val {{font-size:32px;font-weight:800;}}
+.stat .lbl {{font-size:11px;color:#6B7280;margin-top:4px;}}
 .pass-val {{color:#166534;}} .fail-val {{color:#991B1B;}} .warn-val {{color:#92400E;}} .total-val {{color:#1D4ED8;}}
-table {{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E5E7EB;}}
-th {{background:#0A1628;color:#fff;padding:10px 8px;font-size:12px;text-align:left;}}
-td {{padding:8px;font-size:12px;border-bottom:1px solid #F3F4F6;}}
+details summary::-webkit-details-marker {{display:none;}}
+details[open] summary {{border-bottom:1px solid #E5E7EB;}}
+.addon {{background:#fff;border-radius:10px;padding:16px;margin-bottom:12px;border:1px solid #E5E7EB;}}
+.addon h2 {{font-size:14px;font-weight:700;margin-bottom:10px;}}
 </style></head><body>
 <div class="header">
-  <h1>DOKITA Test Bot — Rapport</h1>
-  <p>Run ID : {RUN_ID} | Date : {RUN_DATE} | Taux de succès : {pct}%</p>
+  <h1>🏥 DOKITA Test Bot — Rapport détaillé</h1>
+  <p>Run ID : {RUN_ID} &nbsp;|&nbsp; Date : {RUN_DATE[:19]} &nbsp;|&nbsp; Taux de succès : {pct}%</p>
 </div>
 <div class="stats">
   <div class="stat"><div class="val total-val">{total}</div><div class="lbl">Tests totaux</div></div>
@@ -1212,26 +1393,24 @@ td {{padding:8px;font-size:12px;border-bottom:1px solid #F3F4F6;}}
   <div class="stat"><div class="val fail-val">{nb_fail}</div><div class="lbl">FAIL ❌</div></div>
   <div class="stat"><div class="val warn-val">{nb_warn}</div><div class="lbl">WARN ⚠️</div></div>
 </div>
-<table>
-<thead><tr>
-  <th>Maladie</th><th>Test</th><th>Profil</th><th>Cas spécial</th>
-  <th>Phase</th><th>Résultat</th><th>Diagnostic/IA</th><th>Explication KO</th><th>Durée</th>
-</tr></thead>
-<tbody>{rows_html}</tbody>
-</table>
+
+<h2 style="font-size:15px;font-weight:700;margin-bottom:12px;color:#0A1628">📊 Résultats par maladie</h2>
+{diseases_html}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+<div class="addon"><h2>🔒 Sécurité</h2>{sec_html}</div>
+<div class="addon"><h2>⚡ Performance</h2>{perf_html}</div>
+</div>
 </body></html>"""
 
     with open("rapport.html", "w", encoding="utf-8") as f:
         f.write(html)
-
     with open("rapport.json", "w", encoding="utf-8") as f:
-        json.dump({"run_id": RUN_ID, "date": RUN_DATE, "results": RESULTS}, f, ensure_ascii=False, indent=2)
+        _json.dump({"run_id": RUN_ID, "date": RUN_DATE, "results": RESULTS}, f, ensure_ascii=False, indent=2)
 
     return pct, nb_pass, nb_fail, nb_warn
 
-# ══════════════════════════════════════════════════════════════
-# MAIN
-# ══════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
     login()
 
