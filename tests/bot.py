@@ -16,6 +16,7 @@ from diseases import DISEASES, MALADIES_ERREUR_FIXE, MALADIES_SYMPTOME_FLOU
 # CONFIG
 # ══════════════════════════════════════════════════════════════
 API_URL        = "https://heydoc-mu.vercel.app/api"
+RAG_URL        = "https://heydoc-medecin.vercel.app/api"
 MEDECIN_URL    = "https://heydoc-medecin.vercel.app/api"
 DOKITA_KEY     = os.environ.get("DOKITA_KEY", "dk-2026-prod-x9f7m")
 SUPABASE_URL   = os.environ.get("SUPABASE_URL", "")
@@ -286,7 +287,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
     max_tours = 5
 
     for tour in range(max_tours):
-        status, data, ms = http_post(f"{API_URL}/rag", {
+        status, data, ms = http_post(f"{RAG_URL}/rag", {
             "messages": messages,
             "patient": profil_context
         }, headers={"x-dokita-key": DOKITA_KEY}, timeout=45)
@@ -320,7 +321,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
 
     # RESUME_CONSULTATION
     messages.append({"role": "user", "content": "RESUME_CONSULTATION"})
-    status, data, ms = http_post(f"{API_URL}/rag", {
+    status, data, ms = http_post(f"{RAG_URL}/rag", {
         "messages": messages,
         "patient": profil_context
     }, headers={"x-dokita-key": DOKITA_KEY}, timeout=45)
