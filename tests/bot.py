@@ -426,6 +426,16 @@ def generer_prescription(disease, consultation, profil=None, mode="1ere", oublie
     """
     examens_oms = consultation.get("examens_recommandes", "") or " | ".join(disease["examens_obligatoires"])
     meds_oms    = consultation.get("medicaments_oms", "") or disease["medicament_1ere"]
+    profil_ctx  = ""
+    if profil:
+        age, sexe, poids = profil.get("age","?"), profil.get("sexe","?"), profil.get("poids","?")
+        cas = profil.get("cas_special","aucun")
+        p = f"{age} ans, {'Femme' if sexe=='F' else 'Homme'}, {poids}kg"
+        if cas == "enceinte": p += f", enceinte T{profil.get('grossesse_trimestre',2)}"
+        elif cas == "enfant": p += f", enfant {poids}kg - adapter dose au poids"
+        elif cas == "allergie": p += f", allergie {profil.get('allergie','penicilline')}"
+        elif cas == "VIH+": p += f", VIH+ CD4={profil.get('cd4',200)}"
+        profil_ctx = f"\nPROFIL PATIENT : {p}. Adapter posologie et choix medicament."
 
     if mode == "1ere":
         med_target = disease["medicament_1ere"]
@@ -441,7 +451,7 @@ Retourne UNIQUEMENT ce JSON valide :
         med_target = disease["medicament_2eme"]
         instruction = f"""Tu es médecin. Génère une prescription pour {disease['nom']} avec médicaments de 2ème intention.
 Médicament 2ème intention OMS : {med_target}
-Examens OMS : {', '.join(disease['examens_obligatoires'])}
+Examens OMS : {', '.join(disease['examens_obligatoires'])}{profil_ctx}
 Le diagnostic à poser est : {disease['nom']}
 
 Retourne UNIQUEMENT ce JSON :
@@ -757,7 +767,11 @@ def tester_maladie(disease):
 
     # Tests médecin sur consultation A
     if uuid_A:
-        _tester_medecin_sur_consultation(d, uuid_A, profil_A, "A", conserver_ordonnance=False)
+        try:
+            _tester_medecin_sur_consultation(d, uuid_A, profil_A, "A", conserver_ordonnance=False)
+        except Exception as e:
+            print(f"    [A→medecin] ERREUR: {e}")
+            stocker_resultat({"disease":d["nom"],"test_type":"erreur_medecin_A","result":"FAIL","explication_ko":str(e)})
 
     # ════════════════════════════════
     # CONSULTATION B — RÉCURRENCE
@@ -801,7 +815,11 @@ def tester_maladie(disease):
     })
 
     if uuid_B:
-        _tester_medecin_sur_consultation(d, uuid_B, profil_A, "B", conserver_ordonnance=False)
+        try:
+            _tester_medecin_sur_consultation(d, uuid_B, profil_A, "B", conserver_ordonnance=False)
+        except Exception as e:
+            print(f"    [B→medecin] ERREUR: {e}")
+            stocker_resultat({"disease":d["nom"],"test_type":"erreur_medecin_B","result":"FAIL","explication_ko":str(e)})
 
     # Effacer A + B
     if uuid_A: supprimer_consultation(uuid_A)
@@ -850,7 +868,11 @@ def tester_maladie(disease):
     })
 
     if uuid_C:
-        _tester_medecin_sur_consultation(d, uuid_C, profil_C, "C", conserver_ordonnance=False)
+        try:
+            _tester_medecin_sur_consultation(d, uuid_C, profil_C, "C", conserver_ordonnance=False)
+        except Exception as e:
+            print(f"    [C→medecin] ERREUR: {e}")
+            stocker_resultat({"disease":d["nom"],"test_type":"erreur_medecin_C","result":"FAIL","explication_ko":str(e)})
         supprimer_consultation(uuid_C)
 
     # ════════════════════════════════
@@ -890,7 +912,11 @@ def tester_maladie(disease):
 
     # Tests médecin sur D — ordonnance E3 conservée
     if uuid_D:
-        uuid_ordonnance_E3 = _tester_medecin_sur_consultation(d, uuid_D, profil_D, "D", conserver_ordonnance=True)
+        try:
+            uuid_ordonnance_E3 = _tester_medecin_sur_consultation(d, uuid_D, profil_D, "D", conserver_ordonnance=True)
+        except Exception as e:
+            print(f"    [D→medecin] ERREUR: {e}")
+            stocker_resultat({"disease":d["nom"],"test_type":"erreur_medecin_D","result":"FAIL","explication_ko":str(e)})
         supprimer_consultation(uuid_D)  # effacer consultation D mais pas l'ordonnance E3
 
     return uuid_ordonnance_E3
