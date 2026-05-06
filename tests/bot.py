@@ -442,9 +442,10 @@ Retourne UNIQUEMENT ce JSON :
         instruction = f"""Tu es médecin. Génère une prescription pour {disease['nom']} avec médicaments de 2ème intention.
 Médicament 2ème intention OMS : {med_target}
 Examens OMS : {', '.join(disease['examens_obligatoires'])}
+Le diagnostic à poser est : {disease['nom']}
 
 Retourne UNIQUEMENT ce JSON :
-{{"diagnostic":"...", "examens_prescrits":["exam1","exam2"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
+{{"diagnostic":"{disease['nom']}", "examens_prescrits":["exam1","exam2"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
 
     elif mode == "complet":  # E3 — prescription parfaite
         instruction = f"""Tu es médecin expert. Génère une prescription PARFAITE pour {disease['nom']}.
@@ -501,12 +502,16 @@ def sauvegarder_prescription(consultation_uuid, prescription):
     url = f"{API_URL}/db?table=consultations&id={consultation_uuid}"
     return http_patch(url, body, headers={"x-dokita-key": DOKITA_KEY})
 
-def lancer_validation_ia(consultation, prescription):
+def lancer_validation_ia(consultation, prescription, examen_obligatoire=None):
     """Lance la validation IA sur la prescription"""
     import re
     examens_oms     = consultation.get("examens_recommandes", "")
     medicaments_oms = consultation.get("medicaments_oms", "")
     diag            = consultation.get("diagnostic_ia", "")
+
+    mention_examen = ""
+    if examen_obligatoire:
+        mention_examen = f"\nEXAMEN OBLIGATOIRE À VÉRIFIER : {examen_obligatoire}\nSi cet examen ou un équivalent clinique n'est pas dans la liste des examens prescrits, tu DOIS le mettre dans 'examens_manquants'."
 
     prompt_validation = f"""Tu es un médecin senior expert en médecine tropicale africaine.
 Évalue la prescription suivante selon les guidelines OMS.
@@ -520,6 +525,7 @@ PRESCRIPTION DU MÉDECIN :
 Diagnostic posé : {prescription.get('diagnostic', '')}
 Examens prescrits : {', '.join(prescription.get('examens_prescrits', []))}
 Médicaments : {json.dumps(prescription.get('medicaments', []))}
+{mention_examen}
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
 Exemple de réponse attendue :
@@ -529,7 +535,7 @@ Si des examens obligatoires manquent ou si la posologie est incorrecte, utilise 
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
         "model": "claude-sonnet-4-6",
-        "max_tokens": 400,
+        "max_tokens": 1500,
         "messages": [{"role": "user", "content": prompt_validation}]
     }, headers={
         "x-api-key": ANTHROPIC_KEY,
@@ -999,11 +1005,11 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     print(f"    [{label}→E4] Examen oublié ({d.get('examen_a_oublier','?')})...", end="")
     pres_E4, ms_p4 = generer_prescription(d, consultation, mode="incomplet")
     sauvegarder_prescription(consultation_uuid, pres_E4)
-    val_E4, ms_v4 = lancer_validation_ia(consultation, pres_E4)
+    val_E4, ms_v4 = lancer_validation_ia(consultation, pres_E4,
+        examen_obligatoire=d.get("examen_a_oublier",""))
     stat_E4    = val_E4.get("statut", "ERREUR")
     result_E4  = "PASS" if stat_E4 == "NON_CONFORME" else "FAIL"
-    examen_oublie = d.get("examen_a_oublier", "")
-    mention_oubli = examen_oublie.lower() in val_E4.get("details","").lower() if examen_oublie else True
+    mention_oubli = len(val_E4.get("examens_manquants", [])) > 0
 
     print(f" {result_E4} ({stat_E4} | mention examen oublié: {'✅' if mention_oubli else '⚠️'})")
 
