@@ -242,7 +242,7 @@ Historique : {hist}
 Écris uniquement le message du patient (60-100 mots), en français, à la première personne."""
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 300,
         "messages": [{"role": "user", "content": instruction}]
     }, headers={
@@ -459,7 +459,7 @@ Retourne UNIQUEMENT ce JSON :
 {{"diagnostic":"...", "examens_prescrits":["exam1"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}], "examen_oublie":"{examen_oublie}"}}"""
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 400,
         "messages": [{"role": "user", "content": instruction}]
     }, headers={
@@ -517,7 +517,7 @@ Réponds UNIQUEMENT avec ce JSON :
 {{"statut":"CONFORME"|"NON_CONFORME","score":0-100,"details":"explication","examens_manquants":[],"posologie_ok":true|false,"ecart_posologie":""}}"""
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 400,
         "messages": [{"role": "user", "content": prompt_validation}]
     }, headers={
