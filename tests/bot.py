@@ -585,7 +585,7 @@ def creer_ordonnance(consultation_uuid, prescription):
                 "examens": prescription.get("examens_prescrits", []),
                 "diagnostic": prescription.get("diagnostic", "")
             }),
-            "statut": "active",
+            "statut": "brouillon",
             "is_test": True
         }
         url = f"{API_URL}/db?table=ordonnances"
@@ -604,7 +604,7 @@ def creer_ordonnance(consultation_uuid, prescription):
             "examens": prescription.get("examens_prescrits", []),
             "diagnostic": prescription.get("diagnostic", "")
         }),
-        "statut": "active",
+        "statut": "brouillon",
         "is_test": True
     }
     st, data, ms = supabase_insert("ordonnances", body)
