@@ -1496,59 +1496,6 @@ details[open] summary {{border-bottom:1px solid #E5E7EB;}}
     return pct, nb_pass, nb_fail, nb_warn
 
 
-if __name__ == "__main__":
-    login()
-
-    # Sélectionner les maladies à tester
-    diseases_to_test = DISEASES
-    if DISEASE_FILTER:
-        diseases_to_test = [d for d in DISEASES if d["id"] == DISEASE_FILTER]
-    elif QUICK_MODE:
-        # Mode rapide : 5 maladies représentatives
-        quick_ids = {"M1", "M4", "M9", "M34", "M42"}
-        diseases_to_test = [d for d in DISEASES if d["id"] in quick_ids]
-
-    print(f"Maladies à tester : {len(diseases_to_test)}")
-    ordonnances_conservees = {}
-
-    # Boucle principale
-    for i, disease in enumerate(diseases_to_test):
-        try:
-            ordo_uuid = tester_maladie(disease)
-            if ordo_uuid:
-                ordonnances_conservees[disease["nom"]] = ordo_uuid
-        except Exception as e:
-            print(f"  ❌ ERREUR CRITIQUE {disease['id']}: {e}")
-            stocker_resultat({
-                "disease": disease["nom"], "test_type": "erreur_critique",
-                "result": "FAIL", "explication_ko": str(e)
-            })
-
-    # Tests additionnels
-    tester_securite()
-    tester_performance()
-
-    # Rapport final
-    print(f"\n{'═'*60}")
-    print("📊 GÉNÉRATION RAPPORT")
-    pct, nb_pass, nb_fail, nb_warn = generer_rapport()
-    generer_excel()
-
-    print(f"\n{'═'*60}")
-    print(f"✅ PASS  : {nb_pass}")
-    print(f"❌ FAIL  : {nb_fail}")
-    print(f"⚠️ WARN  : {nb_warn}")
-    print(f"📈 Taux  : {pct}%")
-
-    print(f"\n💊 Ordonnances E3 conservées ({len(ordonnances_conservees)}) :")
-    for maladie, oid in ordonnances_conservees.items():
-        print(f"   {maladie} → {oid}")
-
-    print(f"\nRapports : rapport.html | rapport.json")
-    print(f"{'═'*60}\n")
-
-    # Exit code pour GitHub Actions
-    sys.exit(0 if nb_fail == 0 else 1)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1818,4 +1765,59 @@ def generer_excel():
 
     wb.save("rapport.xlsx")
     print("📊 Excel généré : rapport.xlsx")
+
+
+if __name__ == "__main__":
+    login()
+
+    # Sélectionner les maladies à tester
+    diseases_to_test = DISEASES
+    if DISEASE_FILTER:
+        diseases_to_test = [d for d in DISEASES if d["id"] == DISEASE_FILTER]
+    elif QUICK_MODE:
+        # Mode rapide : 5 maladies représentatives
+        quick_ids = {"M1", "M4", "M9", "M34", "M42"}
+        diseases_to_test = [d for d in DISEASES if d["id"] in quick_ids]
+
+    print(f"Maladies à tester : {len(diseases_to_test)}")
+    ordonnances_conservees = {}
+
+    # Boucle principale
+    for i, disease in enumerate(diseases_to_test):
+        try:
+            ordo_uuid = tester_maladie(disease)
+            if ordo_uuid:
+                ordonnances_conservees[disease["nom"]] = ordo_uuid
+        except Exception as e:
+            print(f"  ❌ ERREUR CRITIQUE {disease['id']}: {e}")
+            stocker_resultat({
+                "disease": disease["nom"], "test_type": "erreur_critique",
+                "result": "FAIL", "explication_ko": str(e)
+            })
+
+    # Tests additionnels
+    tester_securite()
+    tester_performance()
+
+    # Rapport final
+    print(f"\n{'═'*60}")
+    print("📊 GÉNÉRATION RAPPORT")
+    pct, nb_pass, nb_fail, nb_warn = generer_rapport()
+    generer_excel()
+
+    print(f"\n{'═'*60}")
+    print(f"✅ PASS  : {nb_pass}")
+    print(f"❌ FAIL  : {nb_fail}")
+    print(f"⚠️ WARN  : {nb_warn}")
+    print(f"📈 Taux  : {pct}%")
+
+    print(f"\n💊 Ordonnances E3 conservées ({len(ordonnances_conservees)}) :")
+    for maladie, oid in ordonnances_conservees.items():
+        print(f"   {maladie} → {oid}")
+
+    print(f"\nRapports : rapport.html | rapport.json")
+    print(f"{'═'*60}\n")
+
+    # Exit code pour GitHub Actions
+    sys.exit(0 if nb_fail == 0 else 1)
 
