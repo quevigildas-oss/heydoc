@@ -852,6 +852,7 @@ def tester_maladie(disease):
         "patient_poids": profil_A["poids"], "patient_ville": profil_A["ville"],
         "patient_cas_special": "recurrence",
         "phase": "phase1_afribot", "result": result_B,
+        "symptomes_generes": symptomes_B,
         "recurrence_detectee": recurrence_ok,
         "afribot_diagnostic": resume_B.get("diagnostic","") if resume_B else "",
         "diagnostic_attendu": d["diagnostic_attendu"],
@@ -907,6 +908,7 @@ def tester_maladie(disease):
         "patient_poids": profil_C["poids"], "patient_ville": profil_C["ville"],
         "patient_cas_special": "flou" if is_flou else "aucun",
         "phase": "phase1_afribot", "result": result_C,
+        "symptomes_generes": symptomes_C,
         "afribot_diagnostic": resume_C.get("diagnostic","") if resume_C else "",
         "diagnostic_attendu": d["diagnostic_attendu"],
         "diagnostic_correct": diag_ok_C,
@@ -950,6 +952,7 @@ def tester_maladie(disease):
         "patient_poids": profil_D["poids"], "patient_ville": profil_D["ville"],
         "patient_cas_special": cas,
         "phase": "phase1_afribot", "result": result_D,
+        "symptomes_generes": symptomes_D,
         "contre_indication_detectee": ci_ok,
         "afribot_diagnostic": resume_D.get("diagnostic","") if resume_D else "",
         "diagnostic_attendu": d["diagnostic_attendu"],
@@ -1295,11 +1298,12 @@ def generer_rapport():
         e3 = next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None)
 
         # Récupérer les données de référence OMS depuis la réception médecin
-        rec = next((r for r in rs if f"doctor_reception_{label}" in r.get("test_type","")), None)
+        # Snapshot depuis E1 — contient les vraies données OMS
+        e1_r = next((r for r in rs if f"doctor_1ere_{label}" in r.get("test_type","")), None)
         snap = {}
-        if rec and rec.get("consultation_snapshot"):
+        if e1_r and e1_r.get("consultation_snapshot"):
             try:
-                s = rec["consultation_snapshot"]
+                s = e1_r["consultation_snapshot"]
                 snap = _json.loads(s) if isinstance(s,str) else s
                 if isinstance(snap,str): snap = _json.loads(snap)
             except: snap = {}
