@@ -1532,6 +1532,7 @@ if __name__ == "__main__":
     print(f"\n{'═'*60}")
     print("📊 GÉNÉRATION RAPPORT")
     pct, nb_pass, nb_fail, nb_warn = generer_rapport()
+    generer_excel()
 
     print(f"\n{'═'*60}")
     print(f"✅ PASS  : {nb_pass}")
@@ -1548,3 +1549,273 @@ if __name__ == "__main__":
 
     # Exit code pour GitHub Actions
     sys.exit(0 if nb_fail == 0 else 1)
+
+
+# ══════════════════════════════════════════════════════════════
+# GÉNÉRATION EXCEL
+# ══════════════════════════════════════════════════════════════
+def generer_excel():
+    """Génère un fichier Excel avec toutes les données de test"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        import json as _json
+    except ImportError:
+        print("⚠️ openpyxl non installé — Excel non généré")
+        return
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Résultats"
+
+    # ── Couleurs ──
+    COLORS = {
+        "g1": "1E3A5F", "g2": "065F46", "g3": "6B21A8",
+        "g4": "92400E", "g5": "1D4ED8", "g6": "374151",
+        "h1": "DBEAFE", "h2": "D1FAE5", "h3": "EDE9FE",
+        "h4": "FEF3C7", "h5": "BFDBFE", "h6": "F3F4F6",
+        "pass": "D1FAE5", "fail": "FEE2E2", "warn": "FEF3C7",
+        "conf": "D1FAE5", "nonconf": "FEE2E2", "part": "FEF3C7",
+    }
+
+    def fill(hex_color):
+        return PatternFill("solid", fgColor=hex_color)
+
+    def font_white_bold():
+        return Font(bold=True, color="FFFFFF", size=10)
+
+    def font_dark(color="000000"):
+        return Font(bold=True, color=color, size=10)
+
+    def border():
+        s = Side(style="thin", color="D1D5DB")
+        return Border(left=s, right=s, top=s, bottom=s)
+
+    def center():
+        return Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def left():
+        return Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+    # ── Ligne 1 : groupes ──
+    groups = [
+        ("📋 IDENTIFICATION", 3, "g1"),
+        ("👤 PROFIL PATIENT", 5, "g2"),
+        ("🤖 AFRIBOT", 5, "g3"),
+        ("📚 RÉFÉRENCE OMS", 5, "g4"),
+        ("🩺 TEST MÉDECIN", 9, "g5"),
+        ("⚡ PERFORMANCE", 2, "g6"),
+    ]
+
+    col = 1
+    for label, span, color_key in groups:
+        ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col+span-1)
+        cell = ws.cell(row=1, column=col, value=label)
+        cell.fill = fill(COLORS[color_key])
+        cell.font = font_white_bold()
+        cell.alignment = center()
+        cell.border = border()
+        col += span
+
+    # ── Ligne 2 : colonnes ──
+    headers = [
+        # Identification (h1)
+        ("Maladie", "h1"), ("Consultation", "h1"), ("Test", "h1"),
+        # Profil (h2)
+        ("Âge", "h2"), ("Sexe", "h2"), ("Poids (kg)", "h2"), ("Ville", "h2"), ("Cas spécial", "h2"),
+        # AfriBot (h3)
+        ("Symptômes générés", "h3"), ("Diagnostic AfriBot", "h3"),
+        ("Récurrence détectée", "h3"), ("Note historique", "h3"), ("Résultat AfriBot", "h3"),
+        # Référence OMS (h4)
+        ("Médicaments OMS", "h4"), ("Examens OMS", "h4"),
+        ("Contre-indications OMS", "h4"), ("Sources OMS", "h4"), ("Recommandations OMS", "h4"),
+        # Test médecin (h5)
+        ("Résultat", "h5"), ("Validation IA", "h5"), ("Score (%)", "h5"),
+        ("Diagnostic médecin", "h5"), ("Médicaments prescrits", "h5"),
+        ("Posologie conforme", "h5"), ("Examens prescrits", "h5"),
+        ("Examens manquants", "h5"), ("Contenu ordonnance", "h5"),
+        ("Explication KO", "h5"),
+        # Performance (h6)
+        ("Durée AfriBot (ms)", "h6"), ("Durée Valid. IA (ms)", "h6"),
+    ]
+
+    for c, (label, color_key) in enumerate(headers, 1):
+        cell = ws.cell(row=2, column=c, value=label)
+        cell.fill = fill(COLORS[color_key])
+        cell.font = font_dark()
+        cell.alignment = center()
+        cell.border = border()
+
+    # ── Données ──
+    # Regrouper par maladie
+    by_disease = {}
+    for r in RESULTS:
+        d = r.get("disease", "?")
+        by_disease.setdefault(d, []).append(r)
+
+    row_num = 3
+    for disease_name, rs in by_disease.items():
+        if disease_name in ("SECURITE", "PERFORMANCE"):
+            continue
+
+        for label, label_title in [("A","Idéal"), ("B","Récurrence"), ("C","Standard"), ("D","Cas limite")]:
+
+            # Données patient
+            pat = None
+            if label == "A":
+                pat = next((r for r in rs if r.get("test_type") == "patient_ideal"
+                    and r.get("patient_cas_special") not in ("enceinte","enfant","VIH+","allergie","diabetique","drepano","recurrence")), None)
+                if not pat:
+                    pat = next((r for r in rs if r.get("test_type") == "patient_ideal"), None)
+            elif label == "B":
+                pat = next((r for r in rs if r.get("test_type") == "patient_recurrence"), None)
+            elif label == "C":
+                pat = next((r for r in rs if r.get("test_type") in ("patient_ideal","patient_flou")
+                    and r.get("patient_cas_special") not in ("enceinte","enfant","VIH+","allergie","diabetique","drepano","recurrence")
+                    and r != next((r2 for r2 in rs if r2.get("test_type")=="patient_ideal"
+                        and r2.get("patient_cas_special") not in ("enceinte","enfant","VIH+","allergie")), None)), None)
+            elif label == "D":
+                pat = next((r for r in rs if r.get("test_type") == "patient_cas_limite"), None)
+
+            if not pat:
+                continue
+
+            # Snapshot OMS
+            rec = next((r for r in rs if f"doctor_reception_{label}" in r.get("test_type","")), None)
+            snap = {}
+            if rec and rec.get("consultation_snapshot"):
+                try:
+                    s = rec["consultation_snapshot"]
+                    snap = _json.loads(s) if isinstance(s, str) else s
+                    if isinstance(snap, str):
+                        snap = _json.loads(snap)
+                except:
+                    snap = {}
+
+            # Données communes patient
+            age   = pat.get("patient_age", "")
+            sexe  = pat.get("patient_sexe", "")
+            poids = pat.get("patient_poids", "")
+            ville = pat.get("patient_ville", "")
+            cas   = pat.get("patient_cas_special", "")
+            sympt = pat.get("symptomes_generes", "")[:300]
+            diag_afribot = pat.get("afribot_diagnostic", "")
+            recurrence   = "Oui" if pat.get("recurrence_detectee") else "Non"
+            note_hist    = snap.get("note_historique", "") or pat.get("note_historique","")
+            res_afribot  = pat.get("result", "")
+            meds_oms     = snap.get("medicaments_oms", "")[:300]
+            exams_oms    = snap.get("examens_recommandes", "")[:300]
+            ci_oms       = snap.get("contre_indications", "")[:200]
+            sources_oms  = snap.get("sources_oms", "")[:200]
+            reco_oms     = snap.get("recommandations_oms", "")[:200]
+            dur_afribot  = pat.get("duration_api_rag_ms", "")
+
+            # Tests E1, E2, E3
+            test_map = {
+                "E1": next((r for r in rs if f"doctor_1ere_{label}" in r.get("test_type","")), None),
+                "E2": next((r for r in rs if f"doctor_2eme_{label}" in r.get("test_type","")), None),
+                "E3": next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None),
+            }
+
+            for test_name, e in test_map.items():
+                if not e:
+                    continue
+
+                # Parser prescription
+                pj = {}
+                try:
+                    pj = _json.loads(e.get("prescription_json","{}")) if e.get("prescription_json") else {}
+                except:
+                    pj = {}
+
+                meds_list = pj.get("medicaments", [])
+                meds_str  = " | ".join([f"{m.get('nom','')} {m.get('dose','')} {m.get('duree','')}" for m in meds_list])
+                diag_med  = pj.get("diagnostic", "")
+                exams_str = e.get("examens_prescrits", "")
+
+                # Contenu ordonnance
+                ordo_content = ""
+                if e.get("ordonnance_id"):
+                    ordo_content = f"Diag: {diag_med} | Méds: {meds_str} | Examens: {exams_str}"
+
+                val_statut  = e.get("validation_ia_statut", "")
+                score       = e.get("duration_api_rag_ms", "")  # placeholder
+                posol_ok    = "✅ Oui" if e.get("posologie_conforme") is True else ("❌ Non" if e.get("posologie_conforme") is False else "—")
+                exams_manq  = e.get("examens_manquants", "")
+                result      = e.get("result", "")
+                expl_ko     = e.get("explication_ko", "")[:200]
+                dur_val     = e.get("duration_api_rag_ms", "")
+
+                row_data = [
+                    disease_name,
+                    f"{label} — {label_title}",
+                    test_name,
+                    age, sexe, poids, ville, cas,
+                    sympt, diag_afribot, recurrence, note_hist, res_afribot,
+                    meds_oms, exams_oms, ci_oms, sources_oms, reco_oms,
+                    result, val_statut, "",  # score calculé séparément
+                    diag_med, meds_str, posol_ok, exams_str, exams_manq,
+                    ordo_content, expl_ko,
+                    dur_afribot, dur_val,
+                ]
+
+                for c, val in enumerate(row_data, 1):
+                    cell = ws.cell(row=row_num, column=c, value=str(val) if val is not None else "")
+                    cell.border = border()
+                    cell.alignment = left()
+                    cell.font = Font(size=9)
+
+                # Coloriser colonne Résultat (col 19)
+                res_cell = ws.cell(row=row_num, column=19)
+                if result == "PASS":
+                    res_cell.fill = fill(COLORS["pass"])
+                    res_cell.font = Font(bold=True, color="166534", size=9)
+                elif result == "FAIL":
+                    res_cell.fill = fill(COLORS["fail"])
+                    res_cell.font = Font(bold=True, color="991B1B", size=9)
+                elif result == "WARN":
+                    res_cell.fill = fill(COLORS["warn"])
+                    res_cell.font = Font(bold=True, color="92400E", size=9)
+
+                # Coloriser Validation IA (col 20)
+                val_cell = ws.cell(row=row_num, column=20)
+                if "CONFORME" in val_statut and "NON" not in val_statut:
+                    val_cell.fill = fill(COLORS["conf"])
+                    val_cell.font = Font(bold=True, color="166534", size=9)
+                elif "NON_CONFORME" in val_statut:
+                    val_cell.fill = fill(COLORS["nonconf"])
+                    val_cell.font = Font(bold=True, color="991B1B", size=9)
+                elif val_statut:
+                    val_cell.fill = fill(COLORS["warn"])
+                    val_cell.font = Font(bold=True, color="92400E", size=9)
+
+                # Coloriser examens manquants (col 26)
+                if exams_manq:
+                    ws.cell(row=row_num, column=26).fill = fill("FEE2E2")
+                    ws.cell(row=row_num, column=26).font = Font(bold=True, color="991B1B", size=9)
+
+                row_num += 1
+
+    # ── Largeurs colonnes ──
+    col_widths = [
+        25, 18, 12,        # Identification
+        6, 6, 8, 15, 18,   # Profil
+        40, 40, 12, 30, 12, # AfriBot
+        45, 45, 35, 45, 35, # OMS
+        10, 20, 8, 25, 40, 12, 40, 25, 45, 35, # Test médecin
+        14, 14,             # Performance
+    ]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Figer les 2 premières lignes
+    ws.freeze_panes = "A3"
+
+    # Hauteur lignes en-têtes
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 28
+
+    wb.save("rapport.xlsx")
+    print("📊 Excel généré : rapport.xlsx")
+
