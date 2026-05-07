@@ -1308,9 +1308,16 @@ def generer_rapport():
                 if isinstance(snap,str): snap = _json.loads(snap)
             except: snap = {}
 
-        meds_oms_ref  = snap.get("medicaments_oms","")[:300] if snap else ""
-        exams_oms_ref = snap.get("examens_recommandes","")[:300] if snap else ""
-        sources_ref   = snap.get("sources_oms","")[:200] if snap else ""
+        # Fallback direct sur résultat E1 si snapshot vide
+        def _snap_get(k, k2=None):
+            v = snap.get(k,"") if snap else ""
+            if not v and e1_r:
+                v = e1_r.get(k,"") or (e1_r.get(k2,"") if k2 else "")
+            return str(v) if v else ""
+
+        meds_oms_ref  = _snap_get("medicaments_oms")[:300]
+        exams_oms_ref = _snap_get("examens_recommandes","examens_oms")[:300]
+        sources_ref   = _snap_get("sources_oms")[:200]
 
         # Bloc référence OMS (affiché en haut de la section médecin)
         ref_html = ""
@@ -1653,14 +1660,23 @@ def generer_excel():
             sympt = pat.get("symptomes_generes", "")[:300]
             diag_afribot = pat.get("afribot_diagnostic", "")
             recurrence   = "Oui" if pat.get("recurrence_detectee") else "Non"
-            note_hist    = snap.get("note_historique", "") or pat.get("note_historique","")
-            res_afribot  = pat.get("result", "")
-            meds_oms     = snap.get("medicaments_oms", "")[:300]
-            exams_oms    = snap.get("examens_recommandes", "")[:300]
-            ci_oms       = snap.get("contre_indications", "")[:200]
-            sources_oms  = snap.get("sources_oms", "")[:200]
-            reco_oms     = snap.get("recommandations_oms", "")[:200]
-            dur_afribot  = pat.get("duration_api_rag_ms", "")
+            note_hist   = snap.get("note_historique", "") or pat.get("note_historique","")
+            res_afribot = pat.get("result", "")
+
+            # OMS — fallback sur résultat E1 si snapshot vide
+            e1_res = next((r for r in rs if f"doctor_1ere_{label}" in r.get("test_type","")), None)
+            def _oms(k, k2=None):
+                v = snap.get(k,"") if snap else ""
+                if not v and e1_res:
+                    v = e1_res.get(k,"") or (e1_res.get(k2,"") if k2 else "")
+                return str(v)[:300] if v else ""
+
+            meds_oms    = _oms("medicaments_oms")
+            exams_oms   = _oms("examens_recommandes","examens_oms")
+            ci_oms      = _oms("contre_indications")[:200]
+            sources_oms = _oms("sources_oms")[:200]
+            reco_oms    = _oms("recommandations_oms")[:200]
+            dur_afribot = pat.get("duration_api_rag_ms", "")
 
             # Tests E1, E2, E3
             test_map = {
@@ -1685,10 +1701,12 @@ def generer_excel():
                 diag_med  = pj.get("diagnostic", "")
                 exams_str = e.get("examens_prescrits", "")
 
-                # Contenu ordonnance
+                # Contenu ordonnance — toujours rempli si prescription disponible
                 ordo_content = ""
-                if e.get("ordonnance_id"):
-                    ordo_content = f"Diag: {diag_med} | Méds: {meds_str} | Examens: {exams_str}"
+                if diag_med or meds_str:
+                    ordo_id = e.get("ordonnance_id","")
+                    ordo_tag = f" [ID:{ordo_id[:8]}]" if ordo_id else ""
+                    ordo_content = f"Diag: {diag_med} | Méds: {meds_str} | Examens: {exams_str}{ordo_tag}"
 
                 val_statut  = e.get("validation_ia_statut", "")
                 score       = e.get("duration_api_rag_ms", "")  # placeholder
