@@ -463,13 +463,16 @@ Retourne UNIQUEMENT ce JSON :
 {{"diagnostic":"{disease['nom']}", "examens_prescrits":["exam1","exam2"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
 
     elif mode == "complet":  # E3 — prescription parfaite
+        # Utiliser les médicaments OMS de la consultation (adaptés par AfriBot au profil réel)
+        # plutôt que disease['medicament_1ere'] qui est générique
+        meds_pour_ce_patient = consultation.get("medicaments_oms", "") or disease['medicament_1ere']
         instruction = f"""Tu es médecin expert. Génère une prescription PARFAITE pour {disease['nom']}.
-Médicament 1ère intention : {disease['medicament_1ere']}
-TOUS les examens obligatoires : {', '.join(disease['examens_obligatoires'])}
-La prescription doit être exactement conforme aux guidelines OMS.
+Le médecin a lu les recommandations AfriBot et prescrit en conséquence.
+Médicament OMS recommandé pour CE patient : {meds_pour_ce_patient[:400]}
+TOUS les examens obligatoires : {', '.join(disease['examens_obligatoires'])}{profil_ctx}
 
-Retourne UNIQUEMENT ce JSON :
-{{"diagnostic":"...", "examens_prescrits":["exam1","exam2","exam3"], "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
+Retourne UNIQUEMENT ce JSON valide :
+{{"diagnostic":"{disease['nom']}", "examens_prescrits":{json.dumps(disease['examens_obligatoires'])}, "medicaments":[{{"nom":"...","dose":"...","duree":"..."}}]}}"""
 
     else:  # incomplet — E4 — oubli examen
         examen_oublie = disease.get("examen_a_oublier", disease["examens_obligatoires"][-1])
