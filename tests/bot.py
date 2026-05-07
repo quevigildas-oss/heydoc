@@ -745,6 +745,14 @@ def tester_maladie(disease):
 
     result_A_save = "PASS" if status_save == 200 and uuid_A else "FAIL"
     result_A_resume = "PASS" if resume_A and all(resume_A.get(k) for k in ["diagnostic","medicaments_oms","examens","sources"]) else "FAIL"
+    if result_A_resume == "FAIL":
+        champs_vides = [k for k in ["diagnostic","medicaments_oms","examens","sources"] if not resume_A.get(k)] if resume_A else ["resume_None"]
+        print(f"    ⚠️ RESUME champs vides: {champs_vides}")
+        for k in champs_vides:
+            val = resume_A.get(k, "ABSENT") if resume_A else "resume=None"
+            print(f"    ⚠️ {k} = '{str(val)[:120]}'")
+        if resume_A:
+            print(f"    ⚠️ Toutes les clés présentes: {list(resume_A.keys())}")
     result_A_diag = "PASS" if diag_ok_A else "WARN"
 
     print(f"    AfriBot: {result_A_diag} | RESUME: {result_A_resume} | Save: {result_A_save} | {ms_rag}ms rag")
