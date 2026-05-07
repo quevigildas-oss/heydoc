@@ -253,7 +253,12 @@ Historique : {hist}
 
     time.sleep(1.5)  # Tier 1 rate limit — 50 req/min
     if status == 200:
-        return data.get("content", [{}])[0].get("text", "").strip(), ms
+        raw = data.get("content", [{}])[0].get("text", "").strip()
+        # Strip markdown — AfriBot attend message brut sans formatage
+        raw = raw.replace('**', '').replace('*', '').replace('__', '')
+        lines = [l for l in raw.splitlines() if not l.strip().startswith('#') and l.strip() != '---']
+        raw = ' '.join(' '.join(lines).split()).strip()
+        return raw, ms
     return f"J'ai de la fièvre et des symptômes depuis plusieurs jours. Je me sens mal.", ms
 
 # ══════════════════════════════════════════════════════════════
@@ -505,7 +510,7 @@ def sauvegarder_prescription(consultation_uuid, prescription):
     """PATCH consultation avec la prescription médecin"""
     body = {
         "diagnostic_medecin": prescription.get("diagnostic", ""),
-        "examens_prescrits": json.dumps(prescription.get("examens_prescrits", [])),
+        "examens": json.dumps(prescription.get("examens_prescrits", [])),
         "traitement_prescrit": json.dumps(prescription.get("medicaments", [])),
         "statut": "en_attente"
     }
@@ -592,7 +597,7 @@ def creer_ordonnance(consultation_uuid, prescription):
         "patient_id": PATIENT_ID,
         "medecin_id": MEDECIN_UUID,
         "medicaments": json.dumps(prescription.get("medicaments", [])),
-        "examens_prescrits": json.dumps(prescription.get("examens_prescrits", [])),
+        "examens": json.dumps(prescription.get("examens_prescrits", [])),
         "statut": "active",
         "is_test": True
     }
@@ -967,7 +972,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     time.sleep(1.0)  # attendre confirmation PATCH
     val_E1, ms_v1 = lancer_validation_ia(consultation, pres_E1)
     stat_E1   = val_E1.get("statut", "ERREUR")
-    result_E1 = "PASS" if stat_E1 == "CONFORME" else ("WARN" if stat_E1 == "PARTIELLEMENT_CONFORME" else "FAIL")
+    result_E1 = "PASS" if stat_E1 == "CONFORME" else ("WARN" if stat_E1 in ("PARTIELLEMENT_CONFORME","CONFORME_AVEC_REMARQUES") else "FAIL")
     print(f" {result_E1} ({stat_E1} score={val_E1.get('score',0)}%)")
 
     # Phase 3 — vérification Supabase
@@ -1032,7 +1037,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     val_E3, ms_v3 = lancer_validation_ia(consultation, pres_E3)
     stat_E3    = val_E3.get("statut", "ERREUR")
     score_E3   = val_E3.get("score", 0)
-    result_E3  = "PASS" if stat_E3 == "CONFORME" and score_E3 >= 80 else ("WARN" if stat_E3 == "PARTIELLEMENT_CONFORME" else "FAIL")
+    result_E3  = "PASS" if stat_E3 == "CONFORME" and score_E3 >= 80 else ("WARN" if stat_E3 in ("PARTIELLEMENT_CONFORME","CONFORME_AVEC_REMARQUES") else "FAIL")
 
     # Créer ordonnance E3
     st_ord, data_ord, ms_ord = creer_ordonnance(consultation_uuid, pres_E3)
