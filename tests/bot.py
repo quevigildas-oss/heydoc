@@ -289,7 +289,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
 
     total_ms  = 0
     phase4_ok = False
-    max_tours = 5
+    max_tours = 8
 
     for tour in range(max_tours):
         status, data, ms = http_post(f"{RAG_URL}/rag", {
@@ -580,8 +580,11 @@ def creer_ordonnance(consultation_uuid, prescription):
             "consultation_id": consultation_uuid,
             "patient_id": PATIENT_ID,
             "medecin_id": MEDECIN_UUID,
-            "medicaments": json.dumps(prescription.get("medicaments", [])),
-            "examens": json.dumps(prescription.get("examens_prescrits", [])),
+            "prescription_medecin": json.dumps({
+                "medicaments": prescription.get("medicaments", []),
+                "examens": prescription.get("examens_prescrits", []),
+                "diagnostic": prescription.get("diagnostic", "")
+            }),
             "statut": "active",
             "is_test": True
         }
@@ -596,8 +599,11 @@ def creer_ordonnance(consultation_uuid, prescription):
         "consultation_id": consultation_uuid,
         "patient_id": PATIENT_ID,
         "medecin_id": MEDECIN_UUID,
-        "medicaments": json.dumps(prescription.get("medicaments", [])),
-        "examens": json.dumps(prescription.get("examens_prescrits", [])),
+        "prescription_medecin": json.dumps({
+            "medicaments": prescription.get("medicaments", []),
+            "examens": prescription.get("examens_prescrits", []),
+            "diagnostic": prescription.get("diagnostic", "")
+        }),
         "statut": "active",
         "is_test": True
     }
