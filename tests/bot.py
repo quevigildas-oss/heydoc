@@ -443,10 +443,12 @@ def generer_prescription(disease, consultation, profil=None, mode="1ere", oublie
         profil_ctx = f"\nPROFIL PATIENT : {p}. Adapter posologie et choix medicament."
 
     if mode == "1ere":
-        med_target = disease["medicament_1ere"]
+        # Utiliser medicaments_oms de la consultation (adapté par AfriBot au profil réel)
+        meds_pour_ce_patient = consultation.get("medicaments_oms", "") or disease["medicament_1ere"]
         exam_target = disease["examens_obligatoires"]
         instruction = f"""Tu es médecin. Génère une prescription pour {disease['nom']}.
-Médicament 1ère intention OMS : {med_target}
+Le médecin a lu les recommandations AfriBot et prescrit la 1ère intention adaptée à ce patient.
+Médicament OMS recommandé pour CE patient : {meds_pour_ce_patient[:400]}
 Examens obligatoires : {', '.join(exam_target)}{profil_ctx}
 
 Retourne UNIQUEMENT ce JSON valide :
@@ -1306,28 +1308,77 @@ def generer_rapport():
         e3 = next((r for r in rs if f"doctor_exam_complet_{label}" in r.get("test_type","")), None)
         e4 = next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None)
 
-        html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'
+        # Récupérer les données de référence OMS depuis la réception médecin
+        rec = next((r for r in rs if f"doctor_reception_{label}" in r.get("test_type","")), None)
+        snap = {}
+        if rec and rec.get("consultation_snapshot"):
+            try:
+                s = rec["consultation_snapshot"]
+                snap = _json.loads(s) if isinstance(s,str) else s
+                if isinstance(snap,str): snap = _json.loads(snap)
+            except: snap = {}
+
+        meds_oms_ref  = snap.get("medicaments_oms","")[:300] if snap else ""
+        exams_oms_ref = snap.get("examens_recommandes","")[:300] if snap else ""
+        sources_ref   = snap.get("sources_oms","")[:200] if snap else ""
+
+        # Bloc référence OMS (affiché en haut de la section médecin)
+        ref_html = ""
+        if meds_oms_ref or exams_oms_ref:
+            ref_html += '<div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:8px;padding:10px;margin-bottom:10px">'
+            ref_html += '<div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px">📋 RÉFÉRENCE OMS (attendu)</div>'
+            if meds_oms_ref:
+                ref_html += f'<div style="font-size:11px;margin-bottom:4px"><span style="color:#1D4ED8;font-weight:600">💊 Médicaments OMS :</span> {meds_oms_ref}</div>'
+            if exams_oms_ref:
+                ref_html += f'<div style="font-size:11px;margin-bottom:4px"><span style="color:#065F46;font-weight:600">🔬 Examens OMS :</span> {exams_oms_ref}</div>'
+            if sources_ref:
+                ref_html += f'<div style="font-size:11px;color:#6B7280"><span style="font-weight:600">📚 Sources :</span> {sources_ref}</div>'
+            ref_html += '</div>'
+
+        html = f'<div style="margin-top:8px">{ref_html}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
         for e, etitle, ecolor in [(e1,"E1 — 1ère intention","#EFF6FF"), (e2,"E2 — 2ème intention","#F5F3FF"),
                                    (e3,"E3 — Prescription parfaite","#F0FDF4"), (e4,"E4 — Examen oublié","#FFF7ED")]:
             if not e:
                 html += f'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:10px"><b style="font-size:12px">{etitle}</b><div style="color:#9CA3AF;font-size:11px">Non exécuté</div></div>'
                 continue
-            stat = e.get("validation_ia_statut","")
-            score = ""
-            pj = e.get("prescription_json","")
-            ordo = e.get("ordonnance_id","")
-            expl = e.get("explication_ko","") or e.get("examens_manquants","")
+            stat  = e.get("validation_ia_statut","")
+            score = f" {e.get('ecart_posologie','')[:60]}" if e.get("ecart_posologie") else ""
+            pj    = e.get("prescription_json","")
+            ordo  = e.get("ordonnance_id","")
+            expl  = e.get("explication_ko","") or ""
+            exams_manq = e.get("examens_manquants","")
+            posol_ok = e.get("posologie_conforme")
 
-            stat_color = "#166534" if stat == "CONFORME" else "#991B1B" if stat == "NON_CONFORME" else "#92400E"
+            stat_color = "#166534" if stat=="CONFORME" else "#991B1B" if stat=="NON_CONFORME" else "#92400E"
             html += f'<div style="background:{ecolor};border:1px solid #E5E7EB;border-radius:8px;padding:10px">'
-            html += f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+            html += f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
             html += f'<b style="font-size:12px">{etitle}</b>{badge(e.get("result",""))}</div>'
-            html += f'<div style="font-size:11px;color:{stat_color};font-weight:600;margin-bottom:6px">Validation IA: {stat} {score}</div>'
+            html += f'<div style="font-size:11px;color:{stat_color};font-weight:600;margin-bottom:6px">Validation IA : {stat}</div>'
+
+            # Score conformité
+            sc = e.get("duration_api_rag_ms",0)  # on n'a pas score direct — utiliser posologie
+            if posol_ok is True:
+                html += '<div style="font-size:10px;color:#166534;margin-bottom:4px">✅ Posologie correcte</div>'
+            elif posol_ok is False:
+                html += '<div style="font-size:10px;color:#991B1B;margin-bottom:4px">❌ Posologie incorrecte</div>'
+
+            # Prescription prescrite
             if pj: html += parse_prescription(pj)
-            if ordo: html += f'<div style="font-size:11px;color:#166534;margin-top:4px">📄 Ordonnance: {ordo[:20]}...</div>'
-            if expl: html += f'<div style="font-size:11px;color:#991B1B;margin-top:4px;background:#FEE2E2;padding:4px;border-radius:4px">⚠️ {expl[:200]}</div>'
+
+            # Examens manquants
+            if exams_manq:
+                html += f'<div style="font-size:11px;color:#991B1B;margin-top:6px;background:#FEE2E2;padding:4px;border-radius:4px">⚠️ Manquants : {exams_manq[:150]}</div>'
+
+            # Explication KO
+            if expl and e.get("result") in ("FAIL","WARN"):
+                html += f'<div style="font-size:10px;color:#92400E;margin-top:4px;background:#FEF3C7;padding:4px;border-radius:4px">{expl[:200]}</div>'
+
+            # Ordonnance
+            if ordo:
+                html += f'<div style="font-size:11px;color:#166534;margin-top:6px;font-weight:600">📄 Ordonnance conservée : {ordo[:20]}...</div>'
+
             html += '</div>'
-        html += '</div>'
+        html += '</div></div>'
         return html
 
     # Construire le HTML par maladie
