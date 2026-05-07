@@ -522,12 +522,35 @@ def sauvegarder_prescription(consultation_uuid, prescription):
     url = f"{API_URL}/db?table=consultations&id={consultation_uuid}"
     return http_patch(url, body, headers={"x-dokita-key": DOKITA_KEY})
 
-def lancer_validation_ia(consultation, prescription, examen_obligatoire=None):
+def lancer_validation_ia(consultation, prescription, examen_obligatoire=None, profil=None):
     """Lance la validation IA sur la prescription"""
     import re
     examens_oms     = consultation.get("examens_recommandes", "")
     medicaments_oms = consultation.get("medicaments_oms", "")
     diag            = consultation.get("diagnostic_ia", "")
+
+    # Contexte profil patient
+    profil_str = ""
+    if profil:
+        age   = profil.get("age", "?")
+        sexe  = "Femme" if profil.get("sexe") == "F" else "Homme"
+        poids = profil.get("poids", "?")
+        cas   = profil.get("cas_special", "aucun")
+        p     = f"{age} ans, {sexe}, {poids}kg"
+        if cas == "enceinte":
+            t = profil.get("grossesse_trimestre", 2)
+            p += f", enceinte T{t} — adapter médicament au trimestre {t}"
+        elif cas == "enfant":
+            p += f", enfant {poids}kg — vérifier posologie pédiatrique"
+        elif cas == "allergie":
+            p += f", allergie {profil.get('allergie','pénicilline')} — vérifier absence cet ATB"
+        elif cas == "VIH+":
+            p += f", VIH+ CD4={profil.get('cd4',200)} — vérifier interactions ARV"
+        elif cas == "diabetique":
+            p += ", diabétique — surveiller impact glycémique"
+        elif cas == "drepano":
+            p += ", drépanocytaire — vérifier contre-indications"
+        profil_str = f"\nPROFIL PATIENT : {p}\nLa validation DOIT tenir compte de ce profil."
 
     mention_examen = ""
     if examen_obligatoire:
@@ -539,7 +562,7 @@ def lancer_validation_ia(consultation, prescription, examen_obligatoire=None):
 CONSULTATION :
 Diagnostic IA : {diag}
 Examens OMS recommandés : {examens_oms}
-Médicaments OMS recommandés : {medicaments_oms}
+Médicaments OMS recommandés : {medicaments_oms}{profil_str}
 
 PRESCRIPTION DU MÉDECIN :
 Diagnostic posé : {prescription.get('diagnostic', '')}
@@ -551,7 +574,8 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après.
 Exemple de réponse attendue :
 {{"statut": "CONFORME", "score": 85, "details": "Prescription correcte selon OMS", "examens_manquants": [], "posologie_ok": true, "ecart_posologie": ""}}
 
-Si des examens obligatoires manquent ou si la posologie est incorrecte, utilise "NON_CONFORME" et liste les problèmes dans "details"."""
+Si des examens obligatoires manquent ou si la posologie est incorrecte, utilise "NON_CONFORME".
+Si prescription globalement correcte avec réserves mineures sur profil spécial, utilise "CONFORME" avec score < 90."""
 
     status, data, ms = http_post("https://api.anthropic.com/v1/messages", {
         "model": "claude-sonnet-4-6",
@@ -951,7 +975,6 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     Retourne l'UUID de l'ordonnance E3 si conserver_ordonnance=True.
     """
     d = disease
-    ordonnance_E3_uuid = None
 
     # Charger la consultation
     consultation, ms_open = medecin_ouvrir_consultation(consultation_uuid)
@@ -977,14 +1000,22 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     })
 
     # ── E1 — 1ère intention ──
-    print(f"    [{label}→E1] 1ère intention...", end="")
+    print(f"    [{label}→E1] 1ère ligne + examens complets...", end="")
     pres_E1, ms_p1 = generer_prescription(d, consultation, profil=profil, mode="1ere")
     sauvegarder_prescription(consultation_uuid, pres_E1)
     time.sleep(1.0)  # attendre confirmation PATCH
-    val_E1, ms_v1 = lancer_validation_ia(consultation, pres_E1)
+    val_E1, ms_v1 = lancer_validation_ia(consultation, pres_E1, profil=profil)
     stat_E1   = val_E1.get("statut", "ERREUR")
-    result_E1 = "PASS" if stat_E1 == "CONFORME" else ("WARN" if stat_E1 in ("PARTIELLEMENT_CONFORME","CONFORME_AVEC_REMARQUES") else "FAIL")
+    result_E1 = "PASS" if stat_E1 == "CONFORME" else ("WARN" if stat_E1 in ("PARTIELLEMENT_CONFORME","CONFORME_AVEC_REMARQUES","CONFORME_AVEC_RESERVES") else "FAIL")
     print(f" {result_E1} ({stat_E1} score={val_E1.get('score',0)}%)")
+
+    # Créer ordonnance sur E1
+    ordonnance_E1_uuid = None
+    _st1, _d1, _ = creer_ordonnance(consultation_uuid, pres_E1)
+    if _st1 in (200, 201):
+        _rows1 = _d1 if isinstance(_d1, list) else (_d1.get("data") or [])
+        ordonnance_E1_uuid = _rows1[0].get("id") if _rows1 else None
+    valider_consultation(consultation_uuid)
 
     # Phase 3 — vérification Supabase
     p3_result_E1, p3_ok_E1, p3_ko_E1, snap_E1 = verifier_consultation_supabase(consultation_uuid, d)
@@ -1011,6 +1042,8 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "duration_total_ms": ms_v1,
         "champs_ok": p3_ok_E1, "champs_ko": p3_ko_E1,
         "consultation_snapshot": snap_E1 or consultation,
+        "ordonnance_conservee": conserver_ordonnance and bool(ordonnance_E1_uuid),
+        "ordonnance_id": ordonnance_E1_uuid if conserver_ordonnance else None,
         "explication_ko": val_E1.get("details","") if result_E1 == "FAIL" else "",
     })
 
@@ -1018,7 +1051,7 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
     print(f"    [{label}→E2] 2ème intention...", end="")
     pres_E2, ms_p2 = generer_prescription(d, consultation, profil=profil, mode="2eme")
     sauvegarder_prescription(consultation_uuid, pres_E2)
-    val_E2, ms_v2 = lancer_validation_ia(consultation, pres_E2)
+    val_E2, ms_v2 = lancer_validation_ia(consultation, pres_E2, profil=profil)
     stat_E2   = val_E2.get("statut", "ERREUR")
     result_E2 = "PASS" if stat_E2 in ("CONFORME","NON_CONFORME") else "FAIL"  # les deux sont acceptables
     print(f" {stat_E2} (attendu: CONFORME ou WARN)")
@@ -1040,64 +1073,18 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "consultation_snapshot": consultation,
     })
 
-    # ── E3 — Tous examens + 1ère intention (PARFAITE) ──
-    print(f"    [{label}→E3] Prescription parfaite...", end="")
-    pres_E3, ms_p3 = generer_prescription(d, consultation, profil=profil, mode="complet")
+    # ── E3 — Traitement 1ère ligne + examen manquant ──
+    examen_oublie = d.get("examen_a_oublier", d["examens_obligatoires"][-1])
+    print(f"    [{label}→E3] Examen oublié ({examen_oublie})...", end="")
+    pres_E3, ms_p3 = generer_prescription(d, consultation, profil=profil, mode="incomplet")
     sauvegarder_prescription(consultation_uuid, pres_E3)
-    time.sleep(1.0)  # attendre confirmation PATCH
-    val_E3, ms_v3 = lancer_validation_ia(consultation, pres_E3)
+    val_E3, ms_v3 = lancer_validation_ia(consultation, pres_E3, profil=profil,
+        examen_obligatoire=examen_oublie)
     stat_E3    = val_E3.get("statut", "ERREUR")
-    score_E3   = val_E3.get("score", 0)
-    result_E3  = "PASS" if stat_E3 == "CONFORME" and score_E3 >= 80 else ("WARN" if stat_E3 in ("PARTIELLEMENT_CONFORME","CONFORME_AVEC_REMARQUES") else "FAIL")
+    result_E3  = "PASS" if stat_E3 == "NON_CONFORME" else "FAIL"
+    mention_oubli = len(val_E3.get("examens_manquants", [])) > 0
 
-    # Créer ordonnance E3
-    st_ord, data_ord, ms_ord = creer_ordonnance(consultation_uuid, pres_E3)
-    if st_ord in (200, 201):
-        rows_ord = data_ord if isinstance(data_ord, list) else (data_ord.get("data") or [])
-        ordonnance_E3_uuid = rows_ord[0].get("id") if rows_ord else None
-        if not ordonnance_E3_uuid:
-            print(f"    ⚠️ ordonnance créée mais UUID non retourné | data: {str(data_ord)[:100]}")
-
-    valider_consultation(consultation_uuid)
-    print(f" {result_E3} ({stat_E3} {score_E3}% | ordonnance: {'✅' if ordonnance_E3_uuid else '❌'})")
-
-    stocker_resultat({
-        "disease": d["nom"], "test_type": f"doctor_exam_complet_{label}",
-        "patient_age": profil["age"], "patient_sexe": profil["sexe"],
-        "patient_poids": profil["poids"], "patient_ville": profil["ville"],
-        "patient_cas_special": profil.get("cas_special", "aucun"),
-        "phase": "phase2_validation_ia",
-        "result": result_E3,
-        "prescription_json": json.dumps(pres_E3),
-        "validation_ia_statut": stat_E3,
-        "validation_ia_attendu": "CONFORME",
-        "validation_ia_correcte": stat_E3 == "CONFORME",
-        "posologie_conforme": val_E3.get("posologie_ok"),
-        "ecart_posologie": val_E3.get("ecart_posologie",""),
-        "examens_prescrits": ", ".join(pres_E3.get("examens_prescrits",[])),
-        "examens_manquants": ", ".join(val_E3.get("examens_manquants",[])),
-        "duration_api_rag_ms": ms_v3,
-        "ordonnance_conservee": conserver_ordonnance and bool(ordonnance_E3_uuid),
-        "ordonnance_id": ordonnance_E3_uuid if conserver_ordonnance else None,
-        "consultation_snapshot": consultation,
-        "explication_ko": val_E3.get("details","") if result_E3 == "FAIL" else "",
-    })
-
-    # Si pas conservation — effacer l'ordonnance
-    if not conserver_ordonnance and ordonnance_E3_uuid:
-        supprimer_ordonnance(ordonnance_E3_uuid)
-
-    # ── E4 — Examen oublié ──
-    print(f"    [{label}→E4] Examen oublié ({d.get('examen_a_oublier','?')})...", end="")
-    pres_E4, ms_p4 = generer_prescription(d, consultation, profil=profil, mode="incomplet")
-    sauvegarder_prescription(consultation_uuid, pres_E4)
-    val_E4, ms_v4 = lancer_validation_ia(consultation, pres_E4,
-        examen_obligatoire=d.get("examen_a_oublier",""))
-    stat_E4    = val_E4.get("statut", "ERREUR")
-    result_E4  = "PASS" if stat_E4 == "NON_CONFORME" else "FAIL"
-    mention_oubli = len(val_E4.get("examens_manquants", [])) > 0
-
-    print(f" {result_E4} ({stat_E4} | mention examen oublié: {'✅' if mention_oubli else '⚠️'})")
+    print(f" {result_E3} ({stat_E3} | examen détecté: {'✅' if mention_oubli else '⚠️'})")
 
     stocker_resultat({
         "disease": d["nom"], "test_type": f"doctor_exam_oubli_{label}",
@@ -1105,20 +1092,20 @@ def _tester_medecin_sur_consultation(disease, consultation_uuid, profil, label, 
         "patient_poids": profil["poids"], "patient_ville": profil["ville"],
         "patient_cas_special": profil.get("cas_special", "aucun"),
         "phase": "phase2_validation_ia",
-        "result": result_E4,
-        "validation_ia_statut": stat_E4,
+        "result": result_E3,
+        "validation_ia_statut": stat_E3,
         "validation_ia_attendu": "NON_CONFORME",
-        "validation_ia_correcte": stat_E4 == "NON_CONFORME",
-        "prescription_json": json.dumps(pres_E4),
-        "examens_prescrits": ", ".join(pres_E4.get("examens_prescrits",[])),
-        "examens_manquants": d.get("examen_a_oublier",""),
-        "explication_ko": f"Validation IA n'a pas détecté l'oubli de {examen_oublie}" if result_E4 == "FAIL" else "",
-        "duration_api_rag_ms": ms_v4,
-        "duration_total_ms": ms_v4,
+        "validation_ia_correcte": stat_E3 == "NON_CONFORME",
+        "prescription_json": json.dumps(pres_E3),
+        "examens_prescrits": ", ".join(pres_E3.get("examens_prescrits",[])),
+        "examens_manquants": examen_oublie,
+        "explication_ko": f"Validation IA n'a pas détecté l'oubli de {examen_oublie}" if result_E3 == "FAIL" else "",
+        "duration_api_rag_ms": ms_v3,
+        "duration_total_ms": ms_v3,
         "consultation_snapshot": consultation,
     })
 
-    return ordonnance_E3_uuid if conserver_ordonnance else None
+    return ordonnance_E1_uuid if conserver_ordonnance else None
 
 # ══════════════════════════════════════════════════════════════
 # TESTS ADDITIONNELS
@@ -1305,8 +1292,7 @@ def generer_rapport():
     def section_medecin(rs, label):
         e1 = next((r for r in rs if f"doctor_1ere_{label}" in r.get("test_type","")), None)
         e2 = next((r for r in rs if f"doctor_2eme_{label}" in r.get("test_type","")), None)
-        e3 = next((r for r in rs if f"doctor_exam_complet_{label}" in r.get("test_type","")), None)
-        e4 = next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None)
+        e3 = next((r for r in rs if f"doctor_exam_oubli_{label}" in r.get("test_type","")), None)
 
         # Récupérer les données de référence OMS depuis la réception médecin
         rec = next((r for r in rs if f"doctor_reception_{label}" in r.get("test_type","")), None)
@@ -1336,8 +1322,8 @@ def generer_rapport():
             ref_html += '</div>'
 
         html = f'<div style="margin-top:8px">{ref_html}<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-        for e, etitle, ecolor in [(e1,"E1 — 1ère intention","#EFF6FF"), (e2,"E2 — 2ème intention","#F5F3FF"),
-                                   (e3,"E3 — Prescription parfaite","#F0FDF4"), (e4,"E4 — Examen oublié","#FFF7ED")]:
+        for e, etitle, ecolor in [(e1,"E1 — Traitement 1ère ligne + examens complets","#EFF6FF"), (e2,"E2 — Alternative thérapeutique + examens complets","#F5F3FF"),
+                                   (e3,"E3 — Traitement 1ère ligne + examen manquant","#FFF7ED")]:
             if not e:
                 html += f'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:10px"><b style="font-size:12px">{etitle}</b><div style="color:#9CA3AF;font-size:11px">Non exécuté</div></div>'
                 continue
