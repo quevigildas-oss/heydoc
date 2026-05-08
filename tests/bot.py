@@ -31,11 +31,17 @@ MEDECIN_CODE   = os.environ.get("TEST_MEDECIN_CODE", "0001")
 DISEASE_FILTER = None
 QUICK_MODE     = "--quick" in sys.argv
 NO_CLEANUP     = "--no-cleanup" in sys.argv
+START_FROM     = None
+RESUME_RUN_ID  = None
 for arg in sys.argv:
     if arg.startswith("--disease="):
         DISEASE_FILTER = arg.split("=")[1]
+    if arg.startswith("--start="):
+        START_FROM = arg.split("=")[1]
+    if arg.startswith("--resume="):
+        RESUME_RUN_ID = arg.split("=")[1]
 
-RUN_ID   = str(uuid.uuid4())
+RUN_ID   = RESUME_RUN_ID if RESUME_RUN_ID else str(uuid.uuid4())
 RUN_DATE = datetime.utcnow().isoformat()
 RESULTS  = []  # stockage en mémoire
 
@@ -251,7 +257,7 @@ Historique : {hist}
         "anthropic-version": "2023-06-01"
     })
 
-    time.sleep(1.5)  # Tier 1 rate limit — 50 req/min
+    time.sleep(1.0)  # Tier 1 rate limit — 50 req/min
     if status == 200:
         raw = data.get("content", [{}])[0].get("text", "").strip()
         # Strip markdown — AfriBot attend message brut sans formatage
@@ -298,7 +304,7 @@ def simuler_afribot(symptomes, profil, disease, historique_msgs=None):
         }, headers={"x-dokita-key": DOKITA_KEY}, timeout=45)
 
         total_ms += ms
-        time.sleep(2)  # Tier 1 rate limit
+        time.sleep(1.2)  # Tier 1 rate limit
 
         if status != 200:
             return messages, None, total_ms, False, None
@@ -495,7 +501,7 @@ Retourne UNIQUEMENT ce JSON :
         "anthropic-version": "2023-06-01"
     })
 
-    time.sleep(1.5)  # Tier 1 rate limit
+    time.sleep(1.0)  # Tier 1 rate limit
     if status == 200:
         raw = data.get("content", [{}])[0].get("text", "").strip()
         try:
@@ -586,7 +592,7 @@ Si prescription globalement correcte avec réserves mineures sur profil spécial
         "anthropic-version": "2023-06-01"
     })
 
-    time.sleep(1.5)  # Tier 1 rate limit
+    time.sleep(1.0)  # Tier 1 rate limit
     if status == 200:
         raw = (data.get("content", [{}])[0].get("text", "")).strip()
         try:
@@ -1216,15 +1222,35 @@ def generer_rapport():
     """Génère un rapport HTML riche avec détail par phase"""
     import json as _json
 
-    total   = len(RESULTS)
-    nb_pass = sum(1 for r in RESULTS if r.get("result") == "PASS")
-    nb_fail = sum(1 for r in RESULTS if r.get("result") == "FAIL")
-    nb_warn = sum(1 for r in RESULTS if r.get("result") == "WARN")
+    # Charger résultats Supabase pour ce run_id (inclut les runs partiels précédents)
+    all_results = list(RESULTS)  # résultats du run actuel
+    if SUPABASE_URL and SUPABASE_KEY and RESUME_RUN_ID:
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/test_results_archive?run_id=eq.{RUN_ID}&order=created_at.asc&limit=5000"
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+            st, sb_data, _ = http_get(url, headers)
+            if st == 200 and isinstance(sb_data, list):
+                # Dédupliquer — garder Supabase pour les résultats déjà là
+                existing_ids = {r.get("disease","") + r.get("test_type","") for r in all_results}
+                for r in sb_data:
+                    key = r.get("disease","") + r.get("test_type","")
+                    if key not in existing_ids:
+                        all_results.append(r)
+                print(f"  Rapport complet: {len(sb_data)} résultats Supabase + {len(RESULTS)} nouveaux")
+        except Exception as e:
+            print(f"  ⚠️ Chargement Supabase pour rapport: {e}")
+
+    # Utiliser all_results pour le rapport
+    RESULTS_RAPPORT = all_results
+    total   = len(RESULTS_RAPPORT)
+    nb_pass = sum(1 for r in RESULTS_RAPPORT if r.get("result") == "PASS")
+    nb_fail = sum(1 for r in RESULTS_RAPPORT if r.get("result") == "FAIL")
+    nb_warn = sum(1 for r in RESULTS_RAPPORT if r.get("result") == "WARN")
     pct     = int(nb_pass/total*100) if total > 0 else 0
 
     # Grouper par maladie
     by_disease = {}
-    for r in RESULTS:
+    for r in RESULTS_RAPPORT:
         d = r.get("disease","?")
         by_disease.setdefault(d, []).append(r)
 
@@ -1612,7 +1638,8 @@ def generer_excel():
     # ── Données ──
     # Regrouper par maladie
     by_disease = {}
-    for r in RESULTS:
+    all_r = list(RESULTS)
+    for r in all_r:
         d = r.get("disease", "?")
         by_disease.setdefault(d, []).append(r)
 
@@ -1801,9 +1828,13 @@ if __name__ == "__main__":
     if DISEASE_FILTER:
         diseases_to_test = [d for d in DISEASES if d["id"] == DISEASE_FILTER]
     elif QUICK_MODE:
-        # Mode rapide : 5 maladies représentatives
         quick_ids = {"M1", "M4", "M9", "M34", "M42"}
         diseases_to_test = [d for d in DISEASES if d["id"] in quick_ids]
+    elif START_FROM:
+        # Mode reprise — commencer à partir d'une maladie donnée
+        start_idx = next((i for i, d in enumerate(DISEASES) if d["id"] == START_FROM), 0)
+        diseases_to_test = DISEASES[start_idx:]
+        print(f"Reprise depuis {START_FROM} ({len(diseases_to_test)} maladies restantes)")
 
     print(f"Maladies à tester : {len(diseases_to_test)}")
     ordonnances_conservees = {}
