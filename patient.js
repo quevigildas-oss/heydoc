@@ -1,4 +1,4 @@
-// api/patient.js
+// api/patient.js 
 // Endpoints patient — protégés JWT
 // VERSION : V2.0
 // DATE    : 2026-05-12
