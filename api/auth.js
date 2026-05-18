@@ -1,4 +1,6 @@
 // api/auth.js
+// VERSION : V1.1 — 2026-05-17
+// FIX     : patient_id (PAT-...) ajouté dans le payload JWT
 // Authentification patient + médecin → retourne JWT
 
 const supabase = require('./_lib/supabase');
@@ -40,6 +42,7 @@ module.exports = async function handler(req, res) {
 
     const token = signerToken({
       id: patient.id,
+      patient_id: patient.patient_id,  // format PAT-XX-... pour filtres DB
       email: patient.email,
       role: 'patient'
     });
