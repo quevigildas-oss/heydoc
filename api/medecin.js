@@ -1,6 +1,7 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
-// VERSION : V2.0
+// VERSION : V2.1
+// FIX     : catalogue select — suppression colonnes inexistantes (description, obligatoire_defaut)
 // DATE    : 2026-05-12
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (consultations, dossier, profil, agenda,
@@ -112,7 +113,7 @@ module.exports = async function handler(req, res) {
     // GET /api/medecin?action=catalogue
     if (req.method === 'GET' && action === 'catalogue') {
       const q = req.query.q || '';
-      let query = supabase.from('catalogue_examens').select('nom,categorie,description,obligatoire_defaut');
+      let query = supabase.from('catalogue_examens').select('nom,categorie');
       if (q.length >= 2) query = query.ilike('nom', `%${q}%`);
       const { data, error } = await query.order('nom', { ascending: true }).limit(202);
       if (error) return res.status(500).json({ error: error.message });
