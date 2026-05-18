@@ -2,9 +2,7 @@
 <!-- ============================================
      DOKITA — App Patient
      VERSION : V4.41
-//   V4.41 — 2026-05-17 : Phase 2 — Migration JWT frontend complète (0 appels DB_URL directs)
-//            Bug fix: traite check + valide_override, diagnostic_medecin prioritaire
-     DATE    : 2026-05-17 00:00:00
+     DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1303,7 +1301,7 @@ async function creerCompte(){
   if(code!==code2){err.textContent='Les codes ne correspondent pas';err.classList.add('on');return;}
   err.textContent='Vérification en cours...';err.classList.add('on');
   try{
-    var r=await fetch(API_URL+'/auth?action=check_email&email='+encodeURIComponent(email));
+    var r={ok:true};var rData=[];try{var rChk=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_email',email:email})});rData=(await rChk.json()).exists?[{}]:[];}catch(e){}
     var check=await r.json();
     var existing=Array.isArray(check)?check:(check.data||[]);
     if(existing.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
@@ -1311,7 +1309,7 @@ async function creerCompte(){
     // Vérifier le code parrain si renseigné
     var parrainId=null;
     if(codeParrain){
-      var rParrain=await fetch(API_URL+'/patient?action=parrainage_check&code='+encodeURIComponent(codeParrain));
+      var rParrain={ok:true};var dParrain={data:[]};try{var rPar=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_parrain',code:codeParrain})});var pData=await rPar.json();dParrain={data:pData.valid?[{id:pData.parrain_id}]:[]};}catch(e){}
       var dParrain=await rParrain.json();
       var rowsParrain=Array.isArray(dParrain)?dParrain:(dParrain.data||[]);
       if(rowsParrain.length){
@@ -1389,9 +1387,9 @@ function genConsultId(patientId){
 // ══════════════════════════════
 // CONFIG
 // ══════════════════════════════
-var DOKITA_KEY='dk-2026-prod-x9f7m'; // Legacy — conservé pour db.js proxy (pharmacie/admin) uniquement
+var DOKITA_KEY='dk-2026-prod-x9f7m';
+var API_URL='https://heydoc-mu.vercel.app/api';
 var DOKITA_ENV='dev'; // Passer à 'prod' avant go-live via Vercel env var ou ici
-var API_URL      ='https://heydoc-mu.vercel.app/api';
 var FEATURE_DISTANCE=false; // Désactivé phase 1 — réactiver pour Dokita Hubs zones rurales
 var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
 var SAVE_URL     ='https://heydoc-mu.vercel.app/api/save';
@@ -1470,10 +1468,7 @@ async function rechargerSessionNotion(){
   if(!SESSION_EMAIL)return false;
   try{
     // Chercher profil principal par email
-    var r=await fetch(API_URL+'/patient?action=profils_famille',{headers:{Authorization:'Bearer '+chargerJWT()}});
-    // LEGACY_REPLACED_rechargerSession — r=await fetch(DB_URL+'?table=patients&filter=email=eq.'+encodeURIComponent(SESSION_EMAIL)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=profil');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){
@@ -1529,9 +1524,6 @@ async function goMedecin(){
   loadGeo('medecin');
   try{
     var r=await fetch(API_URL+'/patient?action=medecins');
-// MIGRATED_goMedecin
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -1877,7 +1869,9 @@ function delP(i){
     dateSuppression.setFullYear(dateSuppression.getFullYear()+10);
     var dateStr=dateSuppression.toISOString().slice(0,10);
     if(p.supabaseId){
-      fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({date_suppression:dateStr})}).then(function(){dbg('Date suppression programmée : '+dateStr);}).catch(function(e){dbgWarn('date suppression PATCH: '+e.message);});
+      fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({date_suppression:dateStr})}).then(function(){
+        dbg('Date suppression programmée : '+dateStr);
+      }).catch(function(e){dbgWarn('date suppression PATCH: '+e.message);});
     }
     // Supprimer localStorage local
     try{
@@ -1991,7 +1985,11 @@ function saveProfil(){
         parrain_id:SESSION_PARRAIN_ID||null,
         credit_reduction:SESSION_PARRAIN_ID?10:0  // -10% sur 1ère consultation si parrain
       };
-      fetchAPI(API_URL+'/auth?action=inscription',{method:'POST',body:JSON.stringify(body)}).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+      fetchAPI(API_URL+'/patient?action=inscription',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+        body:JSON.stringify(body)
+      }).then(function(r){return r.json();}).then(function(data){
         var row=Array.isArray(data)?data[0]:data;
         if(row&&row.id){
           PROFILS[0].supabaseId=row.id;
@@ -2051,10 +2049,7 @@ async function lancerConsult(){
   var p=PROFILS[SEL];
   if(p&&p.patientId){
     try{
-      var rEx=await fetchAPI(API_URL+'/patient?action=examens');
-    // MIGRATED_lancerConsult_examens // var rEx=await fetchAPI(API_URL+'/patient?action=examens&statut=prescrit&obligatoire=true') // MIGRATED_badgeAnalyses // fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=statut=eq.resultat_recu&order=created_at.desc&limit=10',{
-        headers:{'x-dokita-key':DOKITA_KEY}
-      });
+      var rEx=await fetchAPI(API_URL+'/patient?action=examens&statut=resultat_recu');
       var dEx=await rEx.json();
       p._examensCache=Array.isArray(dEx)?dEx:(dEx.data||[]);
     }catch(e){dbg('Examens preload err: '+e.message);}
@@ -2228,9 +2223,6 @@ async function startChat(){
     try{
       var today=new Date();today.setHours(0,0,0,0);
       var ordR=await fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient');
-    // MIGRATED_startChat_ordonnances // var ordR=await fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(p.patientId||'')+'&order=created_at.desc&limit=1',{
-        headers:{'x-dokita-key':DOKITA_KEY}
-      });
       var ordData=await ordR.json();
       var ordRows=Array.isArray(ordData)?ordData:(ordData.data||[]);
       if(ordRows.length){
@@ -2410,9 +2402,6 @@ async function loadMeds(){
   if(MEDS_LOADED&&NOTION_MEDS.length){renderMeds(NOTION_MEDS);return;}
   try{
     var r=await fetch(API_URL+'/patient?action=medecins');
-// MIGRATED_goMedecin
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -2579,7 +2568,6 @@ async function envoyerDossier(email,nomMed,medId){
     dbgWarn('NOTION_MEDS vide au moment envoi — rechargement...');
     try{
       var rmr=await fetch(API_URL+'/patient?action=medecins');
-    // MIGRATED_envoyerDossier_medecins // var rmr=await fetch(DB_URL+'?table=medecins&filter=statut=eq.Actif&limit=20',{headers:{'x-dokita-key':DOKITA_KEY}});
       var rmd=await rmr.json();
       var rmrows=Array.isArray(rmd)?rmd:(rmd.data||[]);
       NOTION_MEDS=rmrows.map(function(med){
@@ -2727,18 +2715,12 @@ async function envoyerDossier(email,nomMed,medId){
       try{
         // Vérifier si c'est bien la 1ère consultation (count = 1 après cette sauvegarde)
         var rCount=await fetchAPI(API_URL+'/patient?action=consultations&limit=2');
-    // MIGRATED_envoyerDossier_count // var rCount=await fetch(DB_URL+'?table=consultations&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId)+'&select=id&limit=2',{
-          headers:{'x-dokita-key':DOKITA_KEY}
-        });
         var dCount=await rCount.json();
         var nbConsult=(Array.isArray(dCount)?dCount:(dCount.data||[])).length;
 
         if(nbConsult<=1){
           // 1ère consultation → créditer le parrain de 10%
           var rParrain=await fetchAPI(API_URL+'/patient?action=parrainage');
-    // MIGRATED_parrain_info // var rParrain=await fetch(DB_URL+'?table=patients&filter=id=eq.'+encodeURIComponent(p.parrain_id)+'&select=credit_reduction&limit=1',{
-            headers:{'x-dokita-key':DOKITA_KEY}
-          });
           var dParrain=await rParrain.json();
           var rowsParrain=Array.isArray(dParrain)?dParrain:(dParrain.data||[]);
           var creditActuel=(rowsParrain[0]&&rowsParrain[0].credit_reduction)||0;
@@ -2793,20 +2775,7 @@ async function uploadOrdonnanceOnboarding(input){
       reader.onerror=rej;
       reader.readAsDataURL(file);
     });
-    await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({
-          patient_id:p.patientId,
-          nom:'Ordonnance en cours — à valider',
-          type_document:'ordonnance',
-          contenu_base64:base64,
-          mime_type:file.type,
-          taille_octets:file.size,
-          visible_medecin:true,
-          source:'patient',
-          statut:'actif',
-          note:'Uploadée lors de la première consultation — en attente de validation médecin'
-        }
-      })
-    });
+    await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({patient_id:p.patientId,nom:'Ordonnance en cours — à valider',type_document:'ordonnance',contenu_base64:base64,mime_type:file.type,taille_octets:file.size,visible_medecin:true,source:'patient',statut:'actif',note:'Uploadée lors de la première consultation — en attente de validation médecin'})});
     if(modal)modal.remove();
     toast('✅ Ordonnance envoyée — votre médecin la consultera');
   }catch(e){toast('❌ '+e.message);}
@@ -2901,9 +2870,9 @@ async function chargerDossierDokita(){
   var examensSupabase=[], ordos=[], docs=[];
   try{
     var [rEx,rOrd,rDocs]=await Promise.all([
-      fetchAPI(API_URL+'/patient?action=examens') // MIGRATED // fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=50',{headers:{'x-dokita-key':DOKITA_KEY}}),
-      fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient') // MIGRATED // fetch(DB_URL+'?table=ordonnances&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.envoyee_patient&order=created_at.desc&limit=10',{headers:{'x-dokita-key':DOKITA_KEY}}),
-      fetchAPI(API_URL+'/patient?action=dossier') // MIGRATED // fetch(DB_URL+'?table=dossier_medical&filter=patient_id=eq.'+encodeURIComponent(patId)+'&filter2=statut=eq.actif&order=created_at.desc&limit=100',{headers:{'x-dokita-key':DOKITA_KEY}})
+      fetchAPI(API_URL+'/patient?action=examens'),
+      fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient'),
+      fetchAPI(API_URL+'/patient?action=dossier')
     ]);
     var dEx=await rEx.json(); examensSupabase=Array.isArray(dEx)?dEx:(dEx.data||[]);
     var dOrd=await rOrd.json(); ordos=Array.isArray(dOrd)?dOrd:(dOrd.data||[]);
@@ -3380,12 +3349,7 @@ async function envoyerAvis(consultId){
   if(!noteMed&&!noteBot){toast('⚠️ Donnez au moins une note');return;}
   var comment=(document.getElementById('avisComment').value||'').trim();
   try{
-    await fetchAPI(API_URL+'/patient?action=consultation&id='+encodeURIComponent(consultId),{method:'PATCH',body:JSON.stringify({
-        note_medecin:noteMed||null,
-        note_afribot:noteBot||null,
-        commentaire_patient:comment||null
-      })
-    });
+    await fetchAPI(API_URL+'/patient?action=consultation&id='+encodeURIComponent(consultId),{method:'PATCH',body:JSON.stringify({note_medecin:noteMed||null,note_afribot:noteBot||null,commentaire_patient:comment||null})});
     document.getElementById('modalAvis').remove();
     toast('⭐ Merci pour votre avis !');
   }catch(e){toast('⚠️ Erreur: '+e.message);}
@@ -3517,26 +3481,15 @@ async function envoyerSignalement(ref, consultId){
 
   try{
     // 1. Créer le signalement dans la table remboursements
-    await fetchAPI(API_URL+'/patient?action=remboursement',{method:'POST',body:JSON.stringify({
-        patient_id:p.supabaseId,
-        consultation_ref:ref,
-        type_signalement:type,
-        raison:window._signalRaison||message||'Non précisé',
-        statut:'en_attente'
-      })
-    });
+    await fetchAPI(API_URL+'/patient?action=remboursement',{method:'POST',body:JSON.stringify({patient_id:p.supabaseId,consultation_ref:ref,type_signalement:type,raison:window._signalRaison||message||'Non précisé',statut:'en_attente'})});
 
     // 2. Si remboursement → marquer la consultation
     if(type==='remboursement'&&consultId&&consultId!=='undefined'){
-      await fetchAPI(API_URL+'/patient?action=consultation&id='+encodeURIComponent(consultId),{method:'PATCH',body:JSON.stringify({rembourse:true})
-      });
+      await fetchAPI(API_URL+'/patient?action=consultation&id='+encodeURIComponent(consultId),{method:'PATCH',body:JSON.stringify({rembourse:true})});
     }
 
     // 3. Incrémenter nb_remboursements et vérifier abus
     var rGet=await fetchAPI(API_URL+'/patient?action=profil');
-    // MIGRATED_signalement_get // var rGet=await fetch(DB_URL+'?table=patients&filter=id=eq.'+encodeURIComponent(p.supabaseId)+'&select=nb_remboursements&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var dGet=await rGet.json();
     var rows=Array.isArray(dGet)?dGet:(dGet.data||[]);
     var nb=(rows[0]&&rows[0].nb_remboursements||0)+1;
@@ -3556,9 +3509,7 @@ async function envoyerSignalement(ref, consultId){
 
 async function marquerExamenFait(examenId){
   try{
-    await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',
-      body:JSON.stringify({statut:'resultat_recu',date_realisation:new Date().toISOString()})
-    });
+    await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',body:JSON.stringify({statut:'resultat_recu',date_realisation:new Date().toISOString()})});
     toast('✅ Examen marqué comme fait');
     chargerDossierDokita();
   }catch(e){toast('⚠️ Erreur: '+e.message);}
@@ -3626,12 +3577,7 @@ async function confirmerResultatAnalyse(key, examenId, nomExamen){
   // Si lié à un examen Supabase → PATCH statut + résultat + date_realisation
   if(examenId){
     try{
-      await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',body:JSON.stringify({
-          statut:'resultat_recu',
-          resultat:valeur,
-          date_realisation:new Date().toISOString()
-        })
-      });
+      await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',body:JSON.stringify({statut:'resultat_recu',resultat:valeur,date_realisation:new Date().toISOString()})});
       dbg('Examen résultat reçu: '+examenId);
     }catch(e){dbgWarn('Erreur PATCH examen: '+e.message);}
   }
@@ -3903,9 +3849,7 @@ function supprimerTrait(idx){
 function mettreAJourBadgeRDV(profil){
   var p=profil||PROFILS[SEL];
   if(!p||!p.supabaseId)return;
-  fetchAPI(API_URL+'/patient?action=rdv') // MIGRATED_badgeRDV // fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId)+'&order=created_at.desc&limit=20',{
-    headers:{'x-dokita-key':DOKITA_KEY}
-  }).then(function(r){return r.json();}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=rdv').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var nbConfirme=rows.filter(function(r){return r.statut==='confirme';}).length;
     var nbPropose=rows.filter(function(r){return r.statut==='propose';}).length;
@@ -3949,9 +3893,7 @@ function mettreAJourBadgeTuile(keyOverride){
 function mettreAJourBadgeOffres(){
   var p=PROFILS[SEL];
   if(!p||!p.patientId)return;
-  fetchAPI(API_URL+'/patient?action=appels_offres') // MIGRATED_badgeOffres // fetch(DB_URL+'?table=appels_offres&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&order=date_envoi.desc&limit=20',{
-    headers:{'x-dokita-key':DOKITA_KEY}
-  }).then(function(r){return r.json();}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=appels_offres').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var badge=document.getElementById('offresTileBadge');
     var sub=document.getElementById('offresTileSub');
@@ -3988,9 +3930,7 @@ function mettreAJourBadgeAnalyses(){
   var p=PROFILS[SEL];
   if(!p||!p.patientId)return;
   // Compter uniquement : obligatoire=true ET statut=prescrit (pas encore reçu)
-  fetchAPI(API_URL+'/patient?action=examens&statut=prescrit&obligatoire=true') // MIGRATED_badgeAnalyses // fetch(DB_URL+'?table=examens&filter=patient_id=eq.'+encodeURIComponent(p.patientId)+'&filter2=statut=eq.prescrit&filter3=obligatoire=eq.true&limit=50',{
-    headers:{'x-dokita-key':DOKITA_KEY}
-  }).then(function(r){return r.json();}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=examens&statut=prescrit&obligatoire=true').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var badge=document.getElementById('dossierMedTileBadge');
     var sub=document.getElementById('dossierMedTileSub');
@@ -4388,8 +4328,7 @@ async function validerRecupModal(){
       PROFILS.push(nouveauProfil);
       // PATCH Supabase : nouveau compte_parent_id (UUID) + effacer code_transfert
       var myId=PROFILS[0]&&PROFILS[0].supabaseId||null;
-      fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',
-        body:JSON.stringify({
+      fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({
           compte_parent_id:myId,
           lien_familial:LIENS[lien]||lien,
           code_transfert:''
@@ -4522,9 +4461,7 @@ async function genererCodeTransfert(){
 
   toast('⏳ Génération du code...');
   try{
-    var patchRes=await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',
-      body:JSON.stringify({code_transfert:code+'|'+expire})
-    });
+    var patchRes=await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({code_transfert:code+'|'+expire})});
     var patchData=await patchRes.json();
     dbg('PATCH code_transfert — status:'+patchRes.status+' supabaseId:'+p.supabaseId+' data:'+JSON.stringify(patchData).slice(0,150));
     if(!patchRes.ok){
@@ -4698,16 +4635,7 @@ async function confirmerRecuperationProfil(){
   try{
     // PATCH Supabase : compte_parent_id + lien_familial + code_transfert='' + audit transfert
     var myId=PROFILS[0]&&PROFILS[0].supabaseId||null;
-    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',
-      body:JSON.stringify({
-        compte_parent_id:myId,
-        lien_familial:LIENS[p.lien]||p.lien,
-        code_transfert:'',
-        date_transfert:new Date().toISOString(),
-        transfert_vers_email:SESSION_EMAIL||'',
-        transfert_vers_id:myId||null
-      })
-    });
+    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({compte_parent_id:myId,lien_familial:LIENS[p.lien]||p.lien,code_transfert:'',date_transfert:new Date().toISOString(),transfert_vers_email:SESSION_EMAIL||'',transfert_vers_id:myId||null})});
 
     p.email='';
     PROFILS.push(p);
@@ -4792,8 +4720,7 @@ async function renderHistorique(){
   }
   var h='';
   h+=sessions.map(function(s,i){
-    var traite=s.statut==='valide'||s.statut==='valide_override'||s.statut==='cloture'||s.statut==='traite';
-        var enAttenteExamen=s.statut==='en_attente_examen';
+    var traite=s.statut==='valide'||s.statut==='valide_override'||s.statut==='cloture'||s.statut==='traite';var enAttenteExamen=s.statut==='en_attente_examen';
     var statutBadge=traite
       ?'<span style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:var(--accent);">✅ Traité</span>'
       :'<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:6px;padding:2px 8px;font-size:10px;color:#fbbf24;">⏳ En attente</span>';
@@ -4972,9 +4899,7 @@ async function mettreAJourProfilNotion(p){
   if(p.langue)body.langue_preferee=p.langue;
   if(p.sx)body.sexe=p.sx==='H'?'M':p.sx==='F'?'F':null;
   try{
-    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',
-      body:JSON.stringify(body)
-    });
+    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify(body)});
     dbg('Profil Supabase mis à jour ✅');
   }catch(e){dbg('Erreur MAJ profil: '+e.message);}
 }
@@ -4998,9 +4923,7 @@ async function creerFicheMembreFamille(p){
   if(p.poids)body.poids=parseFloat(p.poids)||null;
   if(p.sx)body.sexe=p.sx==='H'?'M':p.sx==='F'?'F':null;
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=inscription',{method:'POST',
-      body:JSON.stringify(body)
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=inscription',{method:'POST',body:JSON.stringify(body)});
     var data=await r.json();
     var row=Array.isArray(data)?data[0]:data;
     if(row&&row.id){
@@ -5074,10 +4997,7 @@ async function chargerHistoriqueNotion(){
   dbg('chargerHisto patId='+patId);
   if(!patId)return[];
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=consultations&limit=20');
-    // MIGRATED_historique // var r=await fetch(DB_URL+'?table=consultations&filter=patient_id=eq.'+encodeURIComponent(patId)+'&order=created_at.desc&limit=20',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=consultations');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     dbg('histo results='+rows.length);
@@ -5125,9 +5045,7 @@ var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // cha
 async function chargerEtablissements(){
   // Chargement au login — stocké en mémoire pour toute la session
   try{
-    var r=await fetch(API_URL+'/patient?action=etablissements',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetch(API_URL+'/patient?action=etablissements');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -5206,10 +5124,6 @@ async function ouvrirRDV(){
 
   try{
     var r=await fetchAPI(API_URL+'/patient?action=rdv');
-    // MIGRATED_ouvrirRDV // var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=demande');
-    // MIGRATED_selectEtab // var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId||p.patientId)+'&order=created_at.desc&limit=20',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
 
@@ -5376,11 +5290,6 @@ async function ouvrirCreneaux(etablissementId){
     var aujourd=new Date();
     var dans7j=new Date(aujourd.getTime()+7*24*60*60*1000);
     var r=await fetch(API_URL+'/patient?action=disponibilites&etablissement_id='+encodeURIComponent(etablissementId));
-    // MIGRATED_ouvrirCreneaux // var r=await fetch(DB_URL+'?table=disponibilites&filter=etablissement_id=eq.'+encodeURIComponent(etablissementId)+
-      '&filter2=statut=eq.disponible&filter3=date_specifique=gte.'+aujourd.toISOString().split('T')[0]+
-      '&order=date_specifique.asc,heure_debut.asc&limit=50',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var dispos=Array.isArray(data)?data:(data.data||[]);
 
@@ -5447,11 +5356,7 @@ async function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
 
   // Vérifier si demande en cours sur cet établissement
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=rdv');
-    // MIGRATED_ouvrirRDV // var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=demande');
-    // MIGRATED_selectEtab // var r=await fetch(DB_URL+'?table=rendez_vous&filter=patient_id=eq.'+encodeURIComponent(p.supabaseId||p.patientId)+'&filter2=etablissement_id=eq.'+encodeURIComponent(etabId)+'&filter3=statut=eq.demande&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=demande');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -5503,17 +5408,7 @@ async function soumettreDemRDV(btn){
   var msg='🏥 Nouvelle demande de RDV Dokita\n\nPatient : '+patNom+'\nMotif : '+typeLabel+(precision?' — '+precision:'')+'\n\nConnectez-vous à Dokita Pro pour proposer des créneaux.';
 
   try{
-    var res=await fetchAPI(API_URL+'/patient?action=rdv',{method:'POST',body:JSON.stringify({
-        patient_id:p.supabaseId||p.patientId,
-        patient_nom:patNom,
-        etablissement_id:RDV_ETABLISSEMENT_SEL.id,
-        etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,
-        type_rdv:typeVal,
-        motif:typeLabel+(precision?' — '+precision:''),
-        statut:'demande',
-        creneaux_proposes:[]
-      })
-    });
+    var res=await fetchAPI(API_URL+'/patient?action=rdv',{method:'POST',body:JSON.stringify({patient_id:p.supabaseId||p.patientId,patient_nom:patNom,etablissement_id:RDV_ETABLISSEMENT_SEL.id,etablissement_nom:RDV_ETABLISSEMENT_SEL.nom,type_rdv:typeVal,motif:typeLabel+(precision?' — '+precision:''),statut:'demande',creneaux_proposes:[]})});
     if(!res.ok){var err=await res.json();throw new Error(JSON.stringify(err).slice(0,200));}
 
     // Fermer modal + notifier
@@ -5541,13 +5436,7 @@ async function soumettreDemRDV(btn){
 
 async function confirmerCreneau(rdvId, date, heure){
   try{
-    await fetchAPI(API_URL+'/patient?action=rdv&id='+encodeURIComponent(rdvId),{method:'PATCH',body:JSON.stringify({
-        statut:'confirme',
-        date_confirmee:date,
-        heure_confirmee:heure,
-        creneaux_proposes:[]
-      })
-    });
+    await fetchAPI(API_URL+'/patient?action=rdv&id='+encodeURIComponent(rdvId),{method:'PATCH',body:JSON.stringify({statut:'confirme',date_confirmee:date,heure_confirmee:heure,creneaux_proposes:[]})});
     toast('✅ RDV confirmé — '+new Date(date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'})+' à '+heure);
     ouvrirRDV();
   }catch(e){toast('❌ '+e.message);}
@@ -5569,7 +5458,7 @@ async function annulerRDV(rdvId){
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length&&rows[0].disponibilite_id){
       // Libérer le slot
-      await fetchAPI(API_URL+'/patient?action=disponibilites_patch&id='+rows[0].disponibilite_id,{method:'PATCH',body:JSON.stringify({statut:'disponible'})});
+      await fetchAPI(API_URL+'/patient?action=rdv',{method:'PATCH',body:JSON.stringify({disponibilite_liberer:rows[0].disponibilite_id})}).catch(function(){});
     }
     await fetchAPI(API_URL+'/patient?action=rdv&id='+rdvId,{method:'PATCH',body:JSON.stringify({statut:'annule_patient'})});
     toast('RDV annulé');
@@ -5751,37 +5640,14 @@ async function ajouterResultatReseau(input, examenId, nomExamen){
 
     // ── ÉTAPE 2 : Sauvegarder dans dossier_medical (fichier + résultat extrait) ──
     var nom=nomExamen?('Résultat — '+nomExamen+' — '+new Date().toLocaleDateString('fr-FR')):('Résultat labo — '+new Date().toLocaleDateString('fr-FR'));
-    var r=await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({
-        table:'dossier_medical',
-        data:{
-          patient_id:p.patientId,
-          nom:nom,
-          type_document:'analyse',
-          contenu_base64:base64,
-          mime_type:file.type,
-          taille_octets:file.size,
-          visible_medecin:true,
-          source:'prescrit_dokita',
-          statut:'actif',
-          note:examenId||'',
-          resultat_ia:resultatTexte||null,
-          extraction_json:extractionIA?JSON.stringify(extractionIA):null
-        }
-      })
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({patient_id:p.patientId,nom:nom,type_document:'analyse',contenu_base64:base64,mime_type:file.type,taille_octets:file.size,visible_medecin:true,source:'prescrit_dokita',statut:'actif',note:examenId||'',resultat_ia:resultatTexte||null,extraction_json:extractionIA?JSON.stringify(extractionIA):null})});
     var data=await r.json();
     if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
 
     // ── ÉTAPE 3 : PATCH examen prescrit → statut resultat_recu + résultat ──
     if(examenId){
       try{
-        await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',body:JSON.stringify({
-            statut:'resultat_recu',
-            resultat:resultatTexte||'Fichier uploadé',
-            date_realisation:new Date().toISOString(),
-            extraction_json:extractionIA&&!extractionIA.erreur?extractionIA:null
-          })
-        });
+        await fetchAPI(API_URL+'/patient?action=examen&id='+examenId,{method:'PATCH',body:JSON.stringify({statut:'resultat_recu',resultat:resultatTexte||'Fichier uploadé',date_realisation:new Date().toISOString(),extraction_json:extractionIA&&!extractionIA.erreur?extractionIA:null})});
         dbg('Examen '+examenId+' → resultat_recu');
       }catch(e){dbgWarn('PATCH examen: '+e.message);}
     }
@@ -5869,7 +5735,9 @@ function ouvrirDocument(id,nom,url,isBase64,mime){
   if(isBase64==='base64'){
     toast('📄 Ouverture... (stockage local)');
     // Pour les docs base64, récupérer depuis Supabase et ouvrir
-    fetchAPI(API_URL+'/documents?action=get&id='+encodeURIComponent(id)).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+    fetchAPI(API_URL+'/documents?action=get&id='+encodeURIComponent(id),{
+      headers:{'x-dokita-key':DOKITA_KEY}
+    }).then(function(r){return r.json();}).then(function(data){
       var rows=Array.isArray(data)?data:(data.data||[]);
       if(!rows.length){toast('Document introuvable');return;}
       var b64=rows[0].contenu_base64||'';
@@ -5989,21 +5857,7 @@ async function soumettrDoc(){
       reader.onerror=rej;
       reader.readAsDataURL(file);
     });
-    var r=await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({
-        table:'dossier_medical',
-        data:{
-          patient_id:p.patientId,
-          nom:nom,
-          type_document:type,
-          contenu_base64:base64,
-          mime_type:file.type,
-          taille_octets:file.size,
-          visible_medecin:visible,
-          source:'patient',
-          statut:'actif'
-        }
-      })
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=document',{method:'POST',body:JSON.stringify({patient_id:p.patientId,nom:nom,type_document:type,contenu_base64:base64,mime_type:file.type,taille_octets:file.size,visible_medecin:visible,source:'patient',statut:'actif'})});
     var data=await r.json();
     if(data&&data.error)throw new Error(JSON.stringify(data.error).slice(0,100));
     document.getElementById('modalAjoutDoc').remove();
@@ -6024,9 +5878,6 @@ async function ouvrirOffres(){
   if(!p){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Sélectionnez un profil</div>';return;}
   try{
     var r=await fetchAPI(API_URL+'/patient?action=appels_offres');
-    // MIGRATED_ouvrirOffres // var r=await fetch(DB_URL+'?table=appels_offres&filter=patient_id=eq.'+encodeURIComponent(p.patientId||'')+'&order=created_at.desc&limit=20',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){
@@ -6343,10 +6194,7 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel){
     try{
       var consultId=existRows.length?existRows[0].consultation_id||'':'';
       if(consultId){
-        var autresR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(AO_CONSULT_ID||''));
-    // MIGRATED_choisirOffre_autres // var autresR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&limit=50',{
-          headers:{'x-dokita-key':DOKITA_KEY}
-        });
+        var autresR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
         var autresData=await autresR.json();
         var autres=Array.isArray(autresData)?autresData:(autresData.data||[]);
         var aAnnuler=autres.filter(function(r){return r.id!==supabaseId&&r.statut!=='annule'&&r.statut!=='livre';});
@@ -6426,9 +6274,6 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   var stockParPharma={};
   try{
     var rStock=await fetch(API_URL+'/patient?action=stock');
-    // MIGRATED_stock // var rStock=await fetch(DB_URL+'?table=stock_pharmacie&select=pharmacie_id,pharmacie_nom,medicament,quantite_recue,quantite_reservee&limit=500',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var dStock=await rStock.json();
     var stockRows=Array.isArray(dStock)?dStock:(dStock.data||[]);
 
@@ -6670,11 +6515,7 @@ async function aoTermine(){
 
 async function checkAOAccepted(consultId){
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_checkAO // var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_fallback // var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.accepte&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     return rows.length>0;
@@ -6689,11 +6530,7 @@ async function genererCodeRetraitFallback(consultId,items){
   dbg('AO fallback — génération code retrait auto pour '+fallback.nom+' : '+code);
   try{
     // Trouver l'AO de la pharmacie fallback
-    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_checkAO // var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_fallback // var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=pharmacie_nom=eq.'+encodeURIComponent(fallback.nom)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -6708,11 +6545,7 @@ async function genererCodeRetraitFallback(consultId,items){
 
 async function compterReponses(consultId){
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_checkAO // var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId||''));
-    // MIGRATED_fallback // var r=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(consultId)+'&filter2=statut=eq.offres_recues',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
+    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
     var data=await r.json();
     return Array.isArray(data)?data.length:0;
   }catch(e){return 0;}
@@ -6941,9 +6774,6 @@ async function voirOrdonnanceHisto(i){
   if(!s.ordonnance&&s.supabaseId){
     try{
       var r=await fetchAPI(API_URL+'/patient?action=ordonnance&consultation_id='+s.supabaseId);
-    // MIGRATED_voirOrdonnanceHisto // var r=await fetch(DB_URL+'?table=ordonnances&select=*&filter=consultation_id=eq.'+s.supabaseId+'&limit=1',{
-        headers:{'x-dokita-key':DOKITA_KEY}
-      });
       var data=await r.json();
       var rows=Array.isArray(data)?data:(data.data||[]);
       if(rows.length){
@@ -6966,9 +6796,7 @@ async function voirOrdonnanceHisto(i){
         var medSpec='';
         if(row.medecin_id){
           try{
-            var rm=await fetch(API_URL+'/patient?action=medecins',{
-              headers:{'x-dokita-key':DOKITA_KEY}
-            });
+            var rm=await fetch(API_URL+'/patient?action=medecins');
             var dm=await rm.json();
             var medRows=Array.isArray(dm)?dm:(dm.data||[]);
             if(medRows.length){
@@ -7003,9 +6831,6 @@ async function voirOrdonnanceHisto(i){
   var aoSoumis=!!(s.ordonnance&&s.ordonnance.ao_soumis)||false;
   try{
     var aoR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+s.supabaseId);
-    // MIGRATED_aoR // var aoR=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+s.supabaseId+'&limit=50',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length){
@@ -7066,7 +6891,7 @@ async function voirOrdonnanceHisto(i){
 
   // Charger examens depuis Supabase et mettre à jour l'ordo bio
   if(s.supabaseId){
-    fetchAPI(API_URL+'/patient?action=examens&consultation_id='+encodeURIComponent(s.supabaseId)) // MIGRATED_voirOrdoExamens // fetch(DB_URL+'?table=examens&filter=consultation_id=eq.'+encodeURIComponent(s.supabaseId)+'&order=created_at.asc',{
+    fetchAPI(API_URL+'/patient?action=examens&consultation_id='+encodeURIComponent(s.supabaseId),{
       headers:{'x-dokita-key':DOKITA_KEY}
     }).then(function(r){return r.json();}).then(function(data){
       var examens=Array.isArray(data)?data:(data.data||[]);
@@ -7846,9 +7671,6 @@ async function voirFichierExamen(examenId){
   try{
     // Chercher le document lié dans dossier_medical (note = examenId)
     var r=await fetchAPI(API_URL+'/documents?action=get_by_note&note='+encodeURIComponent(examenId));
-    // MIGRATED_voirFichierExamen // var r=await fetch(DB_URL+'?table=dossier_medical&filter=note=eq.'+encodeURIComponent(examenId)+'&limit=1',{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){toast('Fichier non trouvé');return;}
