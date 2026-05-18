@@ -1,12 +1,15 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.0
+// VERSION : V2.1
 // DATE    : 2026-05-12
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (profil, profils_famille, consultations,
 //                        examens, ordonnances, dossier, appels_offres, PATCH profil,
 //                        POST document)
-//   V2.0 (2026-05-12) : Phase 2 — Migration JWT frontend complète
+//   V2.0 (2026-05-12) : Routes initiales V2
+//   V2.1 (2026-05-17) : Fix patient_id vs UUID — JWT contient maintenant patient_id (PAT-...)
+//                          patientUuid = req.user.id (UUID Supabase, pour table patients)
+//                          patientId   = req.user.patient_id (PAT-..., pour consultations/examens/ordonnances) : Phase 2 — Migration JWT frontend complète
 //     + GET  medecins          : liste médecins actifs (public, pas de RBAC)
 //     + GET  etablissements    : liste établissements par type
 //     + GET  stock             : stock pharmacies pour sélection AO
@@ -85,7 +88,8 @@ module.exports = async function handler(req, res) {
   }).catch(() => null);
   if (res.writableEnded) return;
 
-  const patientId = req.user.id;
+  const patientUuid = req.user.id;          // UUID Supabase (table patients.id)
+  const patientId = req.user.patient_id || req.user.id;  // PAT-XX-... (consultations, examens, ordonnances)
 
   try {
 
@@ -94,7 +98,7 @@ module.exports = async function handler(req, res) {
     // GET /api/patient?action=profil
     if (req.method === 'GET' && action === 'profil') {
       const { data, error } = await supabase
-        .from('patients').select('*').eq('id', patientId).single();
+        .from('patients').select('*').eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json(data);
     }
@@ -102,7 +106,7 @@ module.exports = async function handler(req, res) {
     // GET /api/patient?action=profils_famille
     if (req.method === 'GET' && action === 'profils_famille') {
       const { data: profil } = await supabase
-        .from('patients').select('email').eq('id', patientId).single();
+        .from('patients').select('email').eq('id', patientUuid).single();
       const { data, error } = await supabase
         .from('patients').select('*').eq('email', profil.email);
       if (error) return res.status(500).json({ error: error.message });
@@ -244,7 +248,7 @@ module.exports = async function handler(req, res) {
       const { data, error } = await supabase
         .from('patients')
         .select('code_parrainage,credit_reduction,nb_remboursements')
-        .eq('id', patientId).single();
+        .eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json(data);
     }
@@ -263,7 +267,7 @@ module.exports = async function handler(req, res) {
       ];
       const safe = {};
       allowed.forEach(k => { if (updates[k] !== undefined) safe[k] = updates[k]; });
-      const { error } = await supabase.from('patients').update(safe).eq('id', patientId);
+      const { error } = await supabase.from('patients').update(safe).eq('id', patientUuid);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });
     }
@@ -395,7 +399,7 @@ module.exports = async function handler(req, res) {
     // POST /api/patient?action=inscription (créer compte famille)
     if (req.method === 'POST' && action === 'inscription') {
       // Vérifier que l'email correspond au patient connecté (même famille)
-      const { data: self } = await supabase.from('patients').select('email').eq('id', patientId).single();
+      const { data: self } = await supabase.from('patients').select('email').eq('id', patientUuid).single();
       const body = req.body;
       if (body.email && body.email !== self.email) {
         return res.status(403).json({ error: 'Email doit correspondre au compte principal' });
