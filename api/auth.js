@@ -22,7 +22,7 @@ module.exports = async function handler(req, res) {
 
     const { data: patients, error } = await supabase
       .from('patients')
-      .select('id, prenom, nom, email, code_acces, ia_consent, statut_compte')
+      .select('id, patient_id, prenom, nom, email, code_acces, ia_consent, statut_compte')
       .eq('email', email.toLowerCase().trim())
       .limit(10);
 
