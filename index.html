@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.41
+     VERSION : V4.42
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -2870,9 +2870,9 @@ async function chargerDossierDokita(){
   var examensSupabase=[], ordos=[], docs=[];
   try{
     var [rEx,rOrd,rDocs]=await Promise.all([
-      fetchAPI(API_URL+'/patient?action=examens'),
-      fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient'),
-      fetchAPI(API_URL+'/patient?action=dossier')
+      fetchAPI(API_URL+'/patient?action=examens'+(patId?'&for='+encodeURIComponent(patId):'')),
+      fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient'+(patId?'&for='+encodeURIComponent(patId):'')),
+      fetchAPI(API_URL+'/patient?action=dossier'+(patId?'&for='+encodeURIComponent(patId):''))
     ]);
     var dEx=await rEx.json(); examensSupabase=Array.isArray(dEx)?dEx:(dEx.data||[]);
     var dOrd=await rOrd.json(); ordos=Array.isArray(dOrd)?dOrd:(dOrd.data||[]);
@@ -3893,7 +3893,7 @@ function mettreAJourBadgeTuile(keyOverride){
 function mettreAJourBadgeOffres(){
   var p=PROFILS[SEL];
   if(!p||!p.patientId)return;
-  fetchAPI(API_URL+'/patient?action=appels_offres').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=appels_offres'+(p.patientId?'&for='+encodeURIComponent(p.patientId):'')).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var badge=document.getElementById('offresTileBadge');
     var sub=document.getElementById('offresTileSub');
@@ -3930,7 +3930,7 @@ function mettreAJourBadgeAnalyses(){
   var p=PROFILS[SEL];
   if(!p||!p.patientId)return;
   // Compter uniquement : obligatoire=true ET statut=prescrit (pas encore reçu)
-  fetchAPI(API_URL+'/patient?action=examens&statut=prescrit&obligatoire=true').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=examens&statut=prescrit&obligatoire=true'+(p.patientId?'&for='+encodeURIComponent(p.patientId):'')).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var badge=document.getElementById('dossierMedTileBadge');
     var sub=document.getElementById('dossierMedTileSub');
@@ -4997,7 +4997,9 @@ async function chargerHistoriqueNotion(){
   dbg('chargerHisto patId='+patId);
   if(!patId)return[];
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=consultations');
+    var selPatId=PROFILS&&PROFILS[SEL]?PROFILS[SEL].patientId:'';
+    var consultUrl=API_URL+'/patient?action=consultations'+(selPatId?'&for='+encodeURIComponent(selPatId):'');
+    var r=await fetchAPI(consultUrl);
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     dbg('histo results='+rows.length);
