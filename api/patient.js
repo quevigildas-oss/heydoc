@@ -1,6 +1,8 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.3
+// VERSION : V2.5
+// ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
+// NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
 // DATE    : 2026-05-12
@@ -58,6 +60,18 @@ module.exports = async function handler(req, res) {
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
   }
+
+
+    // GET pharmacies : table 'pharmacies' (is_test) — go-live: basculer vers etablissements
+    if (req.method === 'GET' && action === 'pharmacies') {
+      const { data, error } = await supabase
+        .from('pharmacies')
+        .select('id,nom,telephone,latitude,longitude,ville,quartier,paiement_mobile,is_test')
+        .order('nom', { ascending: true })
+        .limit(50);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json(data);
+    }
 
   // GET etablissements : liste établissements (cliniques, labos, pharmacies)
   if (req.method === 'GET' && action === 'etablissements') {
