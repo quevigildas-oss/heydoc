@@ -1,6 +1,7 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.5
+// VERSION : V2.6
+// FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
@@ -436,7 +437,10 @@ module.exports = async function handler(req, res) {
 
     // POST /api/patient?action=ao
     if (req.method === 'POST' && action === 'ao') {
-      const body = { ...req.body, patient_id: patientId };
+      // Garder le patient_id du body si c'est un membre de la famille
+      // (le front envoie PROFILS[SEL].patientId qui peut être différent du JWT)
+      const bodyPatientId = req.body.patient_id || patientId;
+      const body = { ...req.body, patient_id: bodyPatientId };
       const { data, error } = await supabase
         .from('appels_offres').insert(body).select('id').single();
       if (error) return res.status(500).json({ error: error.message });
