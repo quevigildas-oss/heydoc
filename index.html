@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.42
+     VERSION : V4.43
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -5046,8 +5046,12 @@ var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // cha
 
 async function chargerEtablissements(){
   // Chargement au login — stocké en mémoire pour toute la session
+  // Dev → table 'pharmacies' (is_test, vos numéros) | Prod → 'etablissements'
+  var etablUrl=DOKITA_ENV==='dev'
+    ? API_URL+'/patient?action=pharmacies'
+    : API_URL+'/patient?action=etablissements';
   try{
-    var r=await fetch(API_URL+'/patient?action=etablissements');
+    var r=await fetch(etablUrl);
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
@@ -5055,9 +5059,9 @@ async function chargerEtablissements(){
         return {
           id:e.id||'',
           nom:e.nom||'',
-          type:e.type||'autre',
+          type:e.type||'pharmacie',
           tel:e.whatsapp||e.telephone||'',
-          whatsapp:e.whatsapp||'',
+          whatsapp:e.whatsapp||e.telephone||'',
           email:e.email||'',
           adresse:e.adresse||'',
           ville:e.ville||'',
@@ -5068,9 +5072,9 @@ async function chargerEtablissements(){
           services:e.services||[],
           langues:e.langues||[],
           mobile_money:e.mobile_money||[],
-          partenaire:e.partenaire||false,
+          partenaire:e.partenaire_dokita||e.partenaire||false,
           accepte_rdv:e.accepte_rdv||false,
-          accepte_ao:e.accepte_ao||false,
+          accepte_ao:true,  // toutes les pharmacies dans la table acceptent les AO
           google_place_id:e.google_place_id||'',
           google_rating:e.google_rating||null
         };
