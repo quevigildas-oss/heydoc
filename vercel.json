@@ -11,6 +11,7 @@
     { "source": "/api/patient", "destination": "/api/patient.js" },
     { "source": "/api/medecin", "destination": "/api/medecin.js" },
     { "source": "/api/documents", "destination": "/api/documents.js" },
+    { "source": "/api/pharmacie", "destination": "/api/pharmacie.js" },
     { "source": "/api/db", "destination": "/api/db.js" },
     { "source": "/api/save", "destination": "/api/save.js" },
     { "source": "/api/rag", "destination": "/api/rag.js" },
