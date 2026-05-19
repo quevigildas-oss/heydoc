@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.43
+     VERSION : V4.44
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6861,7 +6861,12 @@ async function voirOrdonnanceHisto(i){
   } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
   } else if(aoStatut==='annule'){
-    btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Relancer</button>';
+    // Si ao_soumis=true → une pharmacie avait accepté, ne pas relancer
+    if(!aoSoumis){
+      btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💰 Relancer</button>';
+    } else {
+      btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Commande déjà traitée</div>';
+    }
   } else {
     btnMoinsCher='<button onclick="lancerAppelOffre('+i+')" style="flex:1;padding:14px;background:linear-gradient(135deg,#F5A623,#F0801A);border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;">💊 Vos médicaments au meilleur prix</button>';
   }
