@@ -1,6 +1,7 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.1
+// VERSION : V2.2
+// FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
 // DATE    : 2026-05-12
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (profil, profils_famille, consultations,
@@ -105,12 +106,35 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=profils_famille
     if (req.method === 'GET' && action === 'profils_famille') {
+      // Récupérer le profil principal
       const { data: profil } = await supabase
         .from('patients').select('email').eq('id', patientUuid).single();
-      const { data, error } = await supabase
-        .from('patients').select('*').eq('email', profil.email);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json(data);
+
+      // Profils par email (membres famille avec même email)
+      let byEmail = [];
+      if (profil && profil.email) {
+        const { data } = await supabase
+          .from('patients').select('*').eq('email', profil.email);
+        byEmail = data || [];
+      } else {
+        // Pas d'email → charger uniquement ce profil
+        const { data } = await supabase
+          .from('patients').select('*').eq('id', patientUuid);
+        byEmail = data || [];
+      }
+
+      // Profils liés par compte_parent_id (membres famille sans email propre)
+      const { data: byParent } = await supabase
+        .from('patients').select('*').eq('compte_parent_id', patientUuid);
+      const linked = byParent || [];
+
+      // Fusionner et dédupliquer par id
+      const all = [...byEmail];
+      for (const p of linked) {
+        if (!all.find(x => x.id === p.id)) all.push(p);
+      }
+
+      return res.status(200).json(all);
     }
 
     // GET /api/patient?action=consultations
