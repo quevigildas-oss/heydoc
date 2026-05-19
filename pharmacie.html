@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
+<!-- VERSION: V2.0 — 2026-05-19 — Migration JWT/RLS (pharmacie.js API) -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -58,8 +59,7 @@ body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:10
 <div class="toast" id="toast"></div>
 
 <script>
-var DB_URL='https://heydoc-medecin.vercel.app/api/db';
-var DOKITA_KEY='dk-2026-prod-x9f7m';
+var PHARMA_URL='https://heydoc-mu.vercel.app/api/pharmacie';
 var params=new URLSearchParams(window.location.search);
 var aoId=params.get('id');
 var pharmTelParam=params.get('tel')||'';
@@ -74,12 +74,12 @@ function toast(msg){
 function escHtml(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 async function dbPatch(supabaseId, body){
-  var r=await fetch(DB_URL+'?table=appels_offres&id='+encodeURIComponent(supabaseId),{
+  var r=await fetch(PHARMA_URL+'?action=ao&id='+encodeURIComponent(supabaseId),{
     method:'PATCH',
-    headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-  if(!r.ok)throw new Error('DB PATCH '+r.status);
+  if(!r.ok)throw new Error('PATCH '+r.status);
   return await r.json();
 }
 
@@ -87,11 +87,10 @@ async function init(){
   var el=document.getElementById('mainContent');
   if(!aoId){el.innerHTML='<div class="error">❌ Lien invalide.</div>';return;}
   try{
-    var r=await fetch(DB_URL+'?table=appels_offres&filter=ao_id=eq.'+encodeURIComponent(aoId),{
-      headers:{'x-dokita-key':DOKITA_KEY}
-    });
-    var data=await r.json();
-    var rows=Array.isArray(data)?data:(data.data||[]);
+    var r=await fetch(PHARMA_URL+'?action=ao&ao_id='+encodeURIComponent(aoId));
+    if(!r.ok){el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';return;}
+    var row=await r.json();
+    var rows=[row];
     if(!rows.length){el.innerHTML='<div class="error">❌ Appel d\'offre introuvable ou expiré.</div>';return;}
     var row=rows[0];
     var statut=row.statut||'en_attente';
@@ -353,18 +352,15 @@ async function validerRetrait(){
         if(!nomMed)continue;
         try{
           // Chercher la ligne stock correspondante
-          var rStock=await fetch(DB_URL+'?table=stock_pharmacie&filter=pharmacie_nom=eq.'+encodeURIComponent(pharmNom)+'&filter2=medicament=ilike.*'+encodeURIComponent(nomMed.split(' ')[0])+'*&limit=1',{
-            headers:{'x-dokita-key':DOKITA_KEY}
-          });
-          var dStock=await rStock.json();
-          var stockRows=Array.isArray(dStock)?dStock:(dStock.data||[]);
-          if(stockRows.length){
-            var row=stockRows[0];
+          var rStock=await fetch(PHARMA_URL+'?action=stock&pharmacie_nom='+encodeURIComponent(pharmNom)+'&medicament='+encodeURIComponent(nomMed));
+          var stockRow=await rStock.json();
+          if(stockRow&&stockRow.id){
+            var row=stockRow;
             var nouvelleReservee=(row.quantite_reservee||0)+1;
             var alerteStock=nouvelleReservee>(row.quantite_recue||0);
-            await fetch(DB_URL+'?table=stock_pharmacie&id='+encodeURIComponent(row.id),{
+            await fetch(PHARMA_URL+'?action=stock&id='+encodeURIComponent(row.id),{
               method:'PATCH',
-              headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
+              headers:{'Content-Type':'application/json'},
               body:JSON.stringify({
                 quantite_reservee:nouvelleReservee,
                 alerte_stock:alerteStock||undefined,
@@ -379,18 +375,11 @@ async function validerRetrait(){
 
     // 3. Annuler les autres offres du même consultation
     try{
-      var rAutres=await fetch(DB_URL+'?table=appels_offres&filter=consultation_id=eq.'+encodeURIComponent(aoData.consultId),{
-        headers:{'x-dokita-key':DOKITA_KEY}
-      });
-      var dAutres=await rAutres.json();
-      var autres=Array.isArray(dAutres)?dAutres:(dAutres.data||[]);
-      await Promise.all(autres.filter(function(r){return r.id!==aoData.supabaseId&&r.statut!=='livre';}).map(function(r){
-        return fetch(DB_URL+'?table=appels_offres&id='+r.id,{
-          method:'PATCH',
-          headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-          body:JSON.stringify({statut:'annule'})
-        }).catch(function(){});
-      }));
+      await fetch(PHARMA_URL+'?action=ao_annuler_autres',{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({consultation_id:aoData.consultId,exclude_id:aoData.supabaseId})
+      }).catch(function(){});
     }catch(e){}
 
     toast('✅ Retrait validé !');
