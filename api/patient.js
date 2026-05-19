@@ -1,6 +1,7 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.2
+// VERSION : V2.3
+// FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
 // DATE    : 2026-05-12
 // CHANGELOG :
@@ -137,13 +138,37 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(all);
     }
 
-    // GET /api/patient?action=consultations
+    // GET /api/patient?action=consultations[&for=PAT-XX-...]
+    // for= permet de charger les consultations d'un membre de la famille
     if (req.method === 'GET' && action === 'consultations') {
       const limit = parseInt(req.query.limit) || 50;
+      let targetId = patientId; // par défaut : le profil du JWT
+
+      // Si for= est fourni, vérifier que ce patient est dans la famille
+      if (req.query.for && req.query.for !== patientId) {
+        const forId = req.query.for;
+        // Vérifier : même email OU compte_parent_id = patientUuid
+        const { data: famCheck } = await supabase
+          .from('patients')
+          .select('id, patient_id, compte_parent_id, email')
+          .eq('patient_id', forId)
+          .limit(1);
+        const member = famCheck && famCheck[0];
+        if (!member) return res.status(403).json({ error: 'Patient non trouvé' });
+
+        // Autoriser si : lié par compte_parent_id OU même email
+        const { data: self } = await supabase
+          .from('patients').select('email').eq('id', patientUuid).single();
+        const isFamille = member.compte_parent_id === patientUuid ||
+                          (self && member.email && member.email === self.email);
+        if (!isFamille) return res.status(403).json({ error: 'Accès non autorisé' });
+        targetId = forId;
+      }
+
       const { data, error } = await supabase
         .from('consultations')
         .select('*')
-        .eq('patient_id', patientId)
+        .eq('patient_id', targetId)
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) return res.status(500).json({ error: error.message });
@@ -163,7 +188,8 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=examens[&consultation_id=xxx][&statut=xxx]
     if (req.method === 'GET' && action === 'examens') {
-      let query = supabase.from('examens').select('*').eq('patient_id', patientId);
+      const examTarget = req.query.for || patientId;
+      let query = supabase.from('examens').select('*').eq('patient_id', examTarget);
       if (req.query.consultation_id) query = query.eq('consultation_id', req.query.consultation_id);
       if (req.query.statut) query = query.eq('statut', req.query.statut);
       if (req.query.obligatoire) query = query.eq('obligatoire', req.query.obligatoire === 'true');
@@ -185,7 +211,8 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=ordonnances
     if (req.method === 'GET' && action === 'ordonnances') {
-      let query = supabase.from('ordonnances').select('*').eq('patient_id', patientId);
+      const ordTarget = req.query.for || patientId;
+      let query = supabase.from('ordonnances').select('*').eq('patient_id', ordTarget);
       if (req.query.statut) query = query.eq('statut', req.query.statut);
       if (req.query.consultation_id) query = query.eq('consultation_id', req.query.consultation_id);
       const { data, error } = await query.order('created_at', { ascending: false }).limit(20);
@@ -200,7 +227,6 @@ module.exports = async function handler(req, res) {
       const { data, error } = await supabase
         .from('ordonnances').select('*')
         .eq('consultation_id', consultId)
-        .eq('patient_id', patientId)
         .limit(1);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json(data);
@@ -211,7 +237,7 @@ module.exports = async function handler(req, res) {
       const { data, error } = await supabase
         .from('dossier_medical')
         .select('id,patient_id,nom,type_document,mime_type,taille_octets,source,statut,valeur,note,created_at,visible_medecin,resultat_ia,extraction_json')
-        .eq('patient_id', patientId)
+        .eq('patient_id', req.query.for || patientId)
         .eq('statut', 'actif')
         .order('created_at', { ascending: false })
         .limit(100);
@@ -221,7 +247,8 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=appels_offres[&consultation_id=xxx]
     if (req.method === 'GET' && action === 'appels_offres') {
-      let query = supabase.from('appels_offres').select('*').eq('patient_id', patientId);
+      const aoTarget = req.query.for || patientId;
+      let query = supabase.from('appels_offres').select('*').eq('patient_id', aoTarget);
       if (req.query.consultation_id) query = query.eq('consultation_id', req.query.consultation_id);
       if (req.query.statut) query = query.eq('statut', req.query.statut);
       const { data, error } = await query.order('created_at', { ascending: false }).limit(20);
