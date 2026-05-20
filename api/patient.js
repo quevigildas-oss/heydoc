@@ -1,6 +1,7 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.6
+// VERSION : V2.7
+// FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
@@ -358,9 +359,16 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'ordonnance') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const { data: check } = await supabase.from('ordonnances').select('id')
-        .eq('id', id).eq('patient_id', patientId).limit(1);
+      const { data: check } = await supabase.from('ordonnances').select('id,patient_id')
+        .eq('id', id).limit(1);
       if (!check || !check.length) return res.status(403).json({ error: 'Non autorisé' });
+      const ordPatientId = check[0].patient_id;
+      if (ordPatientId !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', ordPatientId)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorisé' });
+      }
       const allowed = ['ao_soumis','statut'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
@@ -373,9 +381,18 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'ao') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const { data: check } = await supabase.from('appels_offres').select('id')
-        .eq('id', id).eq('patient_id', patientId).limit(1);
+      // Vérifier appartenance — patient lui-même OU membre de la famille
+      const { data: check } = await supabase.from('appels_offres').select('id,patient_id')
+        .eq('id', id).limit(1);
       if (!check || !check.length) return res.status(403).json({ error: 'Non autorisé' });
+      const aoPatientId = check[0].patient_id;
+      // Autoriser si : AO du patient lui-même OU AO d'un membre lié par compte_parent_id
+      if (aoPatientId !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', aoPatientId)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorisé' });
+      }
       const allowed = ['statut','code_retrait','pharmacie_selectionnee','pharmacie_tel','date_retrait'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
@@ -388,9 +405,15 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'consultation') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const { data: check } = await supabase.from('consultations').select('id')
-        .eq('id', id).eq('patient_id', patientId).limit(1);
+      const { data: check } = await supabase.from('consultations').select('id,patient_id')
+        .eq('id', id).limit(1);
       if (!check || !check.length) return res.status(403).json({ error: 'Non autorisé' });
+      if (check[0].patient_id !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', check[0].patient_id)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorisé' });
+      }
       // Patient peut seulement écrire ses avis et demander remboursement
       const allowed = ['note_medecin','note_afribot','commentaire_patient','rembourse'];
       const safe = {};
