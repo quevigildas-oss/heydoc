@@ -213,7 +213,7 @@ function renderForm(){
     if(!offres.some(function(o){return o.dispo;})){toast('⚠️ Cochez au moins un médicament disponible');return;}
     try{
       await dbPatch(aoData.supabaseId,{
-        statut:'offre_soumise',
+        statut:'offres_recues',
         date_reponse:new Date().toISOString(),
         disponible_totalite:tousDispos,
         prix_unitaire:offres[0]?offres[0].prix_unitaire:0,
