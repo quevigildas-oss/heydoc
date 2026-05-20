@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.46
+     VERSION : V4.47
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -3897,9 +3897,9 @@ function mettreAJourBadgeOffres(){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var badge=document.getElementById('offresTileBadge');
     var sub=document.getElementById('offresTileSub');
+    var nbAccepte=rows.filter(function(r){return r.statut==='accepte';}).length;
     var nbOffres=rows.filter(function(r){return r.statut==='offres_recues';}).length;
     var nbEnAttente=rows.filter(function(r){return r.statut==='en_attente';}).length;
-    var nbAccepte=rows.filter(function(r){return r.statut==='accepte';}).length;
     if(badge){
       if(nbOffres>0){
         badge.style.display='inline-block';
@@ -5985,10 +5985,8 @@ async function ouvrirOffres(){
     var dejaAccepte=offres.find(function(o){return o.statut==='accepte'&&o.codeRetrait;});
     if(dejaAccepte){
       var shareKey='reload_'+dejaAccepte.codeRetrait;
-      // AO_SESSION_ID set pendant l'envoi — fallback sur le premier ao_id des offres
-  var _firstAoId=toutes&&toutes.length&&toutes[0].aoId?toutes[0].aoId:'';
-  var _aoIdShort=_firstAoId.split('-').pop().toUpperCase();
-  var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():_aoIdShort;
+      var _aoIdShort=dejaAccepte.aoId?dejaAccepte.aoId.split('-').pop().toUpperCase():'';
+      var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():_aoIdShort;
       var tel=dejaAccepte.pharmTel||'';
       SHARE_MSGS[shareKey]='Mon code de retrait Dokita : '+dejaAccepte.codeRetrait+'\nPharmacie : '+dejaAccepte.pharmNom+'\nCommande AO-'+aoNum;
       el.innerHTML=
@@ -6071,7 +6069,6 @@ function trouver2Stops(offres,patLat,patLon){
 
 function renderOffres(complete,stops2,toutes){
   var el=document.getElementById('offresBody');
-  // AO_SESSION_ID set pendant l'envoi — fallback sur le premier ao_id des offres
   var _firstAoId=toutes&&toutes.length&&toutes[0].aoId?toutes[0].aoId:'';
   var _aoIdShort=_firstAoId.split('-').pop().toUpperCase();
   var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():_aoIdShort;
@@ -6215,7 +6212,7 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel){
     try{
       var consultId=existRows.length?existRows[0].consultation_id||'':'';
       if(consultId){
-        var autresR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
+        var autresR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId)+'&for='+encodeURIComponent(PROFILS[SEL]&&PROFILS[SEL].patientId||''));
         var autresData=await autresR.json();
         var autres=Array.isArray(autresData)?autresData:(autresData.data||[]);
         var aAnnuler=autres.filter(function(r){return r.id!==supabaseId&&r.statut!=='annule'&&r.statut!=='livre';});
