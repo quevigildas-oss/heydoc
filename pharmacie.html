@@ -162,9 +162,9 @@ function renderForm(){
       '<div id="prix-fields-'+i+'" style="display:none;">'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'+
           '<div><div style="font-size:11px;color:#aaa;margin-bottom:4px;">BOÎTES</div>'+
-          '<input type="number" id="boites_'+i+'" min="0" value="0" oninput="calcTotal('+i+')" style="width:100%;padding:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:14px;"></div>'+
+          '<input type="number" id="boites_'+i+'" min="0" value="0" oninput="calcTotal('+i+')" style="width:100%;padding:10px;background:#2A2A2A;border:1px solid #4A4A4A;border-radius:6px;color:#FFFFFF;font-size:15px;font-weight:500;"></div>'+
           '<div><div style="font-size:11px;color:#aaa;margin-bottom:4px;">PRIX/BOÎTE (FCFA)</div>'+
-          '<input type="number" id="prix_'+i+'" min="0" value="0" oninput="calcTotal('+i+')" style="width:100%;padding:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:#fff;font-size:14px;"></div>'+
+          '<input type="number" id="prix_'+i+'" min="0" value="0" oninput="calcTotal('+i+')" style="width:100%;padding:10px;background:#2A2A2A;border:1px solid #4A4A4A;border-radius:6px;color:#FFFFFF;font-size:15px;font-weight:500;"></div>'+
         '</div>'+
         '<div><div style="font-size:11px;color:#aaa;margin-bottom:4px;">TOTAL (FCFA)</div>'+
         '<input type="number" id="total_'+i+'" readonly value="0" style="width:100%;padding:8px;background:rgba(0,200,150,.1);border:1px solid rgba(0,200,150,.4);border-radius:6px;color:#00C896;font-size:15px;font-weight:700;"></div>'+
@@ -223,6 +223,21 @@ function renderForm(){
       });
       renderSelectionne();
     }catch(e){toast('⚠️ Erreur: '+e.message);}
+  }
+
+  function renderSelectionne(){
+    document.getElementById('hdrSub').textContent='Offre envoyée';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:24px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">🎯</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Offre soumise !</div>'+
+        '<div style="font-size:13px;color:#aaa;line-height:1.5;">Le patient va recevoir votre offre.<br>Préparez les médicaments si vous êtes sélectionné.</div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-hdr">💊 MÉDICAMENTS À PRÉPARER</div>'+
+        '<div class="card-body">'+getMedsHtml(aoData.meds||[])+'</div>'+
+      '</div>';
   }
 
 window.addEventListener('load',function(){init();});
