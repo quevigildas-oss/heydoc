@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
-<!-- VERSION: V2.2 — 2026-05-21 — Fix ouvrirRefus() manquant + fix renderDejaRepondu apres soumission -->
+<!-- VERSION: V2.3 — 2026-05-21 — Fix renderSelectionne code retrait + confirmerLivraison -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -226,18 +226,25 @@ function renderForm(){
   }
 
   function renderSelectionne(){
-    document.getElementById('hdrSub').textContent='Offre envoyée';
+    document.getElementById('hdrSub').textContent='Vous avez ete selectionne';
+    var code=aoData.codeRetrait||'------';
     document.getElementById('mainContent').innerHTML=
       getAoBadge()+
       '<div class="card" style="text-align:center;padding:24px;">'+
-        '<div style="font-size:48px;margin-bottom:12px;">🎯</div>'+
-        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Offre soumise !</div>'+
-        '<div style="font-size:13px;color:#aaa;line-height:1.5;">Le patient va recevoir votre offre.<br>Préparez les médicaments si vous êtes sélectionné.</div>'+
+        '<div style="font-size:48px;margin-bottom:12px;">🎉</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Vous avez ete selectionne !</div>'+
+        '<div style="font-size:13px;color:#aaa;margin-bottom:16px;">Le patient va se presenter avec un code de retrait.</div>'+
+        '<div style="background:#E8F5F2;border:2px solid #0A7E6A;border-radius:12px;padding:16px;">'+
+          '<div style="font-size:10px;color:#0A7E6A;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Code de retrait patient</div>'+
+          '<div style="font-family:monospace;font-size:32px;font-weight:900;color:#0A7E6A;letter-spacing:8px;">'+code+'</div>'+
+          '<div style="font-size:11px;color:#6B7280;margin-top:8px;">Verifiez ce code quand le patient se presente</div>'+
+        '</div>'+
       '</div>'+
       '<div class="card">'+
-        '<div class="card-hdr">💊 MÉDICAMENTS À PRÉPARER</div>'+
+        '<div class="card-hdr">💊 MÉDICAMENTS À PREPARER</div>'+
         '<div class="card-body">'+getMedsHtml(aoData.meds||[])+'</div>'+
-      '</div>';
+      '</div>'+
+      '<button onclick="confirmerLivraison()" class="btn-submit" style="margin-top:4px;">✅ Medicaments remis au patient</button>';
   }
 
   function renderDejaRepondu(){
@@ -323,6 +330,16 @@ async function confirmerRefus(){
       date_reponse:new Date().toISOString()
     });
     renderIndisponible(raison);
+  }catch(e){toast('Erreur: '+e.message);}
+}
+
+async function confirmerLivraison(){
+  try{
+    await dbPatch(aoData.supabaseId,{
+      statut:'livre',
+      date_validation:new Date().toISOString()
+    });
+    renderLivre();
   }catch(e){toast('Erreur: '+e.message);}
 }
 
