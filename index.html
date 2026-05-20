@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.44
+     VERSION : V4.45
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -824,7 +824,7 @@ select.finput option{background:var(--bg3);}
   <div class="hdr">
     <div class="hdr-back" onclick="nav('espaceProfilScreen')">←</div>
     <div class="hdr-ico" style="background:rgba(245,158,11,.2);">🏪</div>
-    <div style="flex:1"><div class="hdr-title">Offres Dokita</div><div class="hdr-sub" id="offresSub">Meilleures offres pharmacies</div></div>
+    <div style="flex:1"><div class="hdr-title">Offres Dokita</div><div class="hdr-sub" id="offresSub">💊 Vos médicaments au meilleur prix — partenaires Dokitrust</div></div>
     <div onclick="nav('accueilScreen')" title="Accueil" style="width:36px;height:36px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;">🏠</div>
   </div>
   <div class="sbody" id="offresBody">
@@ -5883,11 +5883,11 @@ async function ouvrirOffres(){
   var p=PROFILS[SEL];
   if(!p){el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">Sélectionnez un profil</div>';return;}
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=appels_offres');
+    var r=await fetchAPI(API_URL+'/patient?action=appels_offres'+(p.patientId?'&for='+encodeURIComponent(p.patientId):''));
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){
-      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.<br><br><span style="font-size:12px;">Les offres apparaissent après avoir utilisé<br>"💊 Vos médicaments au meilleur prix" sur une ordonnance.</span></div>';
+      el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);">📭 Aucune offre disponible.</div>';
       return;
     }
     var offres=rows.map(function(row){
