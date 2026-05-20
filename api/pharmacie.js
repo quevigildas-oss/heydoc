@@ -1,6 +1,7 @@
 // api/pharmacie.js
 // Endpoints pharmacie — authentification par token AO (ao_id dans l'URL)
-// VERSION : V1.0
+// VERSION : V1.1
+// ADD     : whitelist prix_unitaire, quantite_boites, total_fcfa, medicaments_offre, disponible_totalite
 // DATE    : 2026-05-19
 // NOTES   : Pas de JWT — la pharmacie s'authentifie via l'ao_id unique dans le lien WhatsApp
 //           Utilise service_role (via _lib/supabase.js) pour bypasser RLS
@@ -49,7 +50,9 @@ module.exports = async function handler(req, res) {
 
       const allowed = [
         'statut', 'date_reponse', 'date_validation',
-        'raison_indisponibilite', 'alerte_stock', 'code_retrait'
+        'raison_indisponibilite', 'alerte_stock', 'code_retrait',
+        'disponible_totalite', 'prix_unitaire', 'quantite_boites',
+        'quantite_comprimes', 'total_fcfa', 'medicaments_offre'
       ];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
