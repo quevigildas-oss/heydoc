@@ -1,13 +1,13 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.7
+// VERSION : V2.8
 // FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
-// DATE    : 2026-05-12
+// DATE    : 2026-05-21
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (profil, profils_famille, consultations,
 //                        examens, ordonnances, dossier, appels_offres, PATCH profil,
@@ -277,10 +277,18 @@ module.exports = async function handler(req, res) {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
       const { data, error } = await supabase
-        .from('appels_offres').select('*')
-        .eq('id', id).eq('patient_id', patientId).single();
+        .from('appels_offres').select('*').eq('id', id).limit(1);
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json(data);
+      if (!data || !data.length) return res.status(404).json({ error: 'AO introuvable' });
+      const ao = data[0];
+      // Vérifier appartenance : patient lui-même OU membre famille (compte_parent_id)
+      if (ao.patient_id !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', ao.patient_id)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorise' });
+      }
+      return res.status(200).json([ao]); // tableau pour compatibilite choisirOffre
     }
 
     // GET /api/patient?action=rdv
