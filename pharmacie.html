@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
-<!-- VERSION: V2.1 — 2026-05-20 — Formulaire offre avec prix/quantités -->
+<!-- VERSION: V2.2 — 2026-05-21 — Fix ouvrirRefus() manquant + fix renderDejaRepondu apres soumission -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -221,7 +221,7 @@ function renderForm(){
         total_fcfa:totalGeneral,
         medicaments_offre:JSON.stringify(offres)
       });
-      renderSelectionne();
+      renderDejaRepondu();
     }catch(e){toast('⚠️ Erreur: '+e.message);}
   }
 
@@ -284,6 +284,47 @@ function renderForm(){
       '</div>';
   }
 
+
+function ouvrirRefus(){
+  var raisons=[
+    'Rupture de stock',
+    'Medicament non reference',
+    'Stock insuffisant pour la quantite',
+    'Medicament perime',
+    'Approvisionnement en cours'
+  ];
+  var opts=raisons.map(function(r,i){
+    return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;margin-bottom:8px;">'+
+      '<input type="radio" name="raison_refus" value="'+escHtml(r)+'" style="accent-color:#dc2626;">'+
+      '<span style="font-size:13px;color:#1A2B3C;">'+escHtml(r)+'</span>'+
+    '</label>';
+  }).join('');
+  document.getElementById('mainContent').innerHTML=
+    getAoBadge()+
+    '<div class="card">'+
+      '<div class="card-hdr" style="background:#dc2626;">📦 MOTIF D\'INDISPONIBILITE</div>'+
+      '<div class="card-body">'+
+        '<div style="font-size:13px;color:#6B7280;margin-bottom:14px;">Selectionnez la raison :</div>'+
+        opts+
+        '<button onclick="confirmerRefus()" class="btn-danger" style="margin-top:8px;">Confirmer l\'indisponibilite</button>'+
+        '<button onclick="renderForm()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:#6B7280;cursor:pointer;margin-top:6px;">Annuler — retour</button>'+
+      '</div>'+
+    '</div>';
+}
+
+async function confirmerRefus(){
+  var sel=document.querySelector('input[name="raison_refus"]:checked');
+  if(!sel){toast('Selectionnez une raison');return;}
+  var raison=sel.value;
+  try{
+    await dbPatch(aoData.supabaseId,{
+      statut:'indisponible',
+      raison_indisponibilite:raison,
+      date_reponse:new Date().toISOString()
+    });
+    renderIndisponible(raison);
+  }catch(e){toast('Erreur: '+e.message);}
+}
 
 window.addEventListener('load',function(){init();});
 
