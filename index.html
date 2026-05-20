@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.45
+     VERSION : V4.46
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -5892,13 +5892,22 @@ async function ouvrirOffres(){
     }
     var offres=rows.map(function(row){
       var offreItems=[];
-      try{if(row.offre_json){
-        var parsed=typeof row.offre_json==='string'?JSON.parse(row.offre_json):row.offre_json;
-        offreItems=parsed.map(function(item){
-          var total=item.total||(item.boites&&item.prixUnitaire?item.boites*item.prixUnitaire:0)||0;
-          return {medicament:item.medicament||'',disponible:item.disponible||false,boites:item.boites||0,prixUnitaire:item.prixUnitaire||0,total:total};
-        });
-      }}catch(e){}
+      try{
+        var rawOffre=row.medicaments_offre||row.offre_json||null;
+        if(rawOffre){
+          var parsed=typeof rawOffre==='string'?JSON.parse(rawOffre):rawOffre;
+          offreItems=parsed.map(function(item){
+            var total=item.total||(item.boites&&item.prix_unitaire?item.boites*item.prix_unitaire:0)||(item.boites&&item.prixUnitaire?item.boites*item.prixUnitaire:0)||0;
+            return {
+              medicament:item.nom||item.medicament||'',
+              disponible:item.dispo!==undefined?item.dispo:(item.disponible||false),
+              boites:item.boites||0,
+              prixUnitaire:item.prix_unitaire||item.prixUnitaire||0,
+              total:total
+            };
+          });
+        }
+      }catch(e){dbgWarn('offre parse: '+e.message);}
       var pharmNom=row.pharmacie_nom||'';
       var pharmaInfo=ETABLISSEMENTS.find(function(ph){return ph.nom===pharmNom;})||null;
       return {
@@ -5976,7 +5985,10 @@ async function ouvrirOffres(){
     var dejaAccepte=offres.find(function(o){return o.statut==='accepte'&&o.codeRetrait;});
     if(dejaAccepte){
       var shareKey='reload_'+dejaAccepte.codeRetrait;
-      var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():'';
+      // AO_SESSION_ID set pendant l'envoi — fallback sur le premier ao_id des offres
+  var _firstAoId=toutes&&toutes.length&&toutes[0].aoId?toutes[0].aoId:'';
+  var _aoIdShort=_firstAoId.split('-').pop().toUpperCase();
+  var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():_aoIdShort;
       var tel=dejaAccepte.pharmTel||'';
       SHARE_MSGS[shareKey]='Mon code de retrait Dokita : '+dejaAccepte.codeRetrait+'\nPharmacie : '+dejaAccepte.pharmNom+'\nCommande AO-'+aoNum;
       el.innerHTML=
@@ -6059,7 +6071,10 @@ function trouver2Stops(offres,patLat,patLon){
 
 function renderOffres(complete,stops2,toutes){
   var el=document.getElementById('offresBody');
-  var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():'';
+  // AO_SESSION_ID set pendant l'envoi — fallback sur le premier ao_id des offres
+  var _firstAoId=toutes&&toutes.length&&toutes[0].aoId?toutes[0].aoId:'';
+  var _aoIdShort=_firstAoId.split('-').pop().toUpperCase();
+  var aoNum=AO_SESSION_ID?AO_SESSION_ID.slice(0,8).toUpperCase():_aoIdShort;
   var html=
 
     // Bannière AO numéro
