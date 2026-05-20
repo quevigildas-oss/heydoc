@@ -16,6 +16,7 @@
     { "source": "/api/save", "destination": "/api/save.js" },
     { "source": "/api/rag", "destination": "/api/rag.js" },
     { "source": "/api/extract-examen", "destination": "/api/extract-examen.js" },
-    { "source": "/admin", "destination": "/admin.html" }
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/pharmacie", "destination": "/pharmacie.html" }
   ]
 }
