@@ -240,6 +240,51 @@ function renderForm(){
       '</div>';
   }
 
+  function renderDejaRepondu(){
+    document.getElementById('hdrSub').textContent='En attente du patient';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:32px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">⏳</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Offre soumise</div>'+
+        '<div style="font-size:13px;color:#aaa;line-height:1.6;">Votre offre a bien été enregistrée.<br>En attente du choix du patient.<br>Vous serez notifié si vous êtes sélectionné.</div>'+
+      '</div>';
+  }
+
+  function renderAnnule(){
+    document.getElementById('hdrSub').textContent='Commande non attribuée';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:32px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">❌</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Non sélectionné</div>'+
+        '<div style="font-size:13px;color:#aaa;line-height:1.6;">Le patient a choisi une autre pharmacie.<br>Merci pour votre participation.</div>'+
+      '</div>';
+  }
+
+  function renderLivre(){
+    document.getElementById('hdrSub').textContent='Commande livrée';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:32px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">✅</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Médicaments remis</div>'+
+        '<div style="font-size:13px;color:#aaa;">Commande clôturée avec succès.</div>'+
+      '</div>';
+  }
+
+  function renderIndisponible(raison){
+    document.getElementById('hdrSub').textContent='Indisponible';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:32px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">📦</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Médicament indisponible</div>'+
+        '<div style="font-size:13px;color:#aaa;">'+(raison||'Stock insuffisant')+'</div>'+
+      '</div>';
+  }
+
+
 window.addEventListener('load',function(){init();});
 
 
