@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.47
+     VERSION : V4.48
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6510,8 +6510,10 @@ async function aoTermine(){
       }catch(e){dbg('ao_soumis patch err: '+e.message);}
     }
     toast('✅ '+envoyes.length+' pharmacie(s) contactée(s) — 15 min pour répondre');
-    var btn=document.querySelector('button[onclick*="lancerAppelOffre"]');
-    if(btn)btn.outerHTML='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres (15 min)</div>';
+    // Désactiver tous les boutons lancerAppelOffre présents à l'écran
+    document.querySelectorAll('button[onclick*="lancerAppelOffre"],button[onclick*="lancerAppelOffre"]').forEach(function(btn){
+      btn.outerHTML='<div class="ao-statut-attente" style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
+    });
     mettreAJourBadgeOffres();
 
     // ── Timer fallback 15min (modèle Uber) ──
@@ -6865,12 +6867,27 @@ async function voirOrdonnanceHisto(i){
   document.getElementById('ordDetailSub').textContent=dateAff;
 
   // Bouton Moins cher selon statut AO
+  // ════════════════════════════════════════════════════════════════════
+  // TODO (après intégration WhatsApp Business API) :
+  // Remplacer lancerAppelOffre() par envoi direct sans modal.
+  // 5 états non cliquables sauf état initial :
+  //   '' (rien envoyé)  → bouton actif  : "💊 Vos médicaments au meilleur prix"
+  //                        onclick → envoi direct aux 3 pharmacies + ao_soumis=true
+  //   'en_attente'      → statut passif : "⏳ En attente des offres"
+  //   'offres_recues'   → statut passif : "📬 Offres reçues — voir Offres Dokita"
+  //   'accepte'         → statut passif : "🏪 En cours de retrait"
+  //   'livre'           → statut passif : "✅ Médicaments retirés"
+  // Garder ci-dessous le fonctionnement actuel (modal 3 liens WhatsApp)
+  // jusqu'à l'implémentation WhatsApp Business.
+  // ════════════════════════════════════════════════════════════════════
   var btnMoinsCher='';
   if(aoStatut==='livre'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Retrait effectué</div>';
   } else if(aoStatut==='accepte'||aoStatut==='en_livraison'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
-  } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
+  } else if(aoStatut==='offres_recues'){
+    btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">📬 Offres reçues — voir Offres Dokita</div>';
+  } else if(aoStatut==='en_attente'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
   } else if(aoStatut==='annule'){
     // Si ao_soumis=true → une pharmacie avait accepté, ne pas relancer
