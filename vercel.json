@@ -1,22 +1,6 @@
 {
-  "version": 2,
-  "functions": {
-    "api/*.js": {
-      "memory": 512,
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
-    { "source": "/api/auth", "destination": "/api/auth.js" },
-    { "source": "/api/patient", "destination": "/api/patient.js" },
-    { "source": "/api/medecin", "destination": "/api/medecin.js" },
-    { "source": "/api/documents", "destination": "/api/documents.js" },
-    { "source": "/api/pharmacie", "destination": "/api/pharmacie.js" },
-    { "source": "/api/db", "destination": "/api/db.js" },
-    { "source": "/api/save", "destination": "/api/save.js" },
-    { "source": "/api/rag", "destination": "/api/rag.js" },
-    { "source": "/api/extract-examen", "destination": "/api/extract-examen.js" },
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/pharmacie", "destination": "/pharmacie.html" }
+    { "source": "/pharmacie", "destination": "/pharmacie.html" },
+    { "source": "/admin",     "destination": "/admin.html" }
   ]
 }

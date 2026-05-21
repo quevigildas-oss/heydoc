@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA ADMIN — Interface saisie livraisons LABOREX
-     VERSION : V1.0
-     DATE    : 2026-04-29
+     VERSION : V1.1
+     DATE    : 2026-05-21 — Migration JWT admin
      ACCÈS   : Protégé par mot de passe admin
 ============================================ -->
 <html lang="fr">
@@ -150,9 +150,14 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
 <div class="toast" id="toast"></div>
 
 <script>
-var DB_URL='https://heydoc-medecin.vercel.app/api/db';
-var DOKITA_KEY='dk-2026-prod-x9f7m';
-var ADMIN_PWD='dokita-admin-2026'; // ⚠️ À changer avant go-live
+var ADMIN_URL='/api/admin';
+var ADMIN_PWD='dokita-admin-2026'; // mot de passe local dev — remplacé par env var ADMIN_PWD sur Vercel
+
+function fetchAdmin(url, opts){
+  opts=opts||{};
+  opts.headers=Object.assign({'Content-Type':'application/json','x-admin-token':ADMIN_PWD},opts.headers||{});
+  return fetch(url, opts);
+}
 var ETABLISSEMENTS=[];
 var MED_IDX=0;
 var MEDS_IDX_LIST=[];
@@ -194,7 +199,7 @@ async function init(){
 
 async function chargerEtablissements(){
   try{
-    var r=await fetch(DB_URL+'?table=etablissements&filter=type=eq.pharmacie&order=nom.asc&limit=100',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var r=await fetchAdmin(ADMIN_URL+'?action=pharmacies');
     var data=await r.json();
     ETABLISSEMENTS=Array.isArray(data)?data:(data.data||[]);
     var sel=document.getElementById('pharmSelect');
@@ -291,9 +296,8 @@ async function enregistrerLivraison(){
   for(var i=0;i<meds.length;i++){
     var m=meds[i];
     try{
-      var r=await fetch(DB_URL+'?table=stock_pharmacie',{
+      var r=await fetchAdmin(ADMIN_URL+'?action=stock',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
         body:JSON.stringify({
           pharmacie_id:pharmId,
           pharmacie_nom:pharmNom,
@@ -331,7 +335,7 @@ async function chargerReconciliation(){
   var el=document.getElementById('reconcContent');
   el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);">⏳ Chargement...</div>';
   try{
-    var r=await fetch(DB_URL+'?table=vw_reconciliation_stock&order=pct_hors_dokita.desc.nullslast&limit=200',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var r=await fetchAdmin(ADMIN_URL+'?action=reconciliation');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Aucune donnée</div>';return;}
@@ -367,7 +371,7 @@ async function chargerHistorique(){
   var el=document.getElementById('histContent');
   el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);">⏳ Chargement...</div>';
   try{
-    var r=await fetch(DB_URL+'?table=stock_pharmacie&order=created_at.desc&limit=200',{headers:{'x-dokita-key':DOKITA_KEY}});
+    var r=await fetchAdmin(ADMIN_URL+'?action=historique');
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Aucune livraison</div>';return;}
