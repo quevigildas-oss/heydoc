@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.50
+     VERSION : V4.51
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6901,10 +6901,10 @@ async function voirOrdonnanceHisto(i){
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length){
-      var priorite=['livre','accepte','en_livraison','offres_recues','annule'];
-      if(aoSoumis)priorite.splice(4,0,'en_attente');
+      // Si des AOs existent → ils ont été envoyés — en_attente toujours dans la liste
+      var priorite=['livre','accepte','en_livraison','offres_recues','en_attente','annule'];
       var statuts=aoRows.map(function(r){return r.statut||'';});
-      aoStatut=priorite.find(function(p){return statuts.includes(p);})||'';
+      aoStatut=priorite.find(function(p){return statuts.includes(p);})||'en_attente';
     }
     dbg('aoStatut: '+aoStatut+' supabase ao_soumis:'+aoSoumis);
   }catch(e){}
