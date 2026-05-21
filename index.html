@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.51
+     VERSION : V4.52
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6534,7 +6534,8 @@ async function aoTermine(){
 
 async function checkAOAccepted(consultId){
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId));
+    var curPatId=(PROFILS[SEL]&&PROFILS[SEL].patientId)||'';
+    var r=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId)+(curPatId?'&for='+encodeURIComponent(curPatId):''));
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     return rows.length>0;
@@ -6897,7 +6898,8 @@ async function voirOrdonnanceHisto(i){
   var aoStatut='';
   var aoSoumis=!!(s.ordonnance&&s.ordonnance.ao_soumis)||false;
   try{
-    var aoR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+s.supabaseId);
+    var aoPatId=s.patientId||(PROFILS[SEL]&&PROFILS[SEL].patientId)||'';
+    var aoR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+s.supabaseId+(aoPatId?'&for='+encodeURIComponent(aoPatId):''));
     var aoData=await aoR.json();
     var aoRows=Array.isArray(aoData)?aoData:(aoData.data||[]);
     if(aoRows.length){
