@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.48
+     VERSION : V4.49
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6249,6 +6249,8 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel){
 
 async function lancerAppelOffre(i){
   var s=HISTO_CACHE[i];if(!s||!s.ordonnance)return;
+  // Guard : si ao_soumis déjà true → ne pas ouvrir le modal
+  if(s.ordonnance.ao_soumis){toast('AO déjà envoyés pour cette ordonnance');return;}
   var ord=s.ordonnance;
   var medsStructures=(ord.medsRaw||[]).concat((ord.medsAldRaw||[]).map(function(m){return Object.assign({},m,{ald:true});}));
   var meds=medsStructures.length?medsStructures:ord.medicaments||[];
@@ -6503,6 +6505,12 @@ async function aoTermine(){
   AO_ITEMS.forEach(function(a){if(a.statut==='attente')a.statut='ignore';});
 
   if(envoyes.length>0){
+    // Marquer ao_soumis dans HISTO_CACHE immédiatement (guard local)
+    if(HISTO_CACHE){
+      HISTO_CACHE.forEach(function(s){
+        if(s&&s.ordonnance&&s.supabaseId===AO_SESSION_ID)s.ordonnance.ao_soumis=true;
+      });
+    }
     // Marquer ao_soumis dans Supabase
     if(AO_SESSION_ID){
       try{
