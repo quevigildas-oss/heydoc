@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA ADMIN — Interface saisie livraisons LABOREX
-     VERSION : V1.1
+     VERSION : V1.2
      DATE    : 2026-05-21 — Migration JWT admin
      ACCÈS   : Protégé par mot de passe admin
 ============================================ -->
@@ -166,17 +166,29 @@ function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.s
 function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ── AUTH ──
-function checkLogin(){
+async function checkLogin(){
   var pwd=(document.getElementById('adminPwd').value||'');
-  if(pwd===ADMIN_PWD){
-    document.getElementById('loginScreen').style.display='none';
-    document.getElementById('adminApp').style.display='block';
-    sessionStorage.setItem('dk_admin','1');
-    init();
-  } else {
+  if(!pwd)return;
+  // Vérification côté serveur — ADMIN_PWD est dans les env vars Vercel
+  try{
+    var r=await fetch(ADMIN_URL+'?action=ping',{
+      headers:{'Content-Type':'application/json','x-admin-token':pwd}
+    });
+    if(r.ok){
+      ADMIN_PWD=pwd; // stocker pour les appels suivants
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('adminApp').style.display='block';
+      sessionStorage.setItem('dk_admin','1');
+      sessionStorage.setItem('dk_admin_pwd',pwd);
+      init();
+    } else {
+      var err=document.getElementById('loginErr');
+      if(err)err.style.display='block';
+      document.getElementById('adminPwd').value='';
+    }
+  }catch(e){
     var err=document.getElementById('loginErr');
-    err.style.display='block';
-    document.getElementById('adminPwd').value='';
+    if(err)err.style.display='block';
   }
 }
 function doLogout(){
@@ -186,6 +198,7 @@ function doLogout(){
 }
 document.getElementById('adminPwd').addEventListener('keydown',function(e){if(e.key==='Enter')checkLogin();});
 if(sessionStorage.getItem('dk_admin')==='1'){
+  ADMIN_PWD=sessionStorage.getItem('dk_admin_pwd')||ADMIN_PWD;
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('adminApp').style.display='block';
   window.addEventListener('DOMContentLoaded',init);
