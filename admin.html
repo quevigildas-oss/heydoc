@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA ADMIN — Interface saisie livraisons LABOREX
-     VERSION : V1.2
+     VERSION : V1.3
      DATE    : 2026-05-21 — Migration JWT admin
      ACCÈS   : Protégé par mot de passe admin
 ============================================ -->
@@ -103,10 +103,15 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
       </div>
 
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <div class="sec-title" style="margin-bottom:0;">Médicaments livrés</div>
-          <button class="btn-secondary" onclick="ajouterMed()">＋ Ajouter</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-secondary" id="btnImportBL" onclick="document.getElementById('blFileInput').click()" style="background:rgba(0,200,150,.08);border-color:rgba(0,200,150,.3);color:var(--accent);">📄 Importer BL</button>
+            <button class="btn-secondary" onclick="ajouterMed()">＋ Ajouter</button>
+          </div>
         </div>
+        <div id="blImportStatus" style="display:none;background:rgba(0,200,150,.06);border:1px solid rgba(0,200,150,.2);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);">⏳ Extraction en cours...</div>
+        <input type="file" id="blFileInput" accept=".pdf,image/*" style="display:none;" onchange="importerBonLivraison(this)"/>
         <div id="medsList"></div>
         <div id="emptyMeds" style="text-align:center;padding:20px;color:var(--text3);font-size:13px;">Aucun médicament — cliquez sur ＋ Ajouter</div>
       </div>
@@ -166,6 +171,101 @@ function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.s
 function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ── AUTH ──
+// ── IMPORT BON DE LIVRAISON VIA CLAUDE API ──
+async function importerBonLivraison(input){
+  var file=input.files[0];
+  if(!file){return;}
+  input.value=''; // reset pour permettre re-upload
+
+  var status=document.getElementById('blImportStatus');
+  var btnImport=document.getElementById('btnImportBL');
+  status.style.display='block';
+  status.textContent='⏳ Lecture du document...';
+  btnImport.disabled=true;
+
+  try{
+    // Lire le fichier en base64
+    var base64=await new Promise(function(resolve,reject){
+      var reader=new FileReader();
+      reader.onload=function(e){resolve(e.target.result.split(',')[1]);};
+      reader.onerror=reject;
+      reader.readAsDataURL(file);
+    });
+
+    var mediaType=file.type||'application/pdf';
+    var isImage=mediaType.startsWith('image/');
+
+    status.textContent='⏳ Extraction IA en cours...';
+
+    // Appel Claude API
+    var payload={
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      messages:[{
+        role:'user',
+        content:[
+          isImage
+            ?{type:'image',source:{type:'base64',media_type:mediaType,data:base64}}
+            :{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},
+          {type:'text',text:'Extrait les infos de ce bon de livraison. Reponds UNIQUEMENT en JSON brut sans markdown: {"reference":"num BL ou null","date":"YYYY-MM-DD ou null","medicaments":[{"nom":"nom+dosage","quantite":0,"prix_unitaire":0}]}. Si absent: null ou 0.'}
+        ]
+      }]
+    };
+
+    var resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+
+    if(!resp.ok)throw new Error('API Claude '+resp.status);
+    var apiData=await resp.json();
+    var rawText=(apiData.content&&apiData.content[0]&&apiData.content[0].text)||'';
+
+    // Parser le JSON retourné
+    var extracted;
+    try{extracted=JSON.parse(rawText.trim());}
+    catch(e){throw new Error('JSON invalide: '+rawText.substring(0,100));}
+
+    // Pré-remplir référence et date
+    if(extracted.reference){
+      document.getElementById('bonRef').value=extracted.reference;
+    }
+    if(extracted.date){
+      document.getElementById('dateLivraison').value=extracted.date;
+    }
+
+    // Effacer les médicaments existants
+    MEDS_IDX_LIST.slice().forEach(function(i){suppMed(i);});
+
+    // Ajouter les médicaments extraits
+    var meds=extracted.medicaments||[];
+    if(!meds.length)throw new Error('Aucun médicament trouvé dans le document');
+
+    meds.forEach(function(m){
+      ajouterMed();
+      var last=MEDS_IDX_LIST[MEDS_IDX_LIST.length-1];
+      if(document.getElementById('mN_'+last))document.getElementById('mN_'+last).value=m.nom||'';
+      if(document.getElementById('mQ_'+last))document.getElementById('mQ_'+last).value=m.quantite||0;
+      if(document.getElementById('mP_'+last))document.getElementById('mP_'+last).value=m.prix_unitaire||0;
+    });
+
+    majResume();
+    status.style.background='rgba(0,200,150,.06)';
+    status.style.borderColor='rgba(0,200,150,.2)';
+    status.style.color='var(--accent)';
+    status.textContent='✅ '+meds.length+' médicament(s) extrait(s) — Vérifiez et corrigez si nécessaire';
+
+  }catch(e){
+    status.style.background='rgba(239,68,68,.06)';
+    status.style.borderColor='rgba(239,68,68,.2)';
+    status.style.color='var(--danger)';
+    status.textContent='❌ Erreur : '+e.message;
+  }finally{
+    btnImport.disabled=false;
+  }
+}
+
 async function checkLogin(){
   var pwd=(document.getElementById('adminPwd').value||'');
   if(!pwd)return;
