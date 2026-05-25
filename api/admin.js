@@ -1,6 +1,6 @@
 // ============================================
 // DOKITA ADMIN API — api/admin.js
-// VERSION : V1.1 — 2026-05-21
+// VERSION : V1.2 — 2026-05-21
 // Auth    : x-admin-token vérifié contre env ADMIN_PWD
 // ============================================
 import { createClient } from '@supabase/supabase-js';
@@ -23,6 +23,11 @@ export default async function handler(req, res) {
   }
 
   const action = req.query.action;
+
+  // Route ping — juste vérifier que le token est valide
+  if (req.method === 'GET' && action === 'ping') {
+    return res.status(200).json({ ok: true });
+  }
 
   if (req.method === 'GET' && action === 'pharmacies') {
     const { data, error } = await supabase
