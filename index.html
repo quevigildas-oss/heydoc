@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.52
+     VERSION : V4.53
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6285,19 +6285,15 @@ async function lancerAppelOffre(i){
 
 async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
 
-  // ── Nouvelle sélection : stock Supabase + proximité ──
   var medsObj=meds.map(function(m){return typeof m==='string'?{nom:m}:m;});
   var medsNoms=medsObj.map(function(m){return (m.nom||'').toLowerCase();});
 
-  // 1. Charger le stock depuis Supabase pour les médicaments demandés
+  // ── Charger stock Supabase ──
   var stockParPharma={};
   try{
     var rStock=await fetch(API_URL+'/patient?action=stock');
     var dStock=await rStock.json();
-    var stockRows=Array.isArray(dStock)?dStock:(dStock.data||[]);
-
-    // Calculer stock disponible théorique par pharmacie pour les médicaments demandés
-    stockRows.forEach(function(row){
+    (Array.isArray(dStock)?dStock:(dStock.data||[])).forEach(function(row){
       var medNom=(row.medicament||'').toLowerCase();
       var match=medsNoms.some(function(n){return medNom.includes(n)||n.includes(medNom.split(' ')[0]);});
       if(!match)return;
@@ -6307,80 +6303,121 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
       if(!stockParPharma[pid])stockParPharma[pid]={nom:row.pharmacie_nom,stock:0};
       stockParPharma[pid].stock+=dispo;
     });
-    dbg('Stock Supabase chargé: '+Object.keys(stockParPharma).length+' pharmacies avec stock');
-  }catch(e){
-    dbgWarn('Stock Supabase err: '+e.message+' — fallback ETABLISSEMENTS');
-  }
+  }catch(e){dbgWarn('Stock err: '+e.message);}
 
-  // 2. Filtrer les pharmacies du réseau avec numéro WhatsApp valide
+  // ── Sélectionner 3 meilleures pharmacies ──
   var pharmacies=ETABLISSEMENTS.filter(function(p){
     if(p.type!=='pharmacie'||!p.accepte_ao)return false;
-    var num=(p.tel||'').replace(/\D/g,'');
-    return num.length>=8;
+    return (p.tel||'').replace(/\D/g,'').length>=8;
   });
-
-  // 3. Scorer chaque pharmacie : stock théorique + proximité
   pharmacies.forEach(function(p){
     var pid=p.id||p.nom;
-    var stockInfo=stockParPharma[pid]||stockParPharma[p.nom]||null;
-    p._stockScore=stockInfo?stockInfo.stock:0;
+    p._stockScore=(stockParPharma[pid]||stockParPharma[p.nom]||{stock:0}).stock;
     p._dist=(lat&&lon&&p.lat&&p.lon)?distKm(lat,lon,p.lat,p.lon):999;
   });
-
-  // 4. Trier : d'abord celles avec du stock, puis par distance
   pharmacies.sort(function(a,b){
     if(b._stockScore!==a._stockScore)return b._stockScore-a._stockScore;
     return a._dist-b._dist;
   });
-
-  // 5. Prendre les 3 meilleures
   var proches=pharmacies.slice(0,3);
+  if(!proches.length){toast('Aucune pharmacie partenaire disponible');return;}
 
-  if(!proches.length){
-    toast('Aucune pharmacie partenaire disponible');return;
+  // ── Initialiser AO_SESSION ──
+  AO_SESSION_ID=s.supabaseId||s.id||'';
+  AO_SESSION_S=s;
+
+  // ── Insérer les AOs en base ──
+  var insertedPharmacies=[];
+  for(var pi=0;pi<proches.length;pi++){
+    var ph=proches[pi];
+    var aoId=ph.id+'-'+AO_SESSION_ID.slice(0,8);
+    try{
+      var patId=(PROFILS[SEL]&&PROFILS[SEL].patientId)||'';
+      var rIns=await fetchAPI(API_URL+'/patient?action=ao'+(patId?'&for='+encodeURIComponent(patId):''),{
+        method:'POST',
+        body:JSON.stringify({
+          ao_id:aoId,
+          consultation_id:AO_SESSION_ID,
+          patient_id:patId,
+          pharmacie_nom:ph.nom,
+          pharmacie_tel:ph.tel,
+          medicaments:medsObj,
+          statut:'en_attente',
+          stock_theorique:ph._stockScore,
+          rayon_km:rayon,
+          patient_lat:lat,
+          patient_lng:lon,
+          date_envoi:new Date().toISOString()
+        })
+      });
+      insertedPharmacies.push({
+        id:ph.id, nom:ph.nom,
+        telephone:ph.tel,
+        ao_id:aoId
+      });
+    }catch(e){dbgWarn('INSERT AO err ('+ph.nom+'): '+e.message);}
   }
 
-  dbg('Pharmacies sélectionnées: '+proches.map(function(p){return p.nom+' (stock:'+p._stockScore+')';}).join(', '));
+  if(!insertedPharmacies.length){toast('Erreur insertion AOs');return;}
 
-  // Préparer le texte des médicaments
-  var medsStr=medsObj.map(function(m,idx){
-    var l=(idx+1)+'. '+(m.nom||'');
-    if(m.dose)l+=' '+m.dose;
-    if(m.poso)l+=' — '+m.poso;
-    return l;
-  }).join('\n');
+  // ── Envoyer WhatsApp via api/whatsapp ──
+  toast('⏳ Envoi WhatsApp en cours...');
+  var envoyes=0;
+  try{
+    var rWA=await fetchAPI(API_URL+'/whatsapp?action=envoyer_ao',{
+      method:'POST',
+      body:JSON.stringify({
+        pharmacies:insertedPharmacies,
+        ordonnance:{medicaments:medsObj},
+        patient:{prenom:PROFILS[SEL]&&PROFILS[SEL].prenom||''},
+        ao_url_base:PHARMA_URL
+      })
+    });
+    var dWA=await rWA.json();
+    envoyes=dWA.envoyes||0;
+    dbg('WhatsApp envoyés: '+envoyes+'/'+insertedPharmacies.length);
+  }catch(e){dbgWarn('WhatsApp err: '+e.message);}
 
-  // Initialiser état global AO
-  AO_SESSION_ID=s.supabaseId||s.id||'';
-  AO_ITEMS=proches.map(function(ph){
-    var aoId=ph.id+'-'+AO_SESSION_ID.slice(0,8);
-    var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 15 min.';
-    return {
-      aoId:aoId,
-      nom:ph.nom,
-      tel:ph.tel,
-      stockScore:ph._stockScore,
-      url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg),
-      statut:'attente',
-      supabaseId:null,
-      data:{
-        ao_id:aoId,
-        consultation_id:AO_SESSION_ID,
-        patient_id:(PROFILS[SEL]&&PROFILS[SEL].patientId)||SESSION_PATIENT_ID||'',
-        pharmacie_nom:ph.nom,
-        pharmacie_tel:ph.tel,
-        medicaments:medsObj,
-        statut:'en_attente',
-        stock_theorique:ph._stockScore,
-        rayon_km:rayon,
-        patient_lat:lat,
-        patient_lng:lon,
-        date_envoi:new Date().toISOString()
-      }
-    };
+  // ── Marquer ao_soumis ──
+  if(AO_SESSION_ID){
+    // Mise à jour cache local immédiate
+    if(HISTO_CACHE){
+      HISTO_CACHE.forEach(function(sc){
+        if(sc&&sc.ordonnance&&sc.supabaseId===AO_SESSION_ID)sc.ordonnance.ao_soumis=true;
+      });
+    }
+    try{
+      await fetchAPI(API_URL+'/patient?action=ordonnance&id='+AO_SESSION_ID,{
+        method:'PATCH',
+        body:JSON.stringify({ao_soumis:true})
+      });
+    }catch(e){dbgWarn('ao_soumis patch err: '+e.message);}
+  }
+
+  toast(envoyes>0?'✅ '+envoyes+' pharmacie(s) contactée(s) — 15 min pour répondre':'✅ AOs envoyés (WhatsApp en attente)');
+
+  // Désactiver le bouton
+  document.querySelectorAll('button[onclick*="lancerAppelOffre"]').forEach(function(btn){
+    btn.outerHTML='<div class="ao-statut-attente" style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
   });
 
-  // Afficher modal
+  /* ═══════════════════════════════════════════════════════════
+     ANCIEN CODE — Modal WhatsApp manuel (conservé en commentaire)
+     À supprimer définitivement quand WhatsApp Business validé
+  ═══════════════════════════════════════════════════════════
+  AO_ITEMS=proches.map(function(ph){
+    var aoId=ph.id+'-'+AO_SESSION_ID.slice(0,8);
+    var medsStr=medsObj.map(function(m,idx){
+      return (idx+1)+'. '+(m.nom||'')+(m.dose?' '+m.dose:'')+(m.poso?' — '+m.poso:'');
+    }).join('\n');
+    var msg='🏪 Appel d\'offre Dokita\n\nMédicaments :\n'+medsStr+'\n\nVotre lien :\n'+PHARMA_URL+'?id='+aoId+'\n\nMerci de répondre dans 15 min.';
+    return {
+      aoId:aoId, nom:ph.nom, tel:ph.tel,
+      url:'https://wa.me/'+ph.tel.replace(/\D/g,'')+'?text='+encodeURIComponent(msg),
+      statut:'attente', supabaseId:null,
+      data:{ao_id:aoId,consultation_id:AO_SESSION_ID,...}
+    };
+  });
   var old=document.getElementById('aoModal');
   if(old)old.remove();
   var modal=document.createElement('div');
@@ -6388,7 +6425,9 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:flex-end;';
   document.body.appendChild(modal);
   aoRenderModal();
+  ═══════════════════════════════════════════════════════════ */
 }
+
 
 var AO_SESSION_S=null;
 
