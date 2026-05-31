@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.53
+     VERSION : V4.54
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1432,6 +1432,8 @@ var GEO_DATA={clinique:[],labo:[],pharmacie:[]};
 try{var _sess=localStorage.getItem('dk_session');if(_sess){var _s=JSON.parse(_sess);SESSION_EMAIL=_s.email||'';SESSION_PATIENT_ID=_s.patientId||'';}}catch(e){}
 // Auto-login si session trouvée
 window.addEventListener('DOMContentLoaded',function(){
+  // Vérifier retour CinetPay (paramètre ?paiement= dans l'URL)
+  verifierPaiementRetour();
   if(SESSION_EMAIL){
     rechargerSessionNotion().then(function(ok){
       if(ok){
@@ -2039,13 +2041,19 @@ async function lancerConsult(){
   if(SEL<0)return;
   PREV_SCREEN='profilsScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false});
-  // Rafraîchir profil depuis Supabase avant de lancer la consultation
+
+  // ── GATE PAIEMENT ──
+  var paiementOk=sessionStorage.getItem('dk_paiement_ok')==='1';
+  if(!paiementOk){
+    await initierPaiementCinetPay();
+    return;
+  }
+  sessionStorage.removeItem('dk_paiement_ok'); // 1 paiement = 1 consultation
+
   await rafraichirProfilSupabase(CURRENT.patientId);
-  // Charger l'historique si pas encore en cache — critique pour getContexteHistorique()
   if(!HISTO_CACHE||HISTO_CACHE.length===0){
     try{HISTO_CACHE=await chargerHistoriqueNotion();}catch(e){dbg('HISTO preload err: '+e.message);}
   }
-  // Charger les examens avec résultats pour injection dans AfriBot
   var p=PROFILS[SEL];
   if(p&&p.patientId){
     try{
@@ -2055,6 +2063,50 @@ async function lancerConsult(){
     }catch(e){dbg('Examens preload err: '+e.message);}
   }
   startChat();
+}
+
+async function initierPaiementCinetPay(){
+  var p=PROFILS[SEL];
+  if(!p){toast('Selectionnez un profil');return;}
+  toast('Redirection vers le paiement...');
+  try{
+    var r=await fetchAPI(API_URL+'/cinetpay?action=initier',{
+      method:'POST',
+      body:JSON.stringify({
+        patient_id:    p.patientId||'',
+        patient_nom:   p.nom||'',
+        patient_prenom:p.prenom||'',
+        patient_email: p.email||'',
+        patient_tel:   p.tel||''
+      })
+    });
+    var d=await r.json();
+    if(d.payment_url){
+      sessionStorage.setItem('dk_paiement_txn',d.transaction_id);
+      window.location.href=d.payment_url;
+    } else {
+      toast('Erreur paiement: '+(d.error||'Inconnue'));
+    }
+  }catch(e){toast('Erreur: '+e.message);}
+}
+
+async function verifierPaiementRetour(){
+  var params=new URLSearchParams(window.location.search);
+  var txn=params.get('paiement');
+  if(!txn)return;
+  window.history.replaceState({},'','/');
+  try{
+    var r=await fetchAPI(API_URL+'/cinetpay?action=verifier&txn='+encodeURIComponent(txn));
+    var d=await r.json();
+    if(d.statut==='paye'){
+      sessionStorage.setItem('dk_paiement_ok','1');
+      toast('Paiement confirme - vous pouvez demarrer la consultation');
+    } else if(d.statut==='en_attente'){
+      toast('Paiement en cours de validation - reessayez dans quelques instants');
+    } else {
+      toast('Paiement non abouti - veuillez reessayer');
+    }
+  }catch(e){dbgWarn('Verif paiement err: '+e.message);}
 }
 
 function lancerEph(){
