@@ -1,7 +1,7 @@
 // ============================================
 // DOKITA CINETPAY API — api/cinetpay.js
-// VERSION : V1.0
-// DATE    : 2026-05-31
+// VERSION : V1.1
+// DATE    : 2026-05-31 — V1.1 : route payout + payout_notify
 // Checkout CinetPay — paiement consultation 5 000 FCFA
 // Endpoints CinetPay :
 //   POST https://api-checkout.cinetpay.com/v2/payment        (init)
@@ -191,6 +191,113 @@ export default async function handler(req, res) {
     // Rediriger vers l'app patient avec le txn en paramètre
     // L'app vérifiera le statut via action=verifier
     return res.redirect(302, BASE_URL + '/?paiement=' + txn);
+  }
+
+  // ══════════════════════════════════════════════
+  // ACTION : payout — virer la part médecin via CinetPay Mass Payout
+  // Appelé par api/medecin.js après INSERT ordonnance réussie
+  // Auth : service-to-service via PAYOUT_SECRET header
+  // ══════════════════════════════════════════════
+  if (req.method === 'POST' && action === 'payout') {
+    const secret = req.headers['x-payout-secret'];
+    if (!secret || secret !== process.env.PAYOUT_SECRET) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
+
+    const { medecin_id, consultation_id, montant_patient, abonnement_type } = req.body || {};
+    if (!medecin_id || !consultation_id) {
+      return res.status(400).json({ error: 'medecin_id et consultation_id requis' });
+    }
+
+    // Calculer la part médecin selon abonnement
+    const commission = abonnement_type === 'premium' ? 0.15 : 0.20;
+    const montant_total = montant_patient || 5000;
+    const montant_medecin = Math.round(montant_total * (1 - commission));
+
+    // Récupérer le numéro mobile money du médecin
+    const { data: med, error: medErr } = await supabase
+      .from('medecins')
+      .select('mobile_money_numero, mobile_money_operateur, prenom, nom, abonnement_type')
+      .eq('id', medecin_id)
+      .single();
+
+    if (medErr || !med) return res.status(404).json({ error: 'Médecin introuvable' });
+    if (!med.mobile_money_numero) {
+      return res.status(400).json({ error: 'Numéro mobile money médecin non renseigné' });
+    }
+
+    // Formater le numéro (retirer le + et l'indicatif si présent)
+    const tel = med.mobile_money_numero.replace(/^\+225/, '').replace(/\D/g, '');
+
+    // Appel CinetPay Mass Payout
+    // Doc : https://docs.cinetpay.com/api/1.0-fr/transfer/utilisation
+    const payoutPayload = [{
+      prefix:               '225',  // Côte d'Ivoire — à adapter selon pays médecin
+      phone:                tel,
+      amount:               montant_medecin,
+      client_transaction_id: 'PAYOUT-MED-' + consultation_id.slice(0, 8).toUpperCase() + '-' + Date.now(),
+      notify_url:           `${process.env.BASE_URL || 'https://heydoc-mu.vercel.app'}/api/cinetpay?action=payout_notify`
+    }];
+
+    try {
+      const r = await fetch('https://client.cinetpay.com/v1/transfer/money/send/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': `${APIKEY}` // CinetPay Mass Payout utilise l'apikey
+        },
+        body: JSON.stringify({
+          data:     payoutPayload,
+          lang:     'fr',
+          description: `Paiement Dokita — consultation ${consultation_id.slice(0, 8)}`
+        })
+      });
+      const pdata = await r.json();
+
+      // Enregistrer le payout en base
+      const statut_payout = pdata.code === 0 ? 'en_cours' : 'echec';
+      await supabase.from('paiements').insert([{
+        transaction_id:  payoutPayload[0].client_transaction_id,
+        patient_id:      'PAYOUT', // marqueur payout
+        consultation_id: consultation_id || null,
+        montant:         montant_medecin,
+        devise:          'XOF',
+        statut:          statut_payout,
+        statut_cinetpay: String(pdata.code),
+        operateur:       med.mobile_money_operateur || null,
+        created_at:      new Date().toISOString()
+      }]);
+
+      if (pdata.code !== 0) {
+        return res.status(400).json({
+          error:   pdata.message || 'Payout échoué',
+          details: pdata
+        });
+      }
+
+      return res.status(200).json({
+        ok:              true,
+        montant_medecin,
+        commission_pct:  Math.round(commission * 100),
+        payout_id:       payoutPayload[0].client_transaction_id
+      });
+
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── Notification payout (CinetPay notifie le statut du virement) ──
+  if (action === 'payout_notify') {
+    const { client_transaction_id, treatment_status } = req.body || {};
+    if (client_transaction_id) {
+      const statut = treatment_status === 'VAL' ? 'paye' :
+                     treatment_status === 'REJ' ? 'echec' : 'en_cours';
+      await supabase.from('paiements')
+        .update({ statut, updated_at: new Date().toISOString() })
+        .eq('transaction_id', client_transaction_id);
+    }
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(404).json({ error: 'Action inconnue : ' + action });
