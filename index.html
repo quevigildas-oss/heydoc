@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
-     DOKITA — App Patient 
-     VERSION : V4.56
+     DOKITA — App Patient
+     VERSION : V4.57
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -2106,7 +2106,9 @@ async function verifierPaiementRetour(){
         toast('Paiement confirme - vous pouvez envoyer vos resultats');
       } else {
         sessionStorage.setItem('dk_paiement_ok','1'); // consultation AfriBot
-        toast('Paiement confirme - vous pouvez demarrer la consultation');
+        toast('Paiement confirme - lancement de la consultation...');
+        // Lancer directement la consultation sans re-clic
+        setTimeout(function(){lancerConsult();}, 1000);
       }
     } else if(d.statut==='en_attente'){
       toast('Paiement en cours de validation - reessayez dans quelques instants');
