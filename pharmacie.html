@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
-<!-- VERSION: V2.4 — 2026-05-21 — renderSelectionne : saisie code retrait par pharmacien + validation -->
+<!-- VERSION: V2.5 — 2026-06-01 — Notifications WhatsApp (offre_recue + medicaments_prets) -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -222,6 +222,20 @@ function renderForm(){
         medicaments_offre:JSON.stringify(offres)
       });
       renderDejaRepondu();
+      // Notifier le patient via WhatsApp
+      try{
+        if(aoData.patientTel){
+          fetch('/api/whatsapp?action=notifier_patient',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              telephone:aoData.patientTel,
+              type:'offre_recue',
+              data:{prenom:aoData.patientPrenom||'',pharmacie:aoData.pharmNom||''}
+            })
+          });
+        }
+      }catch(e){console.warn('Notif WA:',e.message);}
     }catch(e){toast('⚠️ Erreur: '+e.message);}
   }
 
@@ -357,6 +371,24 @@ async function confirmerLivraison(){
       date_validation:new Date().toISOString()
     });
     renderLivre();
+    // Notifier le patient via WhatsApp
+    try{
+      if(aoData.patientTel){
+        fetch('/api/whatsapp?action=notifier_patient',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            telephone:aoData.patientTel,
+            type:'medicaments_prets',
+            data:{
+              prenom:     aoData.patientPrenom||'',
+              pharmacie:  aoData.pharmNom||'',
+              code_retrait:aoData.codeRetrait||''
+            }
+          })
+        });
+      }
+    }catch(e){console.warn('Notif WA:',e.message);}
   }catch(e){toast('Erreur: '+e.message);}
 }
 
