@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.57
+     VERSION : V4.58
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -2100,14 +2100,26 @@ async function verifierPaiementRetour(){
     var d=await r.json();
     if(d.statut==='paye'){
       var examCid=sessionStorage.getItem('dk_paiement_exam_cid')||'';
-      if(examCid){
-        sessionStorage.setItem(examCid,'1'); // autoriser upload pour cette consultation
+      var pendingAo=sessionStorage.getItem('dk_meds_pending_ao')||'';
+      if(examCid && pendingAo && examCid==='dk_paiement_meds_'+pendingAo){
+        sessionStorage.setItem(examCid,'1');
+        sessionStorage.removeItem('dk_paiement_exam_cid');
+        toast('Paiement confirme - confirmation de la pharmacie...');
+        var pNom=sessionStorage.getItem('dk_meds_pending_nom')||'';
+        var pTel=sessionStorage.getItem('dk_meds_pending_tel')||'';
+        var pTotal=sessionStorage.getItem('dk_meds_pending_total')||'0';
+        sessionStorage.removeItem('dk_meds_pending_ao');
+        sessionStorage.removeItem('dk_meds_pending_nom');
+        sessionStorage.removeItem('dk_meds_pending_tel');
+        sessionStorage.removeItem('dk_meds_pending_total');
+        setTimeout(function(){choisirOffre(pendingAo,pNom,pTel,pTotal);},1000);
+      } else if(examCid){
+        sessionStorage.setItem(examCid,'1');
         sessionStorage.removeItem('dk_paiement_exam_cid');
         toast('Paiement confirme - vous pouvez envoyer vos resultats');
       } else {
-        sessionStorage.setItem('dk_paiement_ok','1'); // consultation AfriBot
+        sessionStorage.setItem('dk_paiement_ok','1');
         toast('Paiement confirme - lancement de la consultation...');
-        // Lancer directement la consultation sans re-clic
         setTimeout(function(){lancerConsult();}, 1000);
       }
     } else if(d.statut==='en_attente'){
@@ -6208,7 +6220,7 @@ function renderOffres(complete,stops2,toutes){
           (tel?
             '<a href="tel:'+tel+'" style="display:block;width:100%;padding:11px;background:rgba(0,168,120,.1);border:1px solid rgba(0,168,120,.3);border-radius:10px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-align:center;text-decoration:none;margin-bottom:8px;box-sizing:border-box;">📞 '+tel+' — Appeler avant de vous déplacer</a>'
           :'')+
-          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'+
+          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\',\''+o.total_fcfa+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'+
         '</div>';
     });
   }
@@ -6287,7 +6299,7 @@ function renderCarteCode(code,pharmNom,meds,num){
   '</div>';
 }
 
-async function choisirOffre(supabaseId,pharmNom,pharmTel){
+async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
   toast('⏳ Confirmation en cours...');
   try{
     // Vérifier si un code existe déjà
