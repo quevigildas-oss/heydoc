@@ -1,6 +1,6 @@
 // api/pharmacie.js
 // Endpoints pharmacie — authentification par token AO (ao_id dans l'URL)
-// VERSION : V1.1
+// VERSION : V1.2
 // ADD     : whitelist prix_unitaire, quantite_boites, total_fcfa, medicaments_offre, disponible_totalite
 // DATE    : 2026-05-19
 // NOTES   : Pas de JWT — la pharmacie s'authentifie via l'ao_id unique dans le lien WhatsApp
@@ -59,6 +59,53 @@ module.exports = async function handler(req, res) {
 
       const { error } = await supabase.from('appels_offres').update(safe).eq('id', id);
       if (error) return res.status(500).json({ error: error.message });
+
+      // Si statut=livre → déclencher payout pharmacie côté serveur
+      if (safe.statut === 'livre') {
+        try {
+          // Recharger l'AO complet pour avoir les infos payout
+          const { data: ao } = await supabase
+            .from('appels_offres')
+            .select('ao_id, pharmacie_id, pharmacie_nom, total_fcfa')
+            .eq('id', id).single();
+
+          // Charger le mobile money de la pharmacie
+          const { data: pharma } = await supabase
+            .from('pharmacies')
+            .select('mobile_money_numero, mobile_money_operateur')
+            .eq('id', ao?.pharmacie_id || '').single();
+
+          if (ao?.total_fcfa && pharma?.mobile_money_numero) {
+            // Appel interne à api/payment — service-to-service avec PAYOUT_SECRET
+            const payoutRes = await fetch(
+              (process.env.BASE_URL || 'https://heydoc-mu.vercel.app') + '/api/payment?action=payout_pharmacie',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-payout-secret': process.env.PAYOUT_SECRET || ''
+                },
+                body: JSON.stringify({
+                  ao_id:                  ao.ao_id || id,
+                  pharmacie_id:           ao.pharmacie_id || '',
+                  pharmacie_nom:          ao.pharmacie_nom || '',
+                  montant_total:          ao.total_fcfa,
+                  mobile_money_numero:    pharma.mobile_money_numero,
+                  mobile_money_operateur: pharma.mobile_money_operateur || ''
+                })
+              }
+            );
+            const payoutData = await payoutRes.json();
+            if (!payoutData.ok) {
+              console.error('Payout pharmacie echec:', payoutData.error);
+            }
+          }
+        } catch (payErr) {
+          console.error('Payout pharmacie err:', payErr.message);
+          // Ne pas bloquer la réponse — le PATCH est fait, le payout sera retenté manuellement
+        }
+      }
+
       return res.status(200).json({ ok: true });
     }
 
