@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.58
+     VERSION : V4.59
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1510,7 +1510,10 @@ async function rechargerSessionNotion(){
     PROFILS=[profilPrincipal].concat(membres);
     SEL=0;
     saveProfils();
-    syncTraitementsDepuisNotion(profilPrincipal); // toujours appeler — efface les ALD si traitements vide
+    // Rafraîchir l'écran profils si déjà affiché (fix race condition Akouvi)
+    var ps=document.getElementById('profilsScreen');
+    if(ps&&ps.classList.contains('on'))renderProfils();
+    syncTraitementsDepuisNotion(profilPrincipal);
     mettreAJourBadgeRDV(profilPrincipal);
     return true;
   }catch(e){
