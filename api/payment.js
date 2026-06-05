@@ -1,6 +1,6 @@
 // ============================================
 // DOKITA PAYMENT API — api/payment.js
-// VERSION : V1.0
+// VERSION : V1.1
 // DATE    : 2026-06-01
 // Provider : Flutterwave (remplace CinetPay)
 // Docs     : https://developer.flutterwave.com
@@ -261,6 +261,88 @@ export default async function handler(req, res) {
         ok:              true,
         montant_medecin,
         commission_pct:  Math.round(commission * 100),
+        payout_ref
+      });
+
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  // ACTION : payout_pharmacie — virer la part pharmacie après retrait confirmé
+  // Escrow : Dokita retient 5%, reverse 95% à la pharmacie
+  // Appelé par pharmacie.html après confirmerLivraison()
+  // Auth : x-payout-secret
+  // ══════════════════════════════════════════════
+  if (req.method === 'POST' && action === 'payout_pharmacie') {
+    const secret = req.headers['x-payout-secret'];
+    if (!secret || secret !== process.env.PAYOUT_SECRET) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
+
+    const { ao_id, pharmacie_id, pharmacie_nom, montant_total, mobile_money_numero, mobile_money_operateur } = req.body || {};
+    if (!ao_id || !montant_total) {
+      return res.status(400).json({ error: 'ao_id et montant_total requis' });
+    }
+
+    const COMMISSION_DOKITA = 0.05; // 5%
+    const montant_pharmacie = Math.round(montant_total * (1 - COMMISSION_DOKITA));
+    const commission_dokita = montant_total - montant_pharmacie;
+
+    if (!mobile_money_numero) {
+      return res.status(400).json({ error: 'Numéro mobile money pharmacie non renseigné' });
+    }
+
+    const payout_ref = 'PAYOUT-PH-' + ao_id.slice(0, 8).toUpperCase() + '-' + Date.now();
+
+    try {
+      const r = await fetch(`${FLW_BASE}/transfers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${FLW_SECRET}`,
+          'Content-Type':  'application/json'
+        },
+        body: JSON.stringify({
+          account_bank:    mobile_money_operateur === 'ORANGE' ? 'MOBILE_MONEY_CIV_CI' :
+                           mobile_money_operateur === 'MTN'    ? 'MTN_CIV' : 'MOBILE_MONEY_CIV_CI',
+          account_number:  mobile_money_numero.replace(/\D/g, ''),
+          amount:          montant_pharmacie,
+          currency:        'XOF',
+          beneficiary_name: pharmacie_nom || 'Pharmacie Dokita',
+          reference:       payout_ref,
+          narration:       `Paiement Dokita médicaments AO ${ao_id.slice(0, 8)}`
+        })
+      });
+      const pdata = await r.json();
+
+      const statut_payout = pdata.status === 'success' ? 'en_cours' : 'echec';
+
+      // Enregistrer le payout
+      await supabase.from('paiements').insert([{
+        transaction_id:  payout_ref,
+        patient_id:      'PAYOUT-PHARMA',
+        montant:         montant_pharmacie,
+        devise:          'XOF',
+        statut:          statut_payout,
+        operateur:       mobile_money_operateur || null,
+        created_at:      new Date().toISOString()
+      }]);
+
+      // Mettre à jour l'AO avec le statut payout
+      await supabase.from('appels_offres')
+        .update({ payout_statut: 'en_cours', updated_at: new Date().toISOString() })
+        .eq('ao_id', ao_id);
+
+      if (pdata.status !== 'success') {
+        return res.status(400).json({ error: pdata.message || 'Payout pharmacie échoué' });
+      }
+
+      return res.status(200).json({
+        ok:                true,
+        montant_pharmacie,
+        commission_dokita,
+        commission_pct:    5,
         payout_ref
       });
 
