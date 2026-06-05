@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
-<!-- VERSION: V2.5 — 2026-06-01 — Notifications WhatsApp (offre_recue + medicaments_prets) -->
+<!-- VERSION: V2.6 — 2026-06-04 — Payout pharmacie après confirmerLivraison (escrow 95/5) -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -371,6 +371,7 @@ async function confirmerLivraison(){
       date_validation:new Date().toISOString()
     });
     renderLivre();
+
     // Notifier le patient via WhatsApp
     try{
       if(aoData.patientTel){
@@ -389,6 +390,34 @@ async function confirmerLivraison(){
         });
       }
     }catch(e){console.warn('Notif WA:',e.message);}
+
+    // Payout pharmacie — Dokita reverse 95% du montant après retrait confirmé
+    try{
+      if(aoData.totalFcfa && aoData.totalFcfa > 0){
+        var rPayout=await fetch('/api/payment?action=payout_pharmacie',{
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'x-payout-secret': window.PAYOUT_SECRET||''
+          },
+          body:JSON.stringify({
+            ao_id:                 aoData.aoId||'',
+            pharmacie_id:          aoData.pharmacieId||'',
+            pharmacie_nom:         aoData.pharmNom||'',
+            montant_total:         aoData.totalFcfa,
+            mobile_money_numero:   aoData.mobileMoneyNumero||'',
+            mobile_money_operateur:aoData.mobileMoneyOperateur||''
+          })
+        });
+        var dPayout=await rPayout.json();
+        if(dPayout.ok){
+          console.log('Payout pharmacie OK:',dPayout.montant_pharmacie,'FCFA (commission Dokita:',dPayout.commission_dokita,'FCFA)');
+        } else {
+          console.warn('Payout pharmacie echoue:',dPayout.error);
+        }
+      }
+    }catch(e){console.warn('Payout pharmacie err:',e.message);}
+
   }catch(e){toast('Erreur: '+e.message);}
 }
 
