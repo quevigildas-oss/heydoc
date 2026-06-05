@@ -1,6 +1,6 @@
 // ============================================
 // DOKITA ADMIN API — api/admin.js
-// VERSION : V1.2 — 2026-05-21
+// VERSION : V1.3 — 2026-05-21
 // Auth    : x-admin-token vérifié contre env ADMIN_PWD
 // ============================================
 import { createClient } from '@supabase/supabase-js';
@@ -72,6 +72,21 @@ export default async function handler(req, res) {
     }]);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(201).json({ ok: true });
+  }
+
+  // PATCH pharmacie — mobile money
+  if (req.method === 'PATCH' && action === 'pharmacie') {
+    const id = req.query.id;
+    if (!id) return res.status(400).json({ error: 'id requis' });
+    const { mobile_money_operateur, mobile_money_numero } = req.body || {};
+    if (!mobile_money_operateur || !mobile_money_numero) {
+      return res.status(400).json({ error: 'operateur et numero requis' });
+    }
+    const { error } = await supabase.from('pharmacies')
+      .update({ mobile_money_operateur, mobile_money_numero, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(404).json({ error: 'Route introuvable' });
