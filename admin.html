@@ -355,7 +355,7 @@ async function chargerPharmacies(){
             (hasMM?'✅ '+escHtml(p.mobile_money_operateur)+' — '+escHtml(p.mobile_money_numero):'⚠️ Mobile Money non renseigné')+
           '</div>'+
         '</div>'+
-        '<button onclick="ouvrirEditPharmMM(''+p.id+'',''+escHtml(p.mobile_money_operateur||'')+'',''+escHtml(p.mobile_money_numero||'')+'')" '+
+          '<button data-pid="'+p.id+'" data-op="'+escHtml(p.mobile_money_operateur||'')+'" data-num="'+escHtml(p.mobile_money_numero||'')+'" onclick="ouvrirEditPharmMM(this.dataset.pid,this.dataset.op,this.dataset.num)" '+
           'style="padding:8px 14px;background:rgba(0,200,150,.1);border:1px solid var(--accent);border-radius:8px;font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;">'+
           '✏️ Modifier'+
         '</button>'+
@@ -376,7 +376,7 @@ async function sauvegarderPharmMM(){
   var id=document.getElementById('pharmEditId').value;
   var op=document.getElementById('pharmEditOp').value;
   var num=document.getElementById('pharmEditNum').value.trim();
-  if(!op||!num){toast('⚠️ Renseignez l'opérateur et le numéro');return;}
+  if(!op||!num){toast('Renseignez l operateur et le numero');return;}
   try{
     var r=await fetchAdmin(ADMIN_URL+'?action=pharmacie&id='+encodeURIComponent(id),{
       method:'PATCH',
