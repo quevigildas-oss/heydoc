@@ -7126,56 +7126,107 @@ async function voirOrdonnanceHisto(i){
 }
 
 // ── Télécharger via blob (vrai download sans print dialog) ──
+// ── Télécharger via blob (vrai download sans print dialog) ──
 function genererHtmlOrdonnance(i){
   var s=HISTO_CACHE[i];if(!s)return null;
   var ord=s.ordonnance;if(!ord)return null;
   var p=PROFILS[SEL]||{};
   var patNom=(p.prenom||'')+' '+(p.nom||'');
+  var patAge=p.age?(p.age+' ans'):'';
+  var patPoids=p.poids?(p.poids+' kg'):'';
+  var patInfo=[patAge,patPoids].filter(Boolean).join(' • ');
+  var patVille=p.ville||'';
   var medsHtml=(ord.medicaments||[]).map(function(m,idx){
-    var bg=idx%2===0?'#fff':'#f9fafb';
-    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
-      '<div style="width:22px;height:22px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
-      '<div style="flex:1;font-size:13px;color:#1A2B3C;font-weight:500;">'+escHtml(m)+'</div>'+
+    return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:10px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<div style="min-width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#0A7E6A,#0EA5E9);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;">'+(idx+1)+'</div>'+
+        '<div style="font-size:14px;color:#1A2B3C;font-weight:500;line-height:1.4;">'+escHtml(m)+'</div>'+
+      '</div>'+
     '</div>';
   }).join('');
   var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ordonnance Dokita</title>'+
-    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:#fff;color:#1A2B3C;}'+
-    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>'+
-    '<div style="max-width:210mm;margin:0 auto;min-height:297mm;display:flex;flex-direction:column;">'+
-      '<div style="background:#0A7E6A;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;">'+
-        '<div><div style="font-size:11px;color:rgba(255,255,255,.8);">DOKITA PRO — Système de gestion médicale</div>'+
-        '<div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div></div>'+
-        '<div style="text-align:right;font-size:10px;color:rgba(255,255,255,.8);"><div>Réf : '+escHtml(s.dossierId||'-')+'</div><div>'+dateAff+'</div></div>'+
+  var css=[
+    '*{margin:0;padding:0;box-sizing:border-box;}',
+    'body{font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#1A2B3C;-webkit-print-color-adjust:exact;print-color-adjust:exact;}',
+    '.wrap{max-width:600px;margin:0 auto;background:#fff;min-height:100vh;}',
+    '.header{background:linear-gradient(135deg,#0A7E6A,#0EA5E9);padding:20px 20px 24px;color:#fff;}',
+    '.header-top{font-size:10px;opacity:.75;margin-bottom:6px;letter-spacing:.5px;}',
+    '.header-title{font-size:22px;font-weight:800;letter-spacing:1px;line-height:1.2;}',
+    '.header-meta{font-size:11px;opacity:.8;margin-top:8px;}',
+    '.body{padding:16px;}',
+    '.cards-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}',
+    '@media(max-width:400px){.cards-row{grid-template-columns:1fr;}}',
+    '.card{background:#f0fdf9;border:1px solid #0A7E6A;border-radius:12px;padding:12px;}',
+    '.card-lbl{font-size:9px;font-weight:700;color:#0A7E6A;letter-spacing:.8px;margin-bottom:5px;}',
+    '.card-val{font-size:13px;font-weight:700;color:#1A2B3C;}',
+    '.card-sub{font-size:11px;color:#6B7280;margin-top:3px;}',
+    '.diag{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 14px;margin-bottom:14px;}',
+    '.diag-lbl{font-size:9px;font-weight:700;color:#1D4ED8;letter-spacing:.8px;margin-bottom:4px;}',
+    '.diag-val{font-size:15px;font-weight:700;color:#1e3a8a;}',
+    '.meds-title{font-size:11px;font-weight:700;color:#0A7E6A;letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}',
+    '.sig-box{border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-top:16px;text-align:center;}',
+    '.sig-img{max-width:160px;height:55px;object-fit:contain;display:block;margin:0 auto 8px;}',
+    '.sig-name{font-size:13px;font-weight:700;color:#1A2B3C;border-top:1px solid #1A2B3C;padding-top:6px;margin-top:4px;}',
+    '.sig-spec{font-size:11px;color:#6B7280;margin-top:2px;}',
+    '.footer{background:#0A7E6A;padding:10px 16px;text-align:center;margin-top:20px;}',
+    '.footer-txt{font-size:9px;color:rgba(255,255,255,.8);line-height:1.4;}',
+    '@media print{.wrap{max-width:210mm;}}'
+  ].join('');
+
+  return '<!DOCTYPE html><html lang="fr"><head>'+
+    '<meta charset="UTF-8">'+
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<title>Ordonnance Dokita</title>'+
+    '<style>'+css+'</style>'+
+  '</head><body>'+
+    '<div class="wrap">'+
+      '<div class="header">'+
+        '<div class="header-top">DOKITA PRO — Système de gestion médicale</div>'+
+        '<div class="header-title">ORDONNANCE MÉDICALE</div>'+
+        '<div class="header-meta">'+escHtml(ord.medecin||'')+(ord.specialite?' · '+escHtml(ord.specialite):'')+'</div>'+
       '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:#E8F5F2;">'+
-        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:12px;">'+
-          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PRESCRIPTEUR</div>'+
-          '<div style="font-size:14px;font-weight:700;">'+escHtml(ord.medecin||'-')+'</div>'+
-          '<div style="font-size:11px;color:#6B7280;font-style:italic;">'+escHtml(ord.specialite||'-')+'</div>'+
+      '<div class="body">'+
+        '<div class="cards-row">'+
+          '<div class="card">'+
+            '<div class="card-lbl">PATIENT</div>'+
+            '<div class="card-val">'+escHtml(patNom.trim()||'-')+'</div>'+
+            (patInfo?'<div class="card-sub">'+escHtml(patInfo)+'</div>':'')+
+            (patVille?'<div class="card-sub">'+escHtml(patVille)+'</div>':'')+
+          '</div>'+
+          '<div class="card">'+
+            '<div class="card-lbl">CONSULTATION</div>'+
+            '<div class="card-val">'+dateAff+'</div>'+
+            '<div class="card-sub" style="font-size:9px;word-break:break-all;">'+escHtml(s.dossierId||'-')+'</div>'+
+          '</div>'+
         '</div>'+
-        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:12px;">'+
-          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PATIENT</div>'+
-          '<div style="font-size:14px;font-weight:700;">'+escHtml(patNom.trim()||'-')+'</div>'+
-          '<div style="font-size:10px;color:#6B7280;margin-top:4px;">ID : '+escHtml(SESSION_PATIENT_ID||'-')+'</div>'+
+        (ord.diagnostic?
+          '<div class="diag">'+
+            '<div class="diag-lbl">DIAGNOSTIC</div>'+
+            '<div class="diag-val">'+escHtml(ord.diagnostic)+'</div>'+
+          '</div>':'')+
+        '<div class="meds-title">💊 Traitement prescrit</div>'+
+        medsHtml+
+        (ord.notes?
+          '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;margin-top:10px;">'+
+            '<div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div>'+
+            '<div style="font-size:12px;">'+escHtml(ord.notes)+'</div>'+
+          '</div>':'')+
+        '<div style="background:#f0fdf9;border:1px solid #a7f3d0;border-radius:10px;padding:10px 14px;margin-top:14px;">'+
+          '<div style="font-size:10px;color:#059669;">💡 Ces médicaments sont prescrits sous leur nom générique — Le générique : c\'est moins cher et tout aussi efficace</div>'+
+        '</div>'+
+        '<div class="sig-box">'+
+          (ord.signature_base64?'<img class="sig-img" src="'+ord.signature_base64+'"/>':'<div style="height:55px;"></div>')+
+          '<div class="sig-name">'+escHtml(ord.medecin||'-')+'</div>'+
+          (ord.specialite?'<div class="sig-spec">'+escHtml(ord.specialite)+'</div>':'')+
         '</div>'+
       '</div>'+
-      (ord.diagnostic?'<div style="padding:10px 16px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;"><div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">DIAGNOSTIC</div><div style="font-size:12px;">'+escHtml(ord.diagnostic)+'</div></div>':'')+
-      '<div style="background:#0A7E6A;padding:8px 16px;"><div style="font-size:10px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div></div>'+
-      medsHtml+
-      (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:12px 16px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div><div style="font-size:12px;">'+escHtml(ord.notes)+'</div></div>':'')+
-      '<div style="padding:20px 16px;display:flex;justify-content:flex-end;flex:1;align-items:flex-end;">'+
-        '<div style="width:200px;border:1px solid #D1D5DB;border-radius:8px;padding:14px;text-align:center;">'+
-          (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:70px;">Signature & Cachet du médecin</div>')+
-          '<div style="border-top:1px solid #1A2B3C;padding-top:6px;font-size:10px;font-weight:700;">'+escHtml(ord.medecin||'-')+'</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="background:#0A7E6A;padding:10px 16px;text-align:center;">'+
-        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel · Réservé à l usage du patient désigné</div>'+
+      '<div class="footer">'+
+        '<div class="footer-txt">Document généré par Dokita Pro · Confidentiel · Réservé à l\'usage du patient désigné</div>'+
       '</div>'+
     '</div>'+
   '</body></html>';
 }
+
 
 async function telechargerEtPartager(i){
   var s=HISTO_CACHE[i];if(!s)return;
