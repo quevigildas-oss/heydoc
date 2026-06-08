@@ -2,6 +2,7 @@
 // DOKITA — Sauvegarde consultation dans Supabase
 // V4.9 — Ajout notification email médecin via Resend
 // V4.10 — Fix module.exports + mapping champs OMS
+// V4.11 — Fix RLS : SUPABASE_KEY → SUPABASE_SERVICE_ROLE_KEY
 
 const handler = async function(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,10 +17,10 @@ const handler = async function(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_KEY;
-  const RESEND_KEY   = process.env.RESEND_KEY;
-  const IS_TEST      = process.env.DOKITA_ENV !== 'prod';
+  const SUPABASE_URL      = process.env.SUPABASE_URL;
+  const SUPABASE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY; // ← Fix RLS V4.11
+  const RESEND_KEY        = process.env.RESEND_KEY;
+  const IS_TEST           = process.env.DOKITA_ENV !== 'prod';
 
   try {
     const body = req.body;
@@ -103,7 +104,7 @@ const handler = async function(req, res) {
             + 'Diagnostic IA:\n' + (payload.diagnostic_ia || '-') + '\n\n'
             + 'Connectez-vous a Dokita Pro pour voir le dossier complet.\n\nDokita';
 
-          const emailRes = await fetch('https://api.resend.com/emails', {
+          await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + RESEND_KEY, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -113,23 +114,11 @@ const handler = async function(req, res) {
               text:    emailBody
             })
           });
-
-          if (emailRes.ok) {
-            console.log('Email medecin envoye a: ' + destinataires.join(', '));
-          } else {
-            console.warn('Erreur envoi email Resend:', await emailRes.text());
-          }
         }
       } catch (emailErr) {
         console.warn('Erreur notification email (non bloquante):', emailErr.message);
       }
-    } else {
-      console.warn('RESEND_KEY non configuree — email medecin non envoye');
     }
-
-    // NOTE: Creation auto des examens desactivee intentionnellement.
-    // Les examens sont saisis par le medecin dans DokitaPro.
-    // Le champ examens_recommandes est conserve pour reference IA uniquement.
 
     return res.status(200).json({
       success:         true,
