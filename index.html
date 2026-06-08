@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.59
+     VERSION : V4.60
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -2045,13 +2045,11 @@ async function lancerConsult(){
   PREV_SCREEN='profilsScreen';
   CURRENT=Object.assign({},PROFILS[SEL],{_idx:SEL,_eph:false});
 
-  // ── GATE PAIEMENT ──
+  /* ── GATE PAIEMENT CONSULTATION (commenté pour tests) ──
   var paiementOk=sessionStorage.getItem('dk_paiement_ok')==='1';
-  if(!paiementOk){
-    await initierPaiementCinetPay();
-    return;
-  }
-  sessionStorage.removeItem('dk_paiement_ok'); // 1 paiement = 1 consultation
+  if(!paiementOk){ await initierPaiementFlutterwave(); return; }
+  sessionStorage.removeItem('dk_paiement_ok');
+  ── FIN GATE PAIEMENT ── */
 
   await rafraichirProfilSupabase(CURRENT.patientId);
   if(!HISTO_CACHE||HISTO_CACHE.length===0){
@@ -2599,11 +2597,15 @@ async function envoyerDossier(email,nomMed,medId){
   try{
     var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
     messages.push({role:'user',content:'RESUME_CONSULTATION'});
+    var ragController=new AbortController();
+    var ragTimeout=setTimeout(function(){ragController.abort();},30000);
     var r=await fetch(RAG_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
-      body:JSON.stringify({messages:messages,isResume:true})
+      body:JSON.stringify({messages:messages,isResume:true}),
+      signal:ragController.signal
     });
+    clearTimeout(ragTimeout);
     var d=await r.json();
     var rep=d.answer||d.response||d.text||'';
     if(rep){
@@ -2713,6 +2715,11 @@ async function envoyerDossier(email,nomMed,medId){
     dbg('Save status='+resp.status);
     if(saveOk)sauvegarderSession(resume);
   }catch(e){dbg('Save erreur: '+e.message);}
+  if(!saveOk){
+    var btnDos2=document.getElementById('btnDossier');
+    if(btnDos2){btnDos2.disabled=false;btnDos2.textContent='📋 Dossier';btnDos2.style.opacity='1';btnDos2.style.cursor='pointer';}
+    toast('❌ Erreur envoi — réessayez');return;
+  }
 
   // ── ÉTAPE 4 : stocker déclaratifs dans dossier_medical ──
   if(saveOk){
@@ -5677,35 +5684,37 @@ async function ajouterResultatReseau(input, examenId, nomExamen, consultationId)
   var p=PROFILS[SEL];
   if(!p||!p.patientId){toast('⚠️ Profil non disponible');return;}
 
-  // ── GATE PAIEMENT — 1 seul paiement par consultation (pas par examen) ──
-  var examPayKey='dk_paiement_exam_'+(consultationId||examenId||'');
-  if(sessionStorage.getItem(examPayKey)!=='1'){
-    toast('Paiement requis pour envoyer vos resultats...');
-    try{
-      var rp=await fetchAPI(API_URL+'/payment?action=initier',{
-        method:'POST',
-        body:JSON.stringify({
-          patient_id:    p.patientId||'',
-          patient_nom:   p.nom||'',
-          patient_prenom:p.prenom||'',
-          patient_email: p.email||'',
-          patient_tel:   p.tel||'',
-          consultation_id:consultationId||'',
-          type_paiement:'examen'
-        })
-      });
-      var dp=await rp.json();
-      if(dp.payment_url){
-        sessionStorage.setItem('dk_paiement_txn', dp.transaction_id);
-        sessionStorage.setItem('dk_paiement_exam_cid', examPayKey);
-        window.location.href=dp.payment_url;
-      } else {
-        toast('Erreur paiement: '+(dp.error||'Inconnue'));
-      }
-    }catch(e){toast('Erreur: '+e.message);}
-    return;
-  }
-
+  /* ── GATE PAIEMENT EXAMENS (commenté pour tests) ──
+    // ── GATE PAIEMENT — 1 seul paiement par consultation (pas par examen) ──
+    var examPayKey='dk_paiement_exam_'+(consultationId||examenId||'');
+    if(sessionStorage.getItem(examPayKey)!=='1'){
+      toast('Paiement requis pour envoyer vos resultats...');
+      try{
+        var rp=await fetchAPI(API_URL+'/payment?action=initier',{
+          method:'POST',
+          body:JSON.stringify({
+            patient_id:    p.patientId||'',
+            patient_nom:   p.nom||'',
+            patient_prenom:p.prenom||'',
+            patient_email: p.email||'',
+            patient_tel:   p.tel||'',
+            consultation_id:consultationId||'',
+            type_paiement:'examen'
+          })
+        });
+        var dp=await rp.json();
+        if(dp.payment_url){
+          sessionStorage.setItem('dk_paiement_txn', dp.transaction_id);
+          sessionStorage.setItem('dk_paiement_exam_cid', examPayKey);
+          window.location.href=dp.payment_url;
+        } else {
+          toast('Erreur paiement: '+(dp.error||'Inconnue'));
+        }
+      }catch(e){toast('Erreur: '+e.message);}
+      return;
+    }
+  
+  ── FIN GATE PAIEMENT EXAMENS ── */
   toast('⏳ Analyse en cours...');
   try{
     var base64=await new Promise(function(res,rej){
