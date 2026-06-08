@@ -6812,66 +6812,66 @@ function buildOrdHtml(i){
     meds=(ord.medsRaw||[]).concat((ord.medsAldRaw||[]).map(function(m){return Object.assign({},m,{_ald:true});}));
   }
   var medsHtml=meds.length?meds.map(function(m){
-    return '<div class="med'+(m._ald||m.ald?' ald':'')+'">'+
-      '<div class="mname">'+esc(m.nom||'')+(m._ald||m.ald?'<span class="aldtag">ALD</span>':'')+'</div>'+
-      (m.dose?'<div class="mdose">'+esc(m.dose)+'</div>':'')+
-      '<div class="mposo">'+
+    return '<div class="ord-med'+(m._ald||m.ald?' ord-ald':'')+'">'+
+      '<div class="ord-mname">'+esc(m.nom||'')+(m._ald||m.ald?'<span class="ord-aldtag">ALD</span>':'')+'</div>'+
+      (m.dose?'<div class="ord-mdose">'+esc(m.dose)+'</div>':'')+
+      '<div class="ord-mposo">'+
         (m.poso?'<div>🕐 '+esc(m.poso)+'</div>':'')+
         (m.duree?'<div>📅 Durée : '+esc(m.duree)+'</div>':'')+
         (m.conditionnement?'<div>📦 '+esc(m.conditionnement)+'</div>':'')+
       '</div></div>';
-  }).join(''):'<div class="empty">Aucun médicament enregistré</div>';
+  }).join(''):'<div class="ord-empty">Aucun médicament enregistré</div>';
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><style>'+
     '@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap");'+
     '*{margin:0;padding:0;box-sizing:border-box;}body{font-family:"DM Sans",sans-serif;background:#fff;color:#0A1628;}'+
-    '.pg{max-width:680px;margin:0 auto;padding:32px 24px;}'+
-    '.hdr{background:linear-gradient(135deg,#00C896,#0EA5E9);border-radius:16px;padding:24px;margin-bottom:24px;color:#fff;}'+
-    '.hdr h1{font-family:"Syne",sans-serif;font-size:22px;font-weight:800;}'+
-    '.hdr p{font-size:12px;opacity:.85;margin-top:4px;}'+
-    '.meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}'+
-    '.bloc{background:#F8FAFC;border-radius:12px;padding:16px;}'+
-    '.bloctit{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748B;margin-bottom:10px;}'+
-    '.row{font-size:13px;color:#0A1628;margin-bottom:4px;}'+
-    '.row b{font-weight:600;}'+
-    '.diag{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;margin-bottom:20px;}'+
-    '.diaglbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#3B82F6;margin-bottom:6px;}'+
-    '.diagval{font-family:"Syne",sans-serif;font-size:16px;font-weight:700;color:#1E3A5F;}'+
-    '.medstit{font-family:"Syne",sans-serif;font-size:13px;font-weight:700;color:#0A1628;margin-bottom:12px;}'+
-    '.med{background:#fff;border:1.5px solid #E2E8F0;border-radius:12px;padding:14px 16px;margin-bottom:10px;}'+
-    '.med.ald{border-color:#A78BFA;background:#FAF5FF;}'+
-    '.mname{font-family:"Syne",sans-serif;font-size:14px;font-weight:800;color:#0A1628;}'+
-    '.mdose{font-size:12px;color:#0EA5E9;font-weight:600;margin-top:2px;}'+
-    '.mposo{font-size:12px;color:#475569;margin-top:4px;line-height:1.6;}'+
-    '.aldtag{display:inline-block;background:#EDE9FE;color:#7C3AED;font-size:9px;font-weight:700;border-radius:4px;padding:2px 6px;margin-left:6px;text-transform:uppercase;}'+
-    '.notesbox{background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px;margin-top:16px;font-size:12px;color:#92400E;line-height:1.6;}'+
-    '.foot{margin-top:28px;padding-top:20px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:flex-end;}'+
-    '.footmed{font-size:13px;color:#0A1628;}'+
+    '.ord-pg{max-width:680px;margin:0 auto;padding:32px 24px;}'+
+    '.ord-hdr{background:linear-gradient(135deg,#00C896,#0EA5E9);border-radius:16px;padding:24px;margin-bottom:24px;color:#fff;}'+
+    '.ord-hdr h1{font-family:"Syne",sans-serif;font-size:22px;font-weight:800;}'+
+    '.ord-hdr p{font-size:12px;opacity:.85;margin-top:4px;}'+
+    '.ord-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}'+
+    '.ord-bloc{background:#F8FAFC;border-radius:12px;padding:16px;}'+
+    '.ord-bloctit{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#64748B;margin-bottom:10px;}'+
+    '.ord-row{font-size:13px;color:#0A1628;margin-bottom:4px;}'+
+    '.ord-row b{font-weight:600;}'+
+    '.ord-diag{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px;margin-bottom:20px;}'+
+    '.ord-diaglbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#3B82F6;margin-bottom:6px;}'+
+    '.ord-diagval{font-family:"Syne",sans-serif;font-size:16px;font-weight:700;color:#1E3A5F;}'+
+    '.ord-medstit{font-family:"Syne",sans-serif;font-size:13px;font-weight:700;color:#0A1628;margin-bottom:12px;}'+
+    '.ord-med{background:#fff;border:1.5px solid #E2E8F0;border-radius:12px;padding:14px 16px;margin-bottom:10px;}'+
+    '.ord-med.ord-ald{border-color:#A78BFA;background:#FAF5FF;}'+
+    '.ord-mname{font-family:"Syne",sans-serif;font-size:14px;font-weight:800;color:#0A1628;}'+
+    '.ord-mdose{font-size:12px;color:#0EA5E9;font-weight:600;margin-top:2px;}'+
+    '.ord-mposo{font-size:12px;color:#475569;margin-top:4px;line-height:1.6;}'+
+    '.ord-aldtag{display:inline-block;background:#EDE9FE;color:#7C3AED;font-size:9px;font-weight:700;border-radius:4px;padding:2px 6px;margin-left:6px;text-transform:uppercase;}'+
+    '.ord-notesbox{background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px;margin-top:16px;font-size:12px;color:#92400E;line-height:1.6;}'+
+    '.ord-foot{margin-top:28px;padding-top:20px;border-top:1px solid #E2E8F0;display:flex;justify-content:space-between;align-items:flex-end;}'+
+    '.ord-footmed{font-size:13px;color:#0A1628;}'+
     '.footmed strong{font-family:"Syne",sans-serif;font-size:14px;font-weight:800;display:block;margin-bottom:2px;}'+
-    '.sigbox{width:140px;height:60px;border:1.5px dashed #CBD5E1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94A3B8;}'+
-    '.empty{text-align:center;padding:24px;color:#94A3B8;font-size:13px;}'+
+    '.ord-sigbox{width:140px;height:60px;border:1.5px dashed #CBD5E1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#94A3B8;}'+
+    '.ord-empty{text-align:center;padding:24px;color:#94A3B8;font-size:13px;}'+
     '@media print{.pg{padding:20px;}}'+
-  '</style></head><body><div class="pg">'+
-    '<div class="hdr"><h1>Ordonnance Médicale</h1><p>Dokita Pro • '+esc(ord.medecin||'-')+' • '+esc(ord.specialite||'-')+'</p></div>'+
-    '<div class="meta">'+
-      '<div class="bloc"><div class="bloctit">Patient</div>'+
-        '<div class="row"><b>'+esc(patNom)+'</b></div>'+
-        (p._age||p.naiss?'<div class="row">'+(p._age||calcAge(p.naiss)||'-')+' ans'+(p.poids?' • '+p.poids+'kg':'')+'</div>':'')+
-        (p.ville?'<div class="row">'+esc(p.ville)+'</div>':'')+
+  '</style></head><body><div class="ord-pg">'+
+    '<div class="ord-hdr"><h1>Ordonnance Médicale</h1><p>Dokita Pro • '+esc(ord.medecin||'-')+' • '+esc(ord.specialite||'-')+'</p></div>'+
+    '<div class="ord-meta">'+
+      '<div class="ord-bloc"><div class="ord-bloctit">Patient</div>'+
+        '<div class="ord-row"><b>'+esc(patNom)+'</b></div>'+
+        (p._age||p.naiss?'<div class="ord-row">'+(p._age||calcAge(p.naiss)||'-')+' ans'+(p.poids?' • '+p.poids+'kg':'')+'</div>':'')+
+        (p.ville?'<div class="ord-row">'+esc(p.ville)+'</div>':'')+
       '</div>'+
-      '<div class="bloc"><div class="bloctit">Consultation</div>'+
-        '<div class="row"><b>'+dateAff+'</b></div>'+
-        '<div class="row" style="font-size:11px;color:#64748B;">'+esc(s.dossierId||'-')+'</div>'+
+      '<div class="ord-bloc"><div class="ord-bloctit">Consultation</div>'+
+        '<div class="ord-row"><b>'+dateAff+'</b></div>'+
+        '<div class="ord-row" style="font-size:11px;color:#64748B;">'+esc(s.dossierId||'-')+'</div>'+
       '</div>'+
     '</div>'+
-    (ord.diagnostic?'<div class="diag"><div class="diaglbl">Diagnostic</div><div class="diagval">'+esc(ord.diagnostic)+'</div></div>':'')+
-    '<div class="medstit">💊 Traitement prescrit</div>'+
+    (ord.diagnostic?'<div class="ord-diag"><div class="ord-diaglbl">Diagnostic</div><div class="ord-diagval">'+esc(ord.diagnostic)+'</div></div>':'')+
+    '<div class="ord-medstit">💊 Traitement prescrit</div>'+
     medsHtml+
     '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:#166534;">💡 Ces médicaments sont prescrits sous leur nom générique — Le générique : c\'est moins cher et tout aussi efficace 😉</div>'+
-    (ord.notes?'<div class="notesbox"><b style="display:block;margin-bottom:6px;">📝 Notes</b>'+esc(ord.notes).replace(/\n/g,'<br>')+'</div>':'')+
-    '<div class="foot">'+
-      '<div class="footmed"><strong>'+esc(ord.medecin||'-')+'</strong>'+esc(ord.specialite||'')+'</div>'+
-      (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:60px;object-fit:contain;border-radius:8px;" />':'<div class="sigbox">Signature & Cachet</div>')+
+    (ord.notes?'<div class="ord-notesbox"><b style="display:block;margin-bottom:6px;">📝 Notes</b>'+esc(ord.notes).replace(/\n/g,'<br>')+'</div>':'')+
+    '<div class="ord-foot">'+
+      '<div class="ord-footmed"><strong>'+esc(ord.medecin||'-')+'</strong>'+esc(ord.specialite||'')+'</div>'+
+      (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:60px;object-fit:contain;border-radius:8px;" />':'<div class="ord-sigbox">Signature & Cachet</div>')+
     '</div>'+
   '</div></body></html>';
 }
