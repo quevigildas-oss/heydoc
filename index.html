@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.60
+     VERSION : V4.61
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6980,7 +6980,7 @@ async function voirOrdoBioHisto(i){
     document.getElementById('ordDetailBody').innerHTML=
       buildOrdBioHtml(i,examens)+
       '<div style="display:flex;gap:10px;margin-top:12px;">'+
-        '<button onclick="telechargerOrdoBio('+i+')" style="flex:1;padding:13px;background:#1E40AF;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'+
+        '<button onclick="telechargerOrdoBio('+i+')" style="flex:1;padding:13px;background:#1E40AF;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📤 Partager</button>'+
         '<button onclick="partagerOrdoBio('+i+')" style="flex:1;padding:13px;background:rgba(30,64,175,.1);border:1px solid #1E40AF;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#1E40AF;cursor:pointer;">📤 Partager</button>'+
       '</div>';
     nav('ordonnanceDetailScreen');
@@ -7093,24 +7093,13 @@ async function voirOrdonnanceHisto(i){
 
   var btnMedsHtml=
     '<div style="display:flex;gap:10px;margin-top:12px;">'+
-      (deja?
-        '<div style="flex:1;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center;font-size:12px;color:var(--text3);">📋 Déjà téléchargée</div>'
-      :
-        '<button onclick="telechargerOrdonnance('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'
-      )+
       btnMoinsCher+
-      '<button onclick="partagerOrdonnance('+i+')" style="flex:1;padding:14px;background:rgba(10,126,106,.1);border:1px solid #0A7E6A;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#0A7E6A;cursor:pointer;">📤 Partager</button>'+
+      '<button onclick="telechargerEtPartager('+i+')" style="flex:1;padding:14px;background:#0A7E6A;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📤 Partager</button>'+
     '</div>';
-
   var btnBioHtml=
     '<div style="display:flex;gap:10px;margin-top:10px;">'+
-      '<button onclick="telechargerOrdoBio('+i+')" style="flex:1;padding:13px;background:#1E40AF;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📥 Télécharger</button>'+
-      '<button onclick="partagerOrdoBio('+i+')" style="flex:1;padding:13px;background:rgba(30,64,175,.1);border:1px solid #1E40AF;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#1E40AF;cursor:pointer;">📤 Partager</button>'+
+      '<button onclick="telechargerEtPartagerBio('+i+')" style="flex:1;padding:13px;background:#1E40AF;border:none;border-radius:12px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;cursor:pointer;">📤 Partager</button>'+
     '</div>';
-
-  document.getElementById('ordDetailBody').innerHTML=
-    buildOrdHtml(i)+
-    btnMedsHtml+
     '<div id="ordBioWrapper" style="margin-top:16px;">'+
       '<div id="ordBioSection"></div>'+
       '<div id="ordBioBtns" style="display:none;">'+btnBioHtml+'</div>'+
@@ -7131,6 +7120,87 @@ async function voirOrdonnanceHisto(i){
       }
     }).catch(function(){});
   }
+}
+
+// ── Télécharger via blob (vrai download sans print dialog) ──
+function genererHtmlOrdonnance(i){
+  var s=HISTO_CACHE[i];if(!s)return null;
+  var ord=s.ordonnance;if(!ord)return null;
+  var p=PROFILS[SEL]||{};
+  var patNom=(p.prenom||'')+' '+(p.nom||'');
+  var medsHtml=(ord.medicaments||[]).map(function(m,idx){
+    var bg=idx%2===0?'#fff':'#f9fafb';
+    return '<div style="display:flex;align-items:center;padding:10px 14px;background:'+bg+';border-bottom:1px solid #e5e7eb;">'+
+      '<div style="width:22px;height:22px;border-radius:50%;background:#0A7E6A;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:10px;font-weight:700;color:#fff;margin-right:12px;">'+(idx+1)+'</div>'+
+      '<div style="flex:1;font-size:13px;color:#1A2B3C;font-weight:500;">'+escHtml(m)+'</div>'+
+    '</div>';
+  }).join('');
+  var dateAff=s.date?new Date(s.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'-';
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ordonnance Dokita</title>'+
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;background:#fff;color:#1A2B3C;}'+
+    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>'+
+    '<div style="max-width:210mm;margin:0 auto;min-height:297mm;display:flex;flex-direction:column;">'+
+      '<div style="background:#0A7E6A;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<div><div style="font-size:11px;color:rgba(255,255,255,.8);">DOKITA PRO — Système de gestion médicale</div>'+
+        '<div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:1px;">ORDONNANCE MÉDICALE</div></div>'+
+        '<div style="text-align:right;font-size:10px;color:rgba(255,255,255,.8);"><div>Réf : '+escHtml(s.dossierId||'-')+'</div><div>'+dateAff+'</div></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:#E8F5F2;">'+
+        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:12px;">'+
+          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PRESCRIPTEUR</div>'+
+          '<div style="font-size:14px;font-weight:700;">'+escHtml(ord.medecin||'-')+'</div>'+
+          '<div style="font-size:11px;color:#6B7280;font-style:italic;">'+escHtml(ord.specialite||'-')+'</div>'+
+        '</div>'+
+        '<div style="background:#fff;border:1px solid #0A7E6A;border-radius:8px;padding:12px;">'+
+          '<div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:6px;">PATIENT</div>'+
+          '<div style="font-size:14px;font-weight:700;">'+escHtml(patNom.trim()||'-')+'</div>'+
+          '<div style="font-size:10px;color:#6B7280;margin-top:4px;">ID : '+escHtml(SESSION_PATIENT_ID||'-')+'</div>'+
+        '</div>'+
+      '</div>'+
+      (ord.diagnostic?'<div style="padding:10px 16px;background:#f0fdf4;border-bottom:1px solid #e5e7eb;"><div style="font-size:9px;font-weight:700;color:#0A7E6A;margin-bottom:4px;">DIAGNOSTIC</div><div style="font-size:12px;">'+escHtml(ord.diagnostic)+'</div></div>':'')+
+      '<div style="background:#0A7E6A;padding:8px 16px;"><div style="font-size:10px;font-weight:700;color:#fff;">MÉDICAMENTS PRESCRITS</div></div>'+
+      medsHtml+
+      (ord.notes?'<div style="background:#fffbeb;border-top:2px solid #f59e0b;padding:12px 16px;"><div style="font-size:9px;font-weight:700;color:#d97706;margin-bottom:4px;">NOTES / OBSERVATIONS</div><div style="font-size:12px;">'+escHtml(ord.notes)+'</div></div>':'')+
+      '<div style="padding:20px 16px;display:flex;justify-content:flex-end;flex:1;align-items:flex-end;">'+
+        '<div style="width:200px;border:1px solid #D1D5DB;border-radius:8px;padding:14px;text-align:center;">'+
+          (ord.signature_base64?'<img src="'+ord.signature_base64+'" style="width:140px;height:55px;object-fit:contain;"/>':'<div style="font-size:9px;color:#6B7280;margin-bottom:70px;">Signature & Cachet du médecin</div>')+
+          '<div style="border-top:1px solid #1A2B3C;padding-top:6px;font-size:10px;font-weight:700;">'+escHtml(ord.medecin||'-')+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="background:#0A7E6A;padding:10px 16px;text-align:center;">'+
+        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel · Réservé à l usage du patient désigné</div>'+
+      '</div>'+
+    '</div>'+
+  '</body></html>';
+}
+
+async function telechargerEtPartager(i){
+  var s=HISTO_CACHE[i];if(!s)return;
+  localStorage.setItem('ord_used_'+s.supabaseId,'1');
+  var html=genererHtmlOrdonnance(i);
+  if(!html)return;
+  var patNom=((PROFILS[SEL]?((PROFILS[SEL].prenom||'')+' '+(PROFILS[SEL].nom||'')):'-')).trim();
+  var fileName='Ordonnance_Dokita_'+patNom.replace(/\s+/g,'_')+'.html';
+  // Essayer Web Share API (mobile)
+  if(navigator.share && navigator.canShare){
+    try{
+      var blob=new Blob([html],{type:'text/html'});
+      var file=new File([blob],fileName,{type:'text/html'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Ordonnance Dokita',text:'Ordonnance médicale Dokita'});
+        return;
+      }
+    }catch(e){dbg('Share err: '+e.message);}
+  }
+  // Fallback : téléchargement direct
+  var blob=new Blob([html],{type:'text/html'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=fileName;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  toast('✅ Ordonnance téléchargée');
+  setTimeout(function(){voirOrdonnanceHisto(i);},500);
 }
 
 function telechargerOrdonnance(i){
@@ -7179,7 +7249,7 @@ function telechargerOrdonnance(i){
         '</div>'+
       '</div>'+
       '<div style="background:#0A7E6A;padding:10px 16px;text-align:center;">'+
-        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel · Réservé à l\'usage du patient désigné</div>'+
+        '<div style="font-size:9px;color:rgba(255,255,255,.8);">Document généré par Dokita Pro · Confidentiel · Réservé à l usage du patient désigné</div>'+
       '</div>'+
     '</div>'+
     '<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};}<\/script>'+
@@ -7224,6 +7294,31 @@ function telechargerOrdoBio(i){
   a.href=url;a.download='ordonnance-biologique-dokita.html';
   document.body.appendChild(a);a.click();
   setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+}
+
+async function telechargerEtPartagerBio(i){
+  var s=HISTO_CACHE[i];if(!s)return;
+  var html=genererHtmlOrdoBio(i);
+  if(!html){toast('Ordonnance bio non disponible');return;}
+  var patNom=((PROFILS[SEL]?((PROFILS[SEL].prenom||'')+' '+(PROFILS[SEL].nom||'')):'-')).trim();
+  var fileName='Ordo_Bio_Dokita_'+patNom.replace(/\s+/g,'_')+'.html';
+  if(navigator.share && navigator.canShare){
+    try{
+      var blob=new Blob([html],{type:'text/html'});
+      var file=new File([blob],fileName,{type:'text/html'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file],title:'Ordonnance biologique Dokita'});
+        return;
+      }
+    }catch(e){dbg('Share bio err: '+e.message);}
+  }
+  var blob=new Blob([html],{type:'text/html'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=fileName;
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  toast('✅ Ordonnance biologique téléchargée');
 }
 
 async function partagerOrdoBio(i){
