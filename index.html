@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.62
+     VERSION : V4.63
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1466,6 +1466,15 @@ function nav(id){
 // ══════════════════════════════
 function goPatient(){if(!SESSION_EMAIL){nav('loginScreen');return;}renderProfils();nav('profilsScreen');}
 
+// ── Helper : paramètre &for= pour les membres famille ──
+// Retourne '&for=PAT-XX' si le profil sélectionné est un membre famille
+// Retourne '' si c'est le profil principal
+function forSel(){
+  var p=PROFILS[SEL];
+  if(!p||!p.patientId||p.patientId===SESSION_PATIENT_ID)return '';
+  return '&for='+encodeURIComponent(p.patientId);
+}
+
 async function rechargerSessionNotion(){
   if(!SESSION_EMAIL)return false;
   try{
@@ -2210,7 +2219,7 @@ async function rafraichirProfilSupabase(patientId){
     }
 
     // 2+3. Recharger médicaments actifs + ALD via JWT /api/patient?action=dossier
-    var rd=await fetchAPI(API_URL+'/patient?action=dossier');
+    var rd=await fetchAPI(API_URL+'/patient?action=dossier'+(estFamille?'&for='+encodeURIComponent(patientId):''));
     var dd=rd.ok?await rd.json():[];
     var docs=Array.isArray(dd)?dd:(dd.data||[]);
 
@@ -2307,7 +2316,7 @@ async function startChat(){
     var medsEncours=[];
     try{
       var today=new Date();today.setHours(0,0,0,0);
-      var ordR=await fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient');
+      var ordR=await fetchAPI(API_URL+'/patient?action=ordonnances&statut=envoyee_patient'+(PROFILS[SEL]&&PROFILS[SEL].patientId!==SESSION_PATIENT_ID?'&for='+encodeURIComponent(PROFILS[SEL].patientId):''));
       var ordData=await ordR.json();
       var ordRows=Array.isArray(ordData)?ordData:(ordData.data||[]);
       if(ordRows.length){
@@ -3949,7 +3958,7 @@ function supprimerTrait(idx){
 function mettreAJourBadgeRDV(profil){
   var p=profil||PROFILS[SEL];
   if(!p||!p.supabaseId)return;
-  fetchAPI(API_URL+'/patient?action=rdv').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+  fetchAPI(API_URL+'/patient?action=rdv'+forSel()).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
     var rows=Array.isArray(data)?data:(data.data||[]);
     var nbConfirme=rows.filter(function(r){return r.statut==='confirme';}).length;
     var nbPropose=rows.filter(function(r){return r.statut==='propose';}).length;
@@ -5230,7 +5239,7 @@ async function ouvrirRDV(){
   if(!p||!p.patientId){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">Profil non disponible</div>';return;}
 
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=rdv');
+    var r=await fetchAPI(API_URL+'/patient?action=rdv'+forSel());
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
 
@@ -5463,7 +5472,7 @@ async function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
 
   // Vérifier si demande en cours sur cet établissement
   try{
-    var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=demande');
+    var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=demande'+forSel());
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(rows.length){
