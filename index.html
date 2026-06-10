@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.61
+     VERSION : V4.62
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1507,6 +1507,8 @@ async function rechargerSessionNotion(){
         lien:mp.lien_familial||'autre',compteParent:SESSION_EMAIL,transfere:false
       };
     });
+    // Vider PROFILS avant de reconstruire — évite les doublons (ex: deux Gildas)
+    PROFILS=[];
     PROFILS=[profilPrincipal].concat(membres);
     SEL=0;
     saveProfils();
@@ -2058,7 +2060,8 @@ async function lancerConsult(){
   var p=PROFILS[SEL];
   if(p&&p.patientId){
     try{
-      var rEx=await fetchAPI(API_URL+'/patient?action=examens&statut=resultat_recu');
+      var forParam=p.patientId&&p.patientId!==SESSION_PATIENT_ID?'&for='+encodeURIComponent(p.patientId):'';
+      var rEx=await fetchAPI(API_URL+'/patient?action=examens&statut=resultat_recu'+forParam);
       var dEx=await rEx.json();
       p._examensCache=Array.isArray(dEx)?dEx:(dEx.data||[]);
     }catch(e){dbg('Examens preload err: '+e.message);}
@@ -2160,9 +2163,17 @@ function lancerEph(){
 async function rafraichirProfilSupabase(patientId){
   if(!patientId)return;
   try{
+    // ── Détecter si c'est un membre famille (patientId !== principal) ──
+    var estFamille = patientId !== SESSION_PATIENT_ID;
+    var profilUrl = estFamille
+      ? API_URL+'/patient?action=profil&for='+encodeURIComponent(patientId)
+      : API_URL+'/patient?action=profil';
+
     // 1. Recharger profil patient via JWT /api/patient
-    var rp=await fetchAPI(API_URL+'/patient?action=profil');
+    var rp=await fetchAPI(profilUrl);
     var pat=rp.ok?await rp.json():null;
+    // Pour famille : pat est un tableau, prendre le premier élément
+    if(Array.isArray(pat))pat=pat[0]||null;
     if(pat&&!pat.error){
       if(CURRENT&&CURRENT.patientId===patientId){
         CURRENT.prenom     = pat.prenom||CURRENT.prenom||'';
@@ -2195,7 +2206,7 @@ async function rafraichirProfilSupabase(patientId){
         PROFILS[SEL].groupe_sanguin = pat.groupe_sanguin||PROFILS[SEL].groupe_sanguin||'';
         PROFILS[SEL].langue      = pat.langue_preferee||PROFILS[SEL].langue||'';
       }
-      dbg('Profil rafraîchi JWT ✅ '+patientId+' | '+pat.prenom+' '+pat.nom);
+      dbg('Profil rafraîchi JWT ✅ '+patientId+' | '+pat.prenom+' '+pat.nom+(estFamille?' [famille]':''));
     }
 
     // 2+3. Recharger médicaments actifs + ALD via JWT /api/patient?action=dossier
@@ -2897,8 +2908,14 @@ function ouvrirEspaceProfil(i){
 
   // Rechargement silencieux depuis Supabase pour avoir les données fraîches
   if(p.supabaseId){
-    fetchAPI(API_URL+'/patient?action=profil').then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
-      var rows=Array.isArray(data)?data:(data.data||[]);
+    // Utiliser &for= pour les membres famille (évite d'écraser avec les données du principal)
+    var estFamille2 = p.patientId && p.patientId !== SESSION_PATIENT_ID;
+    var profilUrl2 = estFamille2
+      ? API_URL+'/patient?action=profil&for='+encodeURIComponent(p.patientId)
+      : API_URL+'/patient?action=profil';
+    fetchAPI(profilUrl2).then(function(r){return r&&r.json?r.json():Promise.resolve({});}).then(function(data){
+      // Pour famille l'API retourne un tableau, pour principal un objet
+      var rows=Array.isArray(data)?data:(data.data||[data]);
       if(!rows.length)return;
       var row=rows[0];
       var updated={
