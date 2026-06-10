@@ -1,13 +1,14 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
 // VERSION : V2.8
+// FIX     : profils_famille exclut le principal + action=profil supporte &for=
 // FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
-// DATE    : 2026-05-21
+// DATE    : 2026-05-12
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (profil, profils_famille, consultations,
 //                        examens, ordonnances, dossier, appels_offres, PATCH profil,
@@ -115,6 +116,32 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=profil
     if (req.method === 'GET' && action === 'profil') {
+      // Support ?for=PAT-XX pour les membres famille
+      if (req.query.for && req.query.for !== patientId) {
+        const forId = req.query.for;
+        // Vérifier que ce patient appartient bien à la famille du principal
+        const { data: famData, error: famErr } = await supabase
+          .from('patients').select('*')
+          .eq('patient_id', forId)
+          .eq('compte_parent_id', patientUuid)
+          .single();
+        if (famErr || !famData) {
+          // Essai aussi par byEmail (même email que principal)
+          const { data: profPrincipal } = await supabase
+            .from('patients').select('email').eq('id', patientUuid).single();
+          if (profPrincipal && profPrincipal.email) {
+            const { data: famByEmail } = await supabase
+              .from('patients').select('*')
+              .eq('patient_id', forId)
+              .eq('email', profPrincipal.email)
+              .single();
+            if (famByEmail) return res.status(200).json(famByEmail);
+          }
+          return res.status(403).json({ error: 'Membre famille non trouvé' });
+        }
+        return res.status(200).json(famData);
+      }
+      // Profil principal
       const { data, error } = await supabase
         .from('patients').select('*').eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
@@ -145,13 +172,15 @@ module.exports = async function handler(req, res) {
         .from('patients').select('*').eq('compte_parent_id', patientUuid);
       const linked = byParent || [];
 
-      // Fusionner et dédupliquer par id
+      // Fusionner, dédupliquer par id, ET exclure le principal
       const all = [...byEmail];
       for (const p of linked) {
         if (!all.find(x => x.id === p.id)) all.push(p);
       }
+      // Exclure le principal (sinon il apparaît deux fois côté client)
+      const membres = all.filter(p => p.id !== patientUuid);
 
-      return res.status(200).json(all);
+      return res.status(200).json(membres);
     }
 
     // GET /api/patient?action=consultations[&for=PAT-XX-...]
@@ -277,18 +306,10 @@ module.exports = async function handler(req, res) {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
       const { data, error } = await supabase
-        .from('appels_offres').select('*').eq('id', id).limit(1);
+        .from('appels_offres').select('*')
+        .eq('id', id).eq('patient_id', patientId).single();
       if (error) return res.status(500).json({ error: error.message });
-      if (!data || !data.length) return res.status(404).json({ error: 'AO introuvable' });
-      const ao = data[0];
-      // Vérifier appartenance : patient lui-même OU membre famille (compte_parent_id)
-      if (ao.patient_id !== patientId) {
-        const { data: famCheck } = await supabase.from('patients')
-          .select('id').eq('patient_id', ao.patient_id)
-          .eq('compte_parent_id', patientUuid).limit(1);
-        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorise' });
-      }
-      return res.status(200).json([ao]); // tableau pour compatibilite choisirOffre
+      return res.status(200).json(data);
     }
 
     // GET /api/patient?action=rdv
