@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.65
+     VERSION : V4.66
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -6246,6 +6246,7 @@ function renderOffres(complete,stops2,toutes){
 
   // Offres disponibles
   var offresAfficher=toutes&&toutes.length?toutes:[];
+  var dejaFinalise=offresAfficher.some(function(o){return o.statut==='livre'||o.statut==='accepte';});
   if(!offresAfficher.length){
     html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;color:var(--text2);">Aucune pharmacie disponible pour le moment</div>';
   } else {
@@ -6276,7 +6277,15 @@ function renderOffres(complete,stops2,toutes){
           (tel?
             '<a href="tel:'+tel+'" style="display:block;width:100%;padding:11px;background:rgba(0,168,120,.1);border:1px solid rgba(0,168,120,.3);border-radius:10px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-align:center;text-decoration:none;margin-bottom:8px;box-sizing:border-box;">📞 '+tel+' — Appeler avant de vous déplacer</a>'
           :'')+
-          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\',\''+o.total_fcfa+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'+
+          (estAnnule||o.statut==='annule'?
+            '<div style="width:100%;padding:11px;background:rgba(107,114,128,.08);border:1px solid rgba(107,114,128,.2);border-radius:10px;text-align:center;font-size:12px;color:var(--text3);">Cette offre n\'a pas été retenue — Merci pour votre réactivité</div>'
+          :o.statut==='livre'?
+            '<div style="width:100%;padding:11px;background:rgba(0,200,150,.08);border:1px solid var(--accent);border-radius:10px;text-align:center;font-size:12px;font-weight:700;color:var(--accent);">✅ Médicaments retirés</div>'
+          :o.statut==='accepte'?
+            '<div style="width:100%;padding:11px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:10px;text-align:center;font-size:12px;font-weight:700;color:#6366f1;">⏳ En cours de retrait</div>'
+          :
+          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\',\''+o.total_fcfa+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'
+          )+
         '</div>';
     });
   }
@@ -6408,20 +6417,22 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
           var tousAos2=await fetchAPI(API_URL+'/patient?action=ao'+forSel());
           var dAos2=await tousAos2.json();
           var aosData2=Array.isArray(dAos2)?dAos2:(dAos2.data||[]);
-          var annules2=aosData2.filter(function(a){
-            return a.statut==='annule'&&a.pharmacie_tel;
-          });
+          var annules2=aosData2.filter(function(a){return a.statut==='annule';});
+          var notifCount=0;
           annules2.forEach(function(a){
+            var telPharma=a.pharmacie_tel||a.pharmTel||'';
+            if(!telPharma)return;
             fetchAPI(API_URL+'/whatsapp?action=notifier_pharmacie',{
               method:'POST',
               body:JSON.stringify({
-                telephone:a.pharmacie_tel,
+                telephone:telPharma,
                 type:'offre_non_retenue',
                 data:{pharmacie:a.pharmacie_nom||''}
               })
-            }).catch(function(e){dbgWarn('Notif pharmacie non retenue: '+e.message);});
+            }).catch(function(e){dbgWarn('Notif pharmacie: '+e.message);});
+            notifCount++;
           });
-          if(annules2.length)dbg('Notif pharmacies non retenues: '+annules2.length);
+          if(notifCount)dbg('Notif pharmacies non retenues: '+notifCount);
         }catch(ne){dbgWarn('Notif pharmacies: '+ne.message);}
 
   }catch(e){
