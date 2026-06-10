@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.63
+     VERSION : V4.65
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1432,8 +1432,14 @@ var GEO_DATA={clinique:[],labo:[],pharmacie:[]};
 try{var _sess=localStorage.getItem('dk_session');if(_sess){var _s=JSON.parse(_sess);SESSION_EMAIL=_s.email||'';SESSION_PATIENT_ID=_s.patientId||'';}}catch(e){}
 // Auto-login si session trouvée
 window.addEventListener('DOMContentLoaded',function(){
-  // Vérifier retour CinetPay (paramètre ?paiement= dans l'URL)
   verifierPaiementRetour();
+  // Polling badge Offres Dokita toutes les 30s
+  setInterval(function(){
+    if(!SESSION_EMAIL||SEL<0)return;
+    var screens=['accueilScreen','espaceProfilScreen'];
+    var visible=screens.some(function(s){var el=document.getElementById(s);return el&&el.classList.contains('on');});
+    if(visible)mettreAJourBadgeOffres();
+  },30000);
   if(SESSION_EMAIL){
     rechargerSessionNotion().then(function(ok){
       if(ok){
@@ -3955,6 +3961,18 @@ function supprimerTrait(idx){
   toast('🗑 Traitement supprimé');
 }
 
+async function mettreAJourBadgeOffres(){
+  if(SEL<0||!PROFILS[SEL])return;
+  try{
+    var r=await fetchAPI(API_URL+'/patient?action=ao'+forSel());
+    var d=await r.json();
+    var aos=Array.isArray(d)?d:(d.data||[]);
+    var nbOffres=aos.filter(function(a){return a.statut==='offres_recues';}).length;
+    var badge=document.getElementById('badgeOffres');
+    if(badge){badge.textContent=nbOffres>0?nbOffres:'';badge.style.display=nbOffres>0?'flex':'none';}
+  }catch(e){dbgWarn('Badge offres: '+e.message);}
+}
+
 function mettreAJourBadgeRDV(profil){
   var p=profil||PROFILS[SEL];
   if(!p||!p.supabaseId)return;
@@ -6384,6 +6402,28 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
       '</div>'+
       '<div style="height:30px;"></div>';
 
+
+        // Notifier les pharmacies non retenues
+        try{
+          var tousAos2=await fetchAPI(API_URL+'/patient?action=ao'+forSel());
+          var dAos2=await tousAos2.json();
+          var aosData2=Array.isArray(dAos2)?dAos2:(dAos2.data||[]);
+          var annules2=aosData2.filter(function(a){
+            return a.statut==='annule'&&a.pharmacie_tel;
+          });
+          annules2.forEach(function(a){
+            fetchAPI(API_URL+'/whatsapp?action=notifier_pharmacie',{
+              method:'POST',
+              body:JSON.stringify({
+                telephone:a.pharmacie_tel,
+                type:'offre_non_retenue',
+                data:{pharmacie:a.pharmacie_nom||''}
+              })
+            }).catch(function(e){dbgWarn('Notif pharmacie non retenue: '+e.message);});
+          });
+          if(annules2.length)dbg('Notif pharmacies non retenues: '+annules2.length);
+        }catch(ne){dbgWarn('Notif pharmacies: '+ne.message);}
+
   }catch(e){
     toast('❌ Erreur : '+e.message);
   }
@@ -6687,7 +6727,7 @@ async function aoTermine(){
     // Marquer ao_soumis dans Supabase
     if(AO_SESSION_ID){
       try{
-        await fetchAPI(API_URL+'/patient?action=ordonnance&id='+AO_SESSION_ID,{method:'PATCH',body:JSON.stringify({ao_soumis:true})});
+        await fetchAPI(API_URL+'/patient?action=ordonnance&id='+AO_SESSION_ID+forSel(),{method:'PATCH',body:JSON.stringify({ao_soumis:true})});
       }catch(e){dbg('ao_soumis patch err: '+e.message);}
     }
     toast('✅ '+envoyes.length+' pharmacie(s) contactée(s) — 15 min pour répondre');
