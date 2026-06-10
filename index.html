@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.66
+     VERSION : V4.67
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -2753,16 +2753,22 @@ async function envoyerDossier(email,nomMed,medId){
       var declarations=[];
       // Médicaments déclarés dans la conversation
       var traitsDecl=resume.traitements_en_cours||'';
-      if(traitsDecl){
+      // Valeurs non significatives à ignorer (patient n'a pas de traitement en cours)
+      var IGNORE_VALS=['aucun','aucune','non','no','néant','neant','rien','none','n/a',''];
+      if(traitsDecl&&IGNORE_VALS.indexOf(traitsDecl.toLowerCase().trim())===-1){
         traitsDecl.split('|').forEach(function(t){
           t=t.trim();
-          if(!t)return;
+          if(!t||IGNORE_VALS.indexOf(t.toLowerCase())===-1===false)return;
+          // Filtrer aussi les valeurs vides ou non significatives après split
+          if(IGNORE_VALS.indexOf(t.toLowerCase())!==-1)return;
           var parts=t.split('—');
+          var nomMed=(parts[0]||t).trim();
+          if(!nomMed||IGNORE_VALS.indexOf(nomMed.toLowerCase())!==-1)return;
           declarations.push({
             type:'medicament_cours',
             type_document:'autre',
-            nom:'Médicament déclaré — '+(parts[0]||t).trim(),
-            valeur:(parts[0]||t).trim(),
+            nom:'Médicament déclaré — '+nomMed,
+            valeur:nomMed,
             dose:(parts[1]||'').trim(),
             posologie:(parts[2]||'').trim(),
             source:'patient'
@@ -2771,7 +2777,7 @@ async function envoyerDossier(email,nomMed,medId){
       }
       // Allergies déclarées
       var allergiesDecl=resume.allergies||'';
-      if(allergiesDecl&&!p.allergies){
+      if(allergiesDecl&&IGNORE_VALS.indexOf(allergiesDecl.toLowerCase().trim())===-1&&!p.allergies){
         declarations.push({
           type:'allergie',
           type_document:'autre',
@@ -2782,7 +2788,7 @@ async function envoyerDossier(email,nomMed,medId){
       }
       // Antécédents déclarés
       var antecedentsDecl=resume.antecedents||'';
-      if(antecedentsDecl&&!p.antecedents){
+      if(antecedentsDecl&&IGNORE_VALS.indexOf(antecedentsDecl.toLowerCase().trim())===-1&&!p.antecedents){
         declarations.push({
           type:'antecedent',
           type_document:'autre',
