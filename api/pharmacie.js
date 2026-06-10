@@ -1,6 +1,6 @@
 // api/pharmacie.js
 // Endpoints pharmacie — authentification par token AO (ao_id dans l'URL)
-// VERSION : V1.2
+// VERSION : V1.3
 // ADD     : whitelist prix_unitaire, quantite_boites, total_fcfa, medicaments_offre, disponible_totalite
 // DATE    : 2026-05-19
 // NOTES   : Pas de JWT — la pharmacie s'authentifie via l'ao_id unique dans le lien WhatsApp
@@ -59,6 +59,39 @@ module.exports = async function handler(req, res) {
 
       const { error } = await supabase.from('appels_offres').update(safe).eq('id', id);
       if (error) return res.status(500).json({ error: error.message });
+
+      // Si statut=offres_recues → notifier patient via WhatsApp (côté serveur)
+      if (safe.statut === 'offres_recues') {
+        try {
+          // Récupérer infos AO et patient
+          const { data: aoRow } = await supabase
+            .from('appels_offres').select('patient_id, pharmacie_nom')
+            .eq('id', id).single();
+
+          if (aoRow?.patient_id) {
+            const { data: patRow } = await supabase
+              .from('patients').select('telephone, prenom')
+              .eq('patient_id', aoRow.patient_id).single();
+
+            if (patRow?.telephone) {
+              await fetch(
+                (process.env.BASE_URL || 'https://heydoc-mu.vercel.app') + '/api/whatsapp?action=notifier_patient',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': req.headers['authorization'] || '' },
+                  body: JSON.stringify({
+                    telephone: patRow.telephone,
+                    type: 'offre_recue',
+                    data: { prenom: patRow.prenom || '', pharmacie: aoRow.pharmacie_nom || '' }
+                  })
+                }
+              );
+            }
+          }
+        } catch (notifErr) {
+          console.warn('Notif offre_recue err:', notifErr.message);
+        }
+      }
 
       // Si statut=livre → déclencher payout pharmacie côté serveur
       if (safe.statut === 'livre') {

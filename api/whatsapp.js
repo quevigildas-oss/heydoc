@@ -1,6 +1,6 @@
 // ============================================
 // DOKITA WHATSAPP API — api/whatsapp.js
-// VERSION : V1.0
+// VERSION : V1.1
 // DATE    : 2026-05-26
 // Twilio WhatsApp Sandbox → prod Meta Cloud API
 // ============================================
@@ -152,6 +152,44 @@ export default async function handler(req, res) {
         `Présentez ce code au pharmacien.`,
         ``,
         `_Dokitrust — Plateforme médicale digitale_`
+      ].join('\n')
+    };
+
+    const message = messages[type];
+    if (!message) return res.status(400).json({ error: 'Type inconnu : ' + type });
+
+    try {
+      const sid = await sendWhatsApp(telephone, message);
+      return res.status(200).json({ ok: true, sid });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── ACTION : notifier_pharmacie — informer pharmacie non retenue ──
+  if (action === 'notifier_pharmacie') {
+    const auth = req.headers['authorization'] || '';
+    if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Non autorisé' });
+
+    const { telephone, type, data: notifData } = req.body || {};
+    if (!telephone || !type) {
+      return res.status(400).json({ error: 'telephone et type requis' });
+    }
+
+    const messages = {
+      offre_non_retenue: [
+        `🏥 *DOKITA — Information sur votre offre*`,
+        ``,
+        `Bonjour *${notifData?.pharmacie || 'Pharmacie partenaire'}*,`,
+        ``,
+        `Nous vous remercions sincèrement d'avoir répondu à notre appel d'offres et de la confiance que vous accordez à la plateforme Dokita.`,
+        ``,
+        `Pour cette commande, le patient a choisi une autre pharmacie partenaire.`,
+        ``,
+        `Votre réactivité et votre professionnalisme sont très appréciés. Nous espérons avoir l'opportunité de collaborer avec vous très prochainement.`,
+        ``,
+        `_Cordialement,_`,
+        `_L'équipe Dokitrust_`
       ].join('\n')
     };
 
