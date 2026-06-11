@@ -7721,15 +7721,16 @@ function handleMicTap(){
     }
     return;
   }
-  // Si verrouillé → tap annule
-  if(_micLocked){ _stopMicRecording(true); return; }
+  // Si verrouillé → tap arrête sans effacer le texte
+  if(_micLocked){ _stopMicRecording(false); return; }
   // Pas en cours → démarrer
   _startMicRecording();
 }
 
 function _startMicRecording(){
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('⚠️ Dictée vocale non supportée');return;}
-  _micLocked=false;_micTranscript='';_micSecs=0;
+  clearTimeout(_micTimerInt);
+  _micCancelled=false;_micLocked=false;_micTranscript='';_micSecs=0;
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   recognition=new SR();
   recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=false;
