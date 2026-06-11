@@ -7733,7 +7733,7 @@ function _startMicRecording(){
   _micLocked=false;_micTranscript='';_micSecs=0;
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   recognition=new SR();
-  recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=true;
+  recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=false;
   recognition.onstart=function(){
     isListening=true;
     document.getElementById('micBtn').classList.add('recording','on');
@@ -7750,18 +7750,11 @@ function _startMicRecording(){
     if(navigator.vibrate)navigator.vibrate(40);
   };
   recognition.onresult=function(e){
-    // Accumuler uniquement les résultats FINAUX dans _micTranscript
+    // interimResults=false → tous les résultats sont finaux
     for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){
-        _micTranscript+=e.results[i][0].transcript+' ';
-      }
+      _micTranscript+=e.results[i][0].transcript+' ';
     }
-    // Interim : prendre UNIQUEMENT le dernier résultat non final
-    var interim='';
-    for(var j=e.results.length-1;j>=0;j--){
-      if(!e.results[j].isFinal){interim=e.results[j][0].transcript;break;}
-    }
-    document.getElementById('chatInp').value=(_micTranscript+interim).trim();
+    document.getElementById('chatInp').value=_micTranscript.trim();
     autoH(document.getElementById('chatInp'));
   };
   recognition.onend=function(){
