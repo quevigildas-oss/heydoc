@@ -7738,8 +7738,9 @@ function _startMicRecording(){
     isListening=true;
     document.getElementById('micBtn').classList.add('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('active');
-    document.getElementById('voiceTimer').textContent='0:00';
-    document.getElementById('voiceHint').textContent='Tap: arrêter & envoyer  ·  Double tap: verrouiller';
+    var timerEl=document.getElementById('voiceTimer');
+    if(timerEl){timerEl.textContent='0:00';timerEl.style.display='';}
+    document.getElementById('voiceHint').textContent='Tap: arrêter  ·  Double tap: verrouiller';
     _micTimerInt=setInterval(function(){
       _micSecs++;
       var m=Math.floor(_micSecs/60),s=_micSecs%60;
@@ -7749,13 +7750,18 @@ function _startMicRecording(){
     if(navigator.vibrate)navigator.vibrate(40);
   };
   recognition.onresult=function(e){
-    var t='',fin='';
+    // Accumuler uniquement les résultats FINAUX dans _micTranscript
     for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal)fin+=e.results[i][0].transcript+' ';
-      else t+=e.results[i][0].transcript;
+      if(e.results[i].isFinal){
+        _micTranscript+=e.results[i][0].transcript+' ';
+      }
     }
-    if(fin)_micTranscript+=fin;
-    document.getElementById('chatInp').value=(_micTranscript+t).trim();
+    // Interim : prendre UNIQUEMENT le dernier résultat non final
+    var interim='';
+    for(var j=e.results.length-1;j>=0;j--){
+      if(!e.results[j].isFinal){interim=e.results[j][0].transcript;break;}
+    }
+    document.getElementById('chatInp').value=(_micTranscript+interim).trim();
     autoH(document.getElementById('chatInp'));
   };
   recognition.onend=function(){
@@ -7779,8 +7785,12 @@ function _stopMicRecording(cancel){
 
 function _lockMic(){
   _micLocked=true;
+  clearInterval(_micTimerInt); // Stopper le chrono
   var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('locked');
-  document.getElementById('voiceHint').textContent='🔒 Verrouillé — Bouton Envoyer ➤ pour envoyer  ·  Tap mic pour annuler';
+  // Cacher le timer dans le HUD verrouillé
+  var timerEl=document.getElementById('voiceTimer');
+  if(timerEl)timerEl.style.display='none';
+  document.getElementById('voiceHint').textContent='🔒 Dictée en cours — ➤ pour envoyer  ·  Tap mic pour annuler';
   if(navigator.vibrate)navigator.vibrate([40,20,40]);
 }
 
