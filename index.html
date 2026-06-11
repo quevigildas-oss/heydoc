@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
-     DOKITA — App Patient 
-     VERSION : V4.69
+     DOKITA — App Patient
+     VERSION : V4.70
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -688,9 +688,8 @@ select.finput option{background:var(--bg3);}
 <!-- HUD Enregistrement vocal style WhatsApp -->
 <div id="voiceHUD">
   <div class="voice-dot"></div>
-  <span class="voice-timer" id="voiceTimer">0:00</span>
   <div class="voice-waves"><span></span><span></span><span></span><span></span><span></span></div>
-  <span class="voice-hint" id="voiceHint">↑ Glisser haut pour verrouiller · ← Annuler</span>
+  <span class="voice-hint" id="voiceHint">Tap: arrêter  ·  Double tap: verrouiller</span>
 </div>
   <div class="inp-wrap">
     <button class="mic-btn" id="micBtn" onclick="handleMicTap()" title="Tap: démarrer | Double tap: verrouiller">
@@ -7734,19 +7733,16 @@ function _startMicRecording(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   recognition=new SR();
   recognition.lang='fr-FR';recognition.continuous=true;recognition.interimResults=false;
+  recognition.maxAlternatives=1;
+  recognition.onspeechend=function(){/* ignorer — géré par onend avec redémarrage auto */};
   recognition.onstart=function(){
     isListening=true;
     document.getElementById('micBtn').classList.add('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('active');
-    var timerEl=document.getElementById('voiceTimer');
-    if(timerEl){timerEl.textContent='0:00';timerEl.style.display='';}
     document.getElementById('voiceHint').textContent='Tap: arrêter  ·  Double tap: verrouiller';
     _micTimerInt=setInterval(function(){
       _micSecs++;
-      var m=Math.floor(_micSecs/60),s=_micSecs%60;
-      var el=document.getElementById('voiceTimer');
-      if(el&&!_micLocked)el.textContent=m+':'+(s<10?'0':'')+s;
-      // Max 1 minute → arrêt automatique
+      // Max 60s → arrêt automatique
       if(_micSecs>=60){
         _stopMicRecording(false);
         toast('⏱ Durée max atteinte — message envoyé');
@@ -7772,8 +7768,7 @@ function _startMicRecording(){
     clearInterval(_micTimerInt);isListening=false;_micLocked=false;_micCancelled=false;
     document.getElementById('micBtn').classList.remove('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.remove('active','locked');
-    var timerEl=document.getElementById('voiceTimer');
-    if(timerEl)timerEl.style.display='';
+
   };
   recognition.onerror=function(e){_stopMicRecording(true);if(e.error!=='aborted')toast('⚠️ Micro: '+e.error);};
   try{recognition.start();}catch(e){}
@@ -7795,8 +7790,7 @@ function _lockMic(){
   clearInterval(_micTimerInt); // Stopper le chrono
   var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('locked');
   // Cacher le timer dans le HUD verrouillé
-  var timerEl=document.getElementById('voiceTimer');
-  if(timerEl)timerEl.style.display='none';
+
   document.getElementById('voiceHint').textContent='🔒 Dictée en cours — ➤ pour envoyer  ·  Tap mic pour annuler';
   if(navigator.vibrate)navigator.vibrate([40,20,40]);
 }
