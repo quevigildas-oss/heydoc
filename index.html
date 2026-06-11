@@ -7709,7 +7709,7 @@ initTheme();
 var recognition=null,isListening=false;
 
 // ── Mic double-tap pour verrouiller ──
-var _micTapTimer=null,_micLocked=false,_micTimerInt=null,_micSecs=0,_micTranscript='';
+var _micTapTimer=null,_micLocked=false,_micCancelled=false,_micTimerInt=null,_micSecs=0,_micTranscript='';
 
 function handleMicTap(){
   // Double tap → verrouiller si déjà en cours
@@ -7745,7 +7745,12 @@ function _startMicRecording(){
       _micSecs++;
       var m=Math.floor(_micSecs/60),s=_micSecs%60;
       var el=document.getElementById('voiceTimer');
-      if(el)el.textContent=m+':'+(s<10?'0':'')+s;
+      if(el&&!_micLocked)el.textContent=m+':'+(s<10?'0':'')+s;
+      // Max 1 minute → arrêt automatique
+      if(_micSecs>=60){
+        _stopMicRecording(false);
+        toast('⏱ Durée max atteinte — message envoyé');
+      }
     },1000);
     if(navigator.vibrate)navigator.vibrate(40);
   };
@@ -7758,15 +7763,24 @@ function _startMicRecording(){
     autoH(document.getElementById('chatInp'));
   };
   recognition.onend=function(){
-    clearInterval(_micTimerInt);isListening=false;_micLocked=false;
+    // Si verrouillé et pas annulé → redémarrer automatiquement
+    if(_micLocked&&!_micCancelled&&_micSecs<60){
+      try{recognition.start();}catch(e){}
+      return;
+    }
+    // Fin normale ou max 1min atteint
+    clearInterval(_micTimerInt);isListening=false;_micLocked=false;_micCancelled=false;
     document.getElementById('micBtn').classList.remove('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.remove('active','locked');
+    var timerEl=document.getElementById('voiceTimer');
+    if(timerEl)timerEl.style.display='';
   };
   recognition.onerror=function(e){_stopMicRecording(true);if(e.error!=='aborted')toast('⚠️ Micro: '+e.error);};
   try{recognition.start();}catch(e){}
 }
 
 function _stopMicRecording(cancel){
+  _micCancelled=true; // Empêche le redémarrage auto dans onend
   clearInterval(_micTimerInt);_micLocked=false;
   if(recognition){try{recognition.stop();}catch(e){}recognition=null;}
   isListening=false;
