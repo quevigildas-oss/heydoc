@@ -7740,14 +7740,13 @@ function _startMicRecording(){
     document.getElementById('micBtn').classList.add('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('active');
     document.getElementById('voiceHint').textContent='Tap: arrêter  ·  Double tap: verrouiller';
-    _micTimerInt=setInterval(function(){
-      _micSecs++;
-      // Max 60s → arrêt automatique
-      if(_micSecs>=60){
+    // Timeout unique 60s — pas de setInterval pour éviter les ticks parasites
+    _micTimerInt=setTimeout(function(){
+      if(isListening||_micLocked){
         _stopMicRecording(false);
         toast('⏱ Durée max atteinte — message envoyé');
       }
-    },1000);
+    },60000);
     if(navigator.vibrate)navigator.vibrate(40);
   };
   recognition.onresult=function(e){
@@ -7765,7 +7764,7 @@ function _startMicRecording(){
       return;
     }
     // Fin normale ou max 1min atteint
-    clearInterval(_micTimerInt);isListening=false;_micLocked=false;_micCancelled=false;
+    clearTimeout(_micTimerInt);isListening=false;_micLocked=false;_micCancelled=false;
     document.getElementById('micBtn').classList.remove('recording','on');
     var hud=document.getElementById('voiceHUD');if(hud)hud.classList.remove('active','locked');
 
@@ -7776,7 +7775,7 @@ function _startMicRecording(){
 
 function _stopMicRecording(cancel){
   _micCancelled=true; // Empêche le redémarrage auto dans onend
-  clearInterval(_micTimerInt);_micLocked=false;
+  clearTimeout(_micTimerInt);_micLocked=false;
   if(recognition){try{recognition.stop();}catch(e){}recognition=null;}
   isListening=false;
   document.getElementById('micBtn').classList.remove('recording','on');
@@ -7787,7 +7786,7 @@ function _stopMicRecording(cancel){
 
 function _lockMic(){
   _micLocked=true;
-  clearInterval(_micTimerInt); // Stopper le chrono
+  clearTimeout(_micTimerInt); // Stopper le chrono
   var hud=document.getElementById('voiceHUD');if(hud)hud.classList.add('locked');
   // Cacher le timer dans le HUD verrouillé
 
