@@ -2467,23 +2467,22 @@ function speakMsg(btn){
 
 
 // ── Upload résultats labo ──
-async function uploadResultatsLabo(consultationId, examens) {
+async function uploadResultatsLabo(consultationId) {
+  var examens = LABO_EXAMENS[consultationId] || [];
+  if (!examens.length) { toast('⚠️ Données examens manquantes'); return; }
+
   var inp = document.getElementById('laboFileInput_' + consultationId);
   if (!inp || !inp.files || !inp.files[0]) { toast('⚠️ Aucun fichier sélectionné'); return; }
 
   var file = inp.files[0];
-  var maxSize = 4 * 1024 * 1024; // 4MB
-
   var btn = document.getElementById('laboBtnUpload_' + consultationId);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyse en cours...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyse...'; }
 
   try {
     var base64, mimeType;
-
     if (file.type === 'application/pdf') {
-      // PDF : encoder directement
+      if (file.size > 4 * 1024 * 1024) { toast('⚠️ PDF trop lourd (max 4MB)'); if(btn){btn.disabled=false;btn.textContent='📎 Analyser';} return; }
       mimeType = 'application/pdf';
-      if (file.size > maxSize) { toast('⚠️ PDF trop lourd (max 4MB)'); if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';} return; }
       base64 = await new Promise(function(res, rej) {
         var r = new FileReader();
         r.onload = function() { res(r.result.split(',')[1]); };
@@ -2491,13 +2490,11 @@ async function uploadResultatsLabo(consultationId, examens) {
         r.readAsDataURL(file);
       });
     } else {
-      // Image : compresser via Canvas
       mimeType = 'image/jpeg';
       base64 = await compresserImage(file, 1200, 0.75);
     }
 
-    // Appel API
-    var forParam = forSel ? forSel() : '';
+    var forParam = (typeof forSel === 'function') ? forSel() : '';
     var resp = await fetch('/api/patient?action=analyser_resultats' + forParam, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
@@ -2512,21 +2509,20 @@ async function uploadResultatsLabo(consultationId, examens) {
 
     if (data.error && !data.matches) {
       toast('❌ ' + (data.error || 'Erreur analyse'));
-      if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';}
+      if (btn) { btn.disabled = false; btn.textContent = '📎 Analyser'; }
       return;
     }
 
-    // Afficher les résultats
     afficherResultatsLabo(consultationId, data);
-
-    // Rafraîchir la liste des examens
-    setTimeout(function() { chargerExamens && chargerExamens(consultationId); }, 1000);
+    toast('✅ ' + (data.nb_trouvés || 0) + '/' + (data.nb_total || 0) + ' examens identifiés');
+    setTimeout(function() { if(typeof ouvrirDossierExamens === 'function') ouvrirDossierExamens(); }, 2000);
 
   } catch (e) {
     toast('❌ Erreur: ' + e.message);
-    if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';}
+    if (btn) { btn.disabled = false; btn.textContent = '📎 Analyser'; }
   }
 }
+
 
 // Compression image via Canvas
 function compresserImage(file, maxWidth, quality) {
@@ -2581,26 +2577,30 @@ function afficherResultatsLabo(consultationId, data) {
 
 // Construire la zone upload labo pour une consultation
 
+function laboChoisirFichier(cid) {
+  var inp = document.getElementById('laboFileInput_' + cid);
+  if (inp) inp.click();
+}
+
 function laboFileSelected(inp) {
-  // Activer le bouton upload pour la consultation correspondante
   var cid = inp.id.replace('laboFileInput_', '');
   var btn = document.getElementById('laboBtnUpload_' + cid);
-  if (btn) btn.disabled = false;
+  if (btn) { btn.disabled = false; btn.textContent = '📎 Analyser — ' + inp.files[0].name.substring(0, 20); }
 }
 
 function buildLaboUploadZone(cid, examens) {
-  var examJson = JSON.stringify(examens).replace(/"/g,'&quot;');
-  var inputId = 'laboFileInput_' + cid;
+  LABO_EXAMENS[cid] = examens;
+  var inpId = 'laboFileInput_' + cid;
   var btnId = 'laboBtnUpload_' + cid;
   var resId = 'laboResultsZone_' + cid;
-  var h = '<div class="labo-upload-zone">';
+  var h = '<div class="labo-upload-zone" data-cid="' + cid + '">';
   h += '<div style="font-size:13px;color:var(--text2);margin-bottom:10px;">📋 Uploader la feuille de résultats du laboratoire</div>';
-  h += '<input type="file" id="'+inputId+'" accept="image/*,application/pdf" style="display:none" onchange="laboFileSelected(this)">';
-  h += '<button class="labo-upload-btn" style="background:var(--bg3);color:var(--text);margin-bottom:8px;" ';
-  h += 'onclick="document.getElementById(\'' + inputId + '\').click()">📷 Choisir photo / PDF</button>';
-  h += '<button class="labo-upload-btn" id="'+btnId+'" disabled ';
-  h += 'onclick="uploadResultatsLabo(\'' + cid + '\',' + examJson + ')">📎 Analyser les résultats</button>';
-  h += '<div id="'+resId+'" style="display:none;margin-top:12px;"></div>';
+  h += '<input type="file" id="' + inpId + '" accept="image/*,application/pdf" style="display:none" onchange="laboFileSelected(this)">';
+  h += '<div style="display:flex;gap:8px;">';
+  h += '<button class="labo-upload-btn" style="background:var(--bg3);color:var(--text);flex:1;" onclick="laboChoisirFichier(this.closest(\'.labo-upload-zone\').dataset.cid)">📷 Choisir</button>';
+  h += '<button class="labo-upload-btn" id="' + btnId + '" disabled style="flex:1;" onclick="uploadResultatsLabo(this.closest(\'.labo-upload-zone\').dataset.cid)">📎 Analyser</button>';
+  h += '</div>';
+  h += '<div id="' + resId + '" style="display:none;margin-top:12px;"></div>';
   h += '</div>';
   return h;
 }
@@ -7859,6 +7859,7 @@ initTheme();
 // DICTÉE VOCALE
 // ══════════════════════════════
 var recognition=null,isListening=false;
+var LABO_EXAMENS={}; // Données examens par consultationId pour upload labo
 
 // ── Mic double-tap pour verrouiller ──
 var _micTapTimer=null,_micLocked=false,_micCancelled=false,_micTimerInt=null,_micSecs=0,_micTranscript='';
