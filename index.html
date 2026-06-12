@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.74
+     VERSION : V4.75
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -7275,16 +7275,28 @@ async function voirOrdoBioHisto(i){
       var dOrd=await rOrd.json();
       var rowOrd=Array.isArray(dOrd)?dOrd[0]:(dOrd.data&&dOrd.data[0]);
       if(rowOrd){
-        var rm=await fetch(API_URL+'/patient?action=medecins');
-        var dm=await rm.json();
-        var medRows=Array.isArray(dm)?dm:(dm.data||[]);
-        var medNom='Dr.'; var medSpec='';
-        if(medRows.length){
-          medNom=(medRows[0].nom_complet||('Dr. '+(medRows[0].prenom||'')+' '+(medRows[0].nom||''))).trim();
-          medSpec=medRows[0].specialite||'';
-        }
+        // Chercher le médecin prescripteur par son ID (pas le premier de la liste)
+        var medNom='Dr.'; var medSpec=''; var medSig=null;
+        var medId=rowOrd.medecin_id||rowOrd.prescribed_by||null;
+        try{
+          // Utiliser fetchAPI (avec JWT) pour avoir accès aux médecins
+          var medUrl=API_URL+'/patient?action=medecins';
+          var rm=await fetchAPI(medUrl);
+          var dm=await rm.json();
+          var medRows=Array.isArray(dm)?dm:(dm.data||[]);
+          // Trouver le bon médecin par ID, sinon prendre le premier
+          var med=null;
+          if(medId) med=medRows.find(function(m){return m.id===medId;});
+          if(!med&&medRows.length) med=medRows[0];
+          if(med){
+            medNom=(med.nom_complet||('Dr. '+(med.prenom||'')+' '+(med.nom||''))).trim();
+            medSpec=med.specialite||med.titre||'Médecin généraliste';
+            medSig=med.signature_base64||null;
+            dbg('Prescripteur: '+medNom+' | sig: '+(medSig?'oui':'non'));
+          }
+        }catch(em){dbgWarn('Medecin fetch: '+em.message);}
         s.ordonnance={medecin:medNom,specialite:medSpec,diagnostic:s.diagnostic||'',
-          signature_base64:rowOrd.signature_base64||null};
+          signature_base64:medSig||rowOrd.signature_base64||null};
       }
     }catch(e){dbgWarn('OrdoBio ordonnance load: '+e.message);}
   }
