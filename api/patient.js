@@ -57,7 +57,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET' && action === 'medecins') {
     const { data, error } = await supabase
       .from('medecins')
-      .select('id,prenom,nom,specialite,sous_specialite,ville,quartier,latitude,longitude,tarif_consultation,devise,langues_parlees,jours_consultation,consultation_distance,urgences,annees_experience')
+      .select('id,prenom,nom,specialite,sous_specialite,ville,quartier,latitude,longitude,tarif_consultation,devise,langues_parlees,jours_consultation,consultation_distance,urgences,annees_experience,nom_complet,signature_base64')
       .eq('statut', 'Actif')
       .limit(50);
     if (error) return res.status(500).json({ error: error.message });
