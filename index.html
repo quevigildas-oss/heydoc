@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.71
+     VERSION : V4.72
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1508,6 +1508,8 @@ try{var _p=localStorage.getItem('hd_profils');if(_p)PROFILS=JSON.parse(_p);}catc
 function nav(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('on');});
   document.getElementById(id).classList.add('on');
+  // Toujours re-rendre les profils quand on y navigue
+  if(id==='profilsScreen') renderProfils();
 }
 
 // ══════════════════════════════
@@ -1565,14 +1567,13 @@ async function rechargerSessionNotion(){
         lien:mp.lien_familial||'autre',compteParent:SESSION_EMAIL,transfere:false
       };
     });
-    // Vider PROFILS avant de reconstruire — évite les doublons (ex: deux Gildas)
-    PROFILS=[];
-    PROFILS=[profilPrincipal].concat(membres);
+    // Reconstruire PROFILS atomiquement — on n'efface qu'après avoir les données
+    var newProfils=[profilPrincipal].concat(membres);
+    PROFILS=newProfils; // Assignation unique — jamais de PROFILS=[] intermédiaire
     SEL=0;
     saveProfils();
-    // Rafraîchir l'écran profils si déjà affiché (fix race condition Akouvi)
-    var ps=document.getElementById('profilsScreen');
-    if(ps&&ps.classList.contains('on'))renderProfils();
+    // Toujours rafraîchir — pas de condition sur la visibilité du screen
+    renderProfils();
     syncTraitementsDepuisNotion(profilPrincipal);
     mettreAJourBadgeRDV(profilPrincipal);
     return true;
