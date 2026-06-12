@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.72
+     VERSION : V4.73
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1552,21 +1552,36 @@ async function rechargerSessionNotion(){
       parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
       lien:'moi',compteParent:'',transfere:!!(p.compte_parent_id)
     };
-    // Chercher membres famille via compte_parent_id (UUID)
-    var rf=await fetchAPI(API_URL+'/patient?action=profils_famille');
-    var dataF=await rf.json();
-    var famille=Array.isArray(dataF)?dataF:(dataF.data||[]);
-    var membres=famille.map(function(mp){
-      return {
-        prenom:mp.prenom||'',nom:mp.nom||'',naiss:mp.date_naissance||'',
-        tel:mp.telephone||'',email:'',ville:mp.ville||'',
-        poids:mp.poids?String(mp.poids):'',sx:mp.sexe==='M'?'H':mp.sexe==='F'?'F':'',
-        allergies:mp.allergies||'',antecedents:mp.antecedents||'',
-        traitements:mp.traitements_reguliers||'',
-        patientId:mp.patient_id||mp.id,supabaseId:mp.id,
-        lien:mp.lien_familial||'autre',compteParent:SESSION_EMAIL,transfere:false
-      };
-    });
+    // Chercher membres famille
+    var membres=[];
+    try{
+      var rf=await fetchAPI(API_URL+'/patient?action=profils_famille');
+      if(rf&&rf.ok){
+        var dataF=await rf.json();
+        var famille=Array.isArray(dataF)?dataF:(dataF.data||[]);
+        membres=famille
+          .filter(function(mp){return (mp.patient_id||mp.id)!==SESSION_PATIENT_ID;}) // exclure principal
+          .map(function(mp){
+            return {
+              prenom:mp.prenom||'',nom:mp.nom||'',naiss:mp.date_naissance||'',
+              tel:mp.telephone||'',email:'',ville:mp.ville||'',
+              poids:mp.poids?String(mp.poids):'',sx:mp.sexe==='M'?'H':mp.sexe==='F'?'F':'',
+              allergies:mp.allergies||'',antecedents:mp.antecedents||'',
+              traitements:mp.traitements_reguliers||'',
+              patientId:mp.patient_id||mp.id,supabaseId:mp.id,
+              lien:mp.lien_familial||'autre',compteParent:SESSION_EMAIL,transfere:false
+            };
+          });
+        dbg('Famille chargée: '+membres.length+' membre(s)');
+      } else {
+        // API famille en erreur → garder les membres déjà en mémoire
+        membres=PROFILS.slice(1);
+        dbg('profils_famille erreur — membres conservés: '+membres.length);
+      }
+    }catch(ef){
+      membres=PROFILS.slice(1);
+      dbg('profils_famille exception — membres conservés: '+membres.length);
+    }
     // Reconstruire PROFILS atomiquement — on n'efface qu'après avoir les données
     var newProfils=[profilPrincipal].concat(membres);
     PROFILS=newProfils; // Assignation unique — jamais de PROFILS=[] intermédiaire
