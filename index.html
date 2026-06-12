@@ -7275,28 +7275,11 @@ async function voirOrdoBioHisto(i){
       var dOrd=await rOrd.json();
       var rowOrd=Array.isArray(dOrd)?dOrd[0]:(dOrd.data&&dOrd.data[0]);
       if(rowOrd){
-        // Chercher le médecin prescripteur par son ID (pas le premier de la liste)
-        var medNom='Dr.'; var medSpec=''; var medSig=null;
-        var medId=rowOrd.medecin_id||rowOrd.prescribed_by||null;
-        try{
-          // Utiliser fetchAPI (avec JWT) pour avoir accès aux médecins
-          var medUrl=API_URL+'/patient?action=medecins';
-          var rm=await fetchAPI(medUrl);
-          var dm=await rm.json();
-          var medRows=Array.isArray(dm)?dm:(dm.data||[]);
-          // Trouver le bon médecin par ID, sinon prendre le premier
-          var med=null;
-          if(medId) med=medRows.find(function(m){return m.id===medId;});
-          if(!med&&medRows.length) med=medRows[0];
-          if(med){
-            medNom=(med.nom_complet||('Dr. '+(med.prenom||'')+' '+(med.nom||''))).trim();
-            medSpec=med.specialite||med.titre||'Médecin généraliste';
-            medSig=med.signature_base64||null;
-            dbg('Prescripteur: '+medNom+' | sig: '+(medSig?'oui':'non'));
-          }
-        }catch(em){dbgWarn('Medecin fetch: '+em.message);}
-        s.ordonnance={medecin:medNom,specialite:medSpec,diagnostic:s.diagnostic||'',
-          signature_base64:medSig||rowOrd.signature_base64||null};
+        // Charger prescripteur via helper
+        var medBio=await chargerMedecin(rowOrd.medecin_id||null);
+        dbg('OrdoBio prescripteur: '+medBio.nom+' | sig='+(medBio.sig?'oui':'non'));
+        s.ordonnance={medecin:medBio.nom,specialite:medBio.spec,diagnostic:s.diagnostic||'',
+          signature_base64:medBio.sig||rowOrd.signature_base64||null};
       }
     }catch(e){dbgWarn('OrdoBio ordonnance load: '+e.message);}
   }
@@ -7320,6 +7303,26 @@ async function voirOrdoBioHisto(i){
       '</div>';
     nav('ordonnanceDetailScreen');
   }catch(e){toast('Erreur: '+e.message);}
+}
+
+
+// ── Helper : charger prescripteur depuis medecins ──
+async function chargerMedecin(medId){
+  try{
+    var rm=await fetchAPI(API_URL+'/patient?action=medecins');
+    var dm=await rm.json();
+    var medRows=Array.isArray(dm)?dm:(dm.data||[]);
+    var med=medId?medRows.find(function(m){return m.id===medId;}):null;
+    if(!med&&medRows.length)med=medRows[0];
+    if(med){
+      return {
+        nom:(med.nom_complet||('Dr. '+(med.prenom||'')+' '+(med.nom||''))).trim(),
+        spec:med.specialite||med.sous_specialite||'Médecin',
+        sig:med.signature_base64||null
+      };
+    }
+  }catch(e){dbgWarn('chargerMedecin err: '+e.message);}
+  return {nom:'Dr.',spec:'',sig:null};
 }
 
 async function voirOrdonnanceHisto(i){
@@ -7348,24 +7351,13 @@ async function voirOrdonnanceHisto(i){
           return l;
         });
 
-        // Charger nom prescripteur depuis Supabase medecins
-        var medNom='Dr.';
-        var medSpec='';
-        if(row.medecin_id){
-          try{
-            var rm=await fetch(API_URL+'/patient?action=medecins');
-            var dm=await rm.json();
-            var medRows=Array.isArray(dm)?dm:(dm.data||[]);
-            if(medRows.length){
-              medNom=(medRows[0].nom_complet||('Dr. '+(medRows[0].prenom||'')+' '+(medRows[0].nom||''))).trim();
-              medSpec=medRows[0].specialite||medRows[0].sous_specialite||'';
-            }
-          }catch(e){dbgWarn('Medecin load err: '+e.message);}
-        }
+        // Charger prescripteur via helper
+        var med=await chargerMedecin(row.medecin_id||null);
+        dbg('Ordonnance chargée ✅ medecin='+med.nom+' | sig='+(med.sig?'oui':'non'));
 
         s.ordonnance={
-          medecin:medNom,
-          specialite:medSpec,
+          medecin:med.nom,
+          specialite:med.spec,
           diagnostic:s.diagnostic||'',
           medicaments:meds.concat(medsAld),
           medsRaw:pf.meds||[],
@@ -7375,9 +7367,8 @@ async function voirOrdonnanceHisto(i){
           conforme:row.conforme_oms,
           ordonnanceId:row.id,
           ao_soumis:!!row.ao_soumis,
-          signature_base64:row.signature_base64||null
+          signature_base64:med.sig||row.signature_base64||null
         };
-        dbg('Ordonnance chargée depuis Supabase ✅ medecin='+medNom);
       }
     }catch(e){dbg('Ordonnance Supabase err: '+e.message);}
   }
