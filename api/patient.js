@@ -1,14 +1,14 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.8
-// FIX     : profils_famille exclut le principal + action=profil supporte &for=
+// VERSION : V2.9
 // FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
-// DATE    : 2026-05-12
+// DATE    : 2026-06-12
+//   V2.9 (2026-06-12) : POST analyser_resultats — analyse IA feuille labo + auto-patch examens
 // CHANGELOG :
 //   V1.0 (2026-04-20) : Routes initiales (profil, profils_famille, consultations,
 //                        examens, ordonnances, dossier, appels_offres, PATCH profil,
@@ -116,32 +116,6 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=profil
     if (req.method === 'GET' && action === 'profil') {
-      // Support ?for=PAT-XX pour les membres famille
-      if (req.query.for && req.query.for !== patientId) {
-        const forId = req.query.for;
-        // Vérifier que ce patient appartient bien à la famille du principal
-        const { data: famData, error: famErr } = await supabase
-          .from('patients').select('*')
-          .eq('patient_id', forId)
-          .eq('compte_parent_id', patientUuid)
-          .single();
-        if (famErr || !famData) {
-          // Essai aussi par byEmail (même email que principal)
-          const { data: profPrincipal } = await supabase
-            .from('patients').select('email').eq('id', patientUuid).single();
-          if (profPrincipal && profPrincipal.email) {
-            const { data: famByEmail } = await supabase
-              .from('patients').select('*')
-              .eq('patient_id', forId)
-              .eq('email', profPrincipal.email)
-              .single();
-            if (famByEmail) return res.status(200).json(famByEmail);
-          }
-          return res.status(403).json({ error: 'Membre famille non trouvé' });
-        }
-        return res.status(200).json(famData);
-      }
-      // Profil principal
       const { data, error } = await supabase
         .from('patients').select('*').eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
@@ -172,15 +146,13 @@ module.exports = async function handler(req, res) {
         .from('patients').select('*').eq('compte_parent_id', patientUuid);
       const linked = byParent || [];
 
-      // Fusionner, dédupliquer par id, ET exclure le principal
+      // Fusionner et dédupliquer par id
       const all = [...byEmail];
       for (const p of linked) {
         if (!all.find(x => x.id === p.id)) all.push(p);
       }
-      // Exclure le principal (sinon il apparaît deux fois côté client)
-      const membres = all.filter(p => p.id !== patientUuid);
 
-      return res.status(200).json(membres);
+      return res.status(200).json(all);
     }
 
     // GET /api/patient?action=consultations[&for=PAT-XX-...]
@@ -531,9 +503,119 @@ module.exports = async function handler(req, res) {
       return res.status(201).json(data);
     }
 
+
+    // POST /api/patient?action=analyser_resultats
+    // Analyse IA d'une feuille labo — extrait et matche les examens prescrits
+    if (req.method === 'POST' && action === 'analyser_resultats') {
+      const { contenu_base64, mime_type, examens, consultation_id } = req.body;
+      if (!contenu_base64 || !mime_type || !examens || !examens.length) {
+        return res.status(400).json({ error: 'contenu_base64, mime_type et examens requis' });
+      }
+
+      // Vérifier appartenance consultation
+      const targetPatientId = req.query.for || patientId;
+      const { data: consult } = await supabase
+        .from('consultations').select('id')
+        .eq('id', consultation_id).eq('patient_id', targetPatientId).single();
+      if (!consult) return res.status(403).json({ error: 'Consultation non trouvée' });
+
+      const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY;
+      if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_KEY manquant — ajouter dans Vercel env vars' });
+
+      // Construire liste examens pour le prompt
+      const examensList = examens.map(e => `- ${e.type_examen} (${e.obligatoire ? 'OBL' : 'REC'})`).join('\n');
+
+      const prompt = `Tu es un expert en analyse de résultats d'examens biologiques africains (Côte d'Ivoire).
+
+Analyse ce document de résultats de laboratoire et identifie les examens prescrits suivants :
+
+EXAMENS PRESCRITS :
+${examensList}
+
+Pour chaque examen prescrit, détermine :
+1. S'il est présent dans le document (trouvé: true/false)
+2. La valeur ou résultat exact si trouvé
+3. Une interprétation courte (normal / anormal / positif / négatif)
+
+Réponds UNIQUEMENT avec ce JSON valide, sans texte avant ou après :
+{
+  "matches": [
+    {
+      "type_examen": "nom de l'examen prescrit (recopié exactement)",
+      "trouvé": true,
+      "valeur": "valeur extraite ou null",
+      "interpretation": "normal/anormal/positif/négatif ou null"
+    }
+  ],
+  "labo": "nom du laboratoire si visible ou null",
+  "date_document": "date du document si visible ou null"
+}
+
+RÈGLES ABSOLUES :
+- Ne jamais inventer un résultat absent du document
+- Si document illisible → trouvé: false pour tous
+- Matching sémantique : NFS = Numération Formule Sanguine = Hémogramme
+- TDR Paludisme = Test rapide Plasmodium = Paludisme test antigénique
+- GE/FS = Goutte épaisse = Frottis sanguin = Examen parasitologique sang`;
+
+      // Construire le message Claude (image ou PDF)
+      const messageContent = [];
+      if (mime_type === 'application/pdf') {
+        messageContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: contenu_base64 } });
+      } else {
+        messageContent.push({ type: 'image', source: { type: 'base64', media_type: mime_type, data: contenu_base64 } });
+      }
+      messageContent.push({ type: 'text', text: prompt });
+
+      // Appel Claude API
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: messageContent }] })
+      });
+      const claudeData = await claudeRes.json();
+      const rawText = claudeData?.content?.[0]?.text || '';
+
+      try {
+        const clean = rawText.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(clean);
+        const matches = parsed.matches || [];
+
+        // Auto-patch les examens trouvés dans Supabase
+        for (const match of matches) {
+          if (!match.trouvé) continue;
+          const exam = examens.find(e =>
+            e.type_examen.toLowerCase().includes(match.type_examen.toLowerCase().substring(0, 6)) ||
+            match.type_examen.toLowerCase().includes(e.type_examen.toLowerCase().substring(0, 6))
+          );
+          if (exam?.id) {
+            await supabase.from('examens').update({
+              statut: 'recu',
+              valeur: match.valeur || '',
+              resultat_ia: match.interpretation || '',
+              note: 'Extrait automatiquement par IA Dokita — ' + new Date().toLocaleDateString('fr-FR')
+            }).eq('id', exam.id);
+          }
+        }
+
+        return res.status(200).json({
+          matches,
+          labo: parsed.labo || null,
+          date_document: parsed.date_document || null,
+          nb_trouvés: matches.filter(m => m.trouvé).length,
+          nb_total: matches.length
+        });
+
+      } catch (e) {
+        console.error('analyser_resultats parse error:', e.message, 'raw:', rawText.substring(0, 200));
+        return res.status(200).json({ matches: [], error: 'Extraction IA échouée', raw: rawText.substring(0, 300) });
+      }
+    }
+
     return res.status(404).json({ error: 'Action non reconnue: ' + action });
 
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 };
+// PATCH pour analyser_resultats — insérer avant la ligne finale
