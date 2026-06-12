@@ -3358,6 +3358,12 @@ function ouvrirDossierExamens(){
     var exs=byConsult[cid];
     var dateConsult=exs[0].created_at?new Date(exs[0].created_at).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'}):'';
     html+='<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px;">Prescrit le '+dateConsult+'</div>';
+    // Zone upload labo si examens en attente
+    var exsEnAttente=exs.filter(function(e){return (e.statut||'prescrit')==='prescrit';});
+    if(exsEnAttente.length>0){
+      var examensData=exs.map(function(e){return{id:e.id,type_examen:e.type_examen,obligatoire:!!e.obligatoire};});
+      html+=buildLaboUploadZone(cid,examensData);
+    }
     exs.forEach(function(ex){
       var statut=ex.statut||'prescrit';
       var obl=ex.obligatoire;
