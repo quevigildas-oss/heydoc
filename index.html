@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.70
+     VERSION : V4.71
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -420,6 +420,21 @@ select.finput option{background:var(--bg3);}
 #voiceHUD.locked .voice-hint{color:#ef4444;font-weight:600;}
 #micBtn.recording{background:#ef4444!important;animation:mPulse .8s infinite;}
 @keyframes mPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4);}50%{box-shadow:0 0 0 6px rgba(239,68,68,0);}}
+
+
+/* ── Upload résultats labo ── */
+.labo-upload-zone{background:var(--card);border:2px dashed var(--accent);border-radius:14px;padding:16px;margin:12px 0;text-align:center;}
+.labo-upload-btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;}
+.labo-upload-btn:disabled{opacity:.5;cursor:not-allowed;}
+.labo-match-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.labo-match-item:last-child{border-bottom:none;}
+.labo-match-icon{font-size:18px;flex-shrink:0;margin-top:2px;}
+.labo-match-name{font-weight:600;font-size:13px;color:var(--text);}
+.labo-match-val{font-size:12px;color:var(--text2);margin-top:2px;}
+.labo-match-interp{font-size:11px;font-weight:700;margin-top:3px;}
+.labo-match-interp.ok{color:#10b981;}
+.labo-match-interp.bad{color:#ef4444;}
+.labo-summary{background:var(--bg3);border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px;}
 
 </style>
 </head>
@@ -2450,6 +2465,146 @@ function speakMsg(btn){
   window.speechSynthesis.speak(utt);
 }
 
+
+// ── Upload résultats labo ──
+async function uploadResultatsLabo(consultationId, examens) {
+  var inp = document.getElementById('laboFileInput_' + consultationId);
+  if (!inp || !inp.files || !inp.files[0]) { toast('⚠️ Aucun fichier sélectionné'); return; }
+
+  var file = inp.files[0];
+  var maxSize = 4 * 1024 * 1024; // 4MB
+
+  var btn = document.getElementById('laboBtnUpload_' + consultationId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyse en cours...'; }
+
+  try {
+    var base64, mimeType;
+
+    if (file.type === 'application/pdf') {
+      // PDF : encoder directement
+      mimeType = 'application/pdf';
+      if (file.size > maxSize) { toast('⚠️ PDF trop lourd (max 4MB)'); if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';} return; }
+      base64 = await new Promise(function(res, rej) {
+        var r = new FileReader();
+        r.onload = function() { res(r.result.split(',')[1]); };
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    } else {
+      // Image : compresser via Canvas
+      mimeType = 'image/jpeg';
+      base64 = await compresserImage(file, 1200, 0.75);
+    }
+
+    // Appel API
+    var forParam = forSel ? forSel() : '';
+    var resp = await fetch('/api/patient?action=analyser_resultats' + forParam, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+      body: JSON.stringify({
+        contenu_base64: base64,
+        mime_type: mimeType,
+        examens: examens,
+        consultation_id: consultationId
+      })
+    });
+    var data = await resp.json();
+
+    if (data.error && !data.matches) {
+      toast('❌ ' + (data.error || 'Erreur analyse'));
+      if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';}
+      return;
+    }
+
+    // Afficher les résultats
+    afficherResultatsLabo(consultationId, data);
+
+    // Rafraîchir la liste des examens
+    setTimeout(function() { chargerExamens && chargerExamens(consultationId); }, 1000);
+
+  } catch (e) {
+    toast('❌ Erreur: ' + e.message);
+    if(btn){btn.disabled=false;btn.textContent='📎 Analyser les résultats';}
+  }
+}
+
+// Compression image via Canvas
+function compresserImage(file, maxWidth, quality) {
+  return new Promise(function(resolve, reject) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      var dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// Afficher le résultat de l'analyse IA
+function afficherResultatsLabo(consultationId, data) {
+  var zone = document.getElementById('laboResultsZone_' + consultationId);
+  if (!zone) return;
+
+  var matches = data.matches || [];
+  var nbTrouvés = matches.filter(function(m) { return m.trouvé; }).length;
+  var labo = data.labo ? '<span style="color:var(--text2)">🏥 ' + data.labo + '</span>' : '';
+  var dateDoc = data.date_document ? '<span style="color:var(--text2)"> · 📅 ' + data.date_document + '</span>' : '';
+
+  var html = '<div class="labo-summary">';
+  html += '<strong>' + nbTrouvés + '/' + matches.length + ' examens trouvés</strong> ' + labo + dateDoc;
+  html += '</div>';
+
+  matches.forEach(function(m) {
+    var icon = m.trouvé ? '✅' : '❓';
+    var interpClass = m.interpretation && (m.interpretation.toLowerCase().includes('positif') || m.interpretation.toLowerCase().includes('anormal')) ? 'bad' : 'ok';
+    html += '<div class="labo-match-item">';
+    html += '<span class="labo-match-icon">' + icon + '</span>';
+    html += '<div>';
+    html += '<div class="labo-match-name">' + (m.type_examen || '') + '</div>';
+    if (m.valeur) html += '<div class="labo-match-val">📊 ' + m.valeur + '</div>';
+    if (m.interpretation) html += '<div class="labo-match-interp ' + interpClass + '">' + m.interpretation + '</div>';
+    if (!m.trouvé) html += '<div class="labo-match-val" style="color:#f59e0b">⚠️ Non trouvé dans le document</div>';
+    html += '</div></div>';
+  });
+
+  zone.innerHTML = html;
+  zone.style.display = 'block';
+}
+
+// Construire la zone upload labo pour une consultation
+
+function laboFileSelected(inp) {
+  // Activer le bouton upload pour la consultation correspondante
+  var cid = inp.id.replace('laboFileInput_', '');
+  var btn = document.getElementById('laboBtnUpload_' + cid);
+  if (btn) btn.disabled = false;
+}
+
+function buildLaboUploadZone(cid, examens) {
+  var examJson = JSON.stringify(examens).replace(/"/g,'&quot;');
+  var inputId = 'laboFileInput_' + cid;
+  var btnId = 'laboBtnUpload_' + cid;
+  var resId = 'laboResultsZone_' + cid;
+  var h = '<div class="labo-upload-zone">';
+  h += '<div style="font-size:13px;color:var(--text2);margin-bottom:10px;">📋 Uploader la feuille de résultats du laboratoire</div>';
+  h += '<input type="file" id="'+inputId+'" accept="image/*,application/pdf" style="display:none" onchange="laboFileSelected(this)">';
+  h += '<button class="labo-upload-btn" style="background:var(--bg3);color:var(--text);margin-bottom:8px;" ';
+  h += 'onclick="document.getElementById(\'' + inputId + '\').click()">📷 Choisir photo / PDF</button>';
+  h += '<button class="labo-upload-btn" id="'+btnId+'" disabled ';
+  h += 'onclick="uploadResultatsLabo(\'' + cid + '\',' + examJson + ')">📎 Analyser les résultats</button>';
+  h += '<div id="'+resId+'" style="display:none;margin-top:12px;"></div>';
+  h += '</div>';
+  return h;
+}
+
 function choisirOption(btn){
   var val=btn.getAttribute('data-val')||btn.textContent;
   // Désactiver tous les boutons du même groupe
@@ -3232,8 +3387,6 @@ function ouvrirDossierExamens(){
           :statut==='prescrit'?
             '<div style="display:flex;gap:6px;margin-top:8px;">'+
               '<button onclick="ouvrirModalResultat(\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\')" style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;font-family:\'DM Sans\',sans-serif;">📝 Saisir</button>'+
-              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\',\''+cid+'\')"></label>'+
-              '<label style="flex:1;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);">📂 PDF<input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" style="display:none;" onchange="ajouterResultatReseau(this,\''+ex.id+'\',\''+escHtml(ex.type_examen)+'\',\''+cid+'\')"></label>'+
             '</div>'
           :'')+
         '</div>';
