@@ -5387,8 +5387,9 @@ async function chargerHistoriqueNotion(){
         diagnostic:row.diagnostic_medecin||row.diagnostic_ia||'',
         statut:statut,
         traite:traite,
-        ordonnance:null, // chargé à la demande depuis table ordonnances
-        dossierId:row.consultation_id||row.id.slice(0,8)
+        ordonnance:null,
+        dossierId:row.consultation_id||row.id.slice(0,8),
+        medecin_id:row.medecin_id||null  // pour ordo biologique
       };
     });
   }catch(e){dbg('Erreur chargement historique: '+e.message);return[];}
@@ -7268,20 +7269,18 @@ async function voirOrdoBioHisto(i){
   if(!s){toast('Consultation introuvable');return;}
   if(!s.supabaseId){toast('Consultation non synchronisée');return;}
 
-  // Charger ordonnance pour nom prescripteur (si pas déjà en mémoire)
-  if(!s.ordonnance&&s.supabaseId){
+  // Charger prescripteur depuis medecin_id de la consultation
+  if(!s.ordonnance){
     try{
-      var rOrd=await fetchAPI(API_URL+'/patient?action=ordonnances&consultation_id='+encodeURIComponent(s.supabaseId)+'&for='+encodeURIComponent(s.patientId||''));
-      var dOrd=await rOrd.json();
-      var rowOrd=Array.isArray(dOrd)?dOrd[0]:(dOrd.data&&dOrd.data[0]);
-      if(rowOrd){
-        // Charger prescripteur via helper
-        var medBio=await chargerMedecin(rowOrd.medecin_id||null);
-        dbg('OrdoBio prescripteur: '+medBio.nom+' | sig='+(medBio.sig?'oui':'non'));
-        s.ordonnance={medecin:medBio.nom,specialite:medBio.spec,diagnostic:s.diagnostic||'',
-          signature_base64:medBio.sig||rowOrd.signature_base64||null};
-      }
-    }catch(e){dbgWarn('OrdoBio ordonnance load: '+e.message);}
+      var medBio=await chargerMedecin(s.medecin_id||null);
+      dbg('OrdoBio prescripteur: '+medBio.nom+' | medId='+s.medecin_id+' | sig='+(medBio.sig?'oui':'non'));
+      s.ordonnance={
+        medecin:medBio.nom,
+        specialite:medBio.spec,
+        diagnostic:s.diagnostic||'',
+        signature_base64:medBio.sig||null
+      };
+    }catch(e){dbgWarn('OrdoBio load: '+e.message);}
   }
 
   // Charger examens depuis Supabase
@@ -7351,13 +7350,24 @@ async function voirOrdonnanceHisto(i){
           return l;
         });
 
-        // Charger prescripteur via helper
-        var med=await chargerMedecin(row.medecin_id||null);
-        dbg('Ordonnance chargée ✅ medecin='+med.nom+' | sig='+(med.sig?'oui':'non'));
+        // Charger nom prescripteur depuis Supabase medecins
+        var medNom='Dr.';
+        var medSpec='';
+        if(row.medecin_id){
+          try{
+            var rm=await fetch(API_URL+'/patient?action=medecins');
+            var dm=await rm.json();
+            var medRows=Array.isArray(dm)?dm:(dm.data||[]);
+            if(medRows.length){
+              medNom=(medRows[0].nom_complet||('Dr. '+(medRows[0].prenom||'')+' '+(medRows[0].nom||''))).trim();
+              medSpec=medRows[0].specialite||medRows[0].sous_specialite||'';
+            }
+          }catch(e){dbgWarn('Medecin load err: '+e.message);}
+        }
 
         s.ordonnance={
-          medecin:med.nom,
-          specialite:med.spec,
+          medecin:medNom,
+          specialite:medSpec,
           diagnostic:s.diagnostic||'',
           medicaments:meds.concat(medsAld),
           medsRaw:pf.meds||[],
@@ -7367,8 +7377,9 @@ async function voirOrdonnanceHisto(i){
           conforme:row.conforme_oms,
           ordonnanceId:row.id,
           ao_soumis:!!row.ao_soumis,
-          signature_base64:med.sig||row.signature_base64||null
+          signature_base64:row.signature_base64||null
         };
+        dbg('Ordonnance chargée depuis Supabase ✅ medecin='+medNom);
       }
     }catch(e){dbg('Ordonnance Supabase err: '+e.message);}
   }
