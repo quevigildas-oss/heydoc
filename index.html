@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.73
+     VERSION : V4.74
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -1532,15 +1532,15 @@ async function rechargerSessionNotion(){
     // Chercher profil principal par email
     var r=await fetchAPI(API_URL+'/patient?action=profil');
     var data=await r.json();
-    var rows=Array.isArray(data)?data:(data.data||[]);
-    if(!rows.length){
+    // action=profil retourne un objet seul (pas un tableau) — normaliser
+    var p = Array.isArray(data) ? data[0] : (data && data.id ? data : null);
+    if(!p){
       // Fallback localStorage
       var profilsLocaux=[];
       try{var _p=localStorage.getItem('hd_profils');if(_p)profilsLocaux=JSON.parse(_p);}catch(e2){}
       if(profilsLocaux.length){PROFILS=profilsLocaux;SEL=0;return true;}
       return false;
     }
-    var p=rows[0];
     SESSION_PATIENT_ID=p.patient_id||p.id;
     var profilPrincipal={
       prenom:p.prenom||'',nom:p.nom||'',naiss:p.date_naissance||'',
