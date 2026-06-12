@@ -124,36 +124,44 @@ module.exports = async function handler(req, res) {
 
     // GET /api/patient?action=profils_famille
     if (req.method === 'GET' && action === 'profils_famille') {
-      // Récupérer le profil principal
-      const { data: profil } = await supabase
-        .from('patients').select('email').eq('id', patientUuid).single();
+      // Utiliser SERVICE_ROLE_KEY pour bypasser RLS — lecture cross-patient nécessaire
+      const SUPA_URL = process.env.SUPABASE_URL;
+      const SUPA_SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-      // Profils par email (membres famille avec même email)
-      let byEmail = [];
-      if (profil && profil.email) {
-        const { data } = await supabase
-          .from('patients').select('*').eq('email', profil.email);
-        byEmail = data || [];
-      } else {
-        // Pas d'email → charger uniquement ce profil
-        const { data } = await supabase
-          .from('patients').select('*').eq('id', patientUuid);
-        byEmail = data || [];
+      // 1. Récupérer le profil principal pour avoir son UUID exact
+      const profilRes = await fetch(
+        `${SUPA_URL}/rest/v1/patients?id=eq.${patientUuid}&select=id,email&limit=1`,
+        { headers: { 'apikey': SUPA_SRK, 'Authorization': `Bearer ${SUPA_SRK}` } }
+      );
+      const profilRows = await profilRes.json();
+      const profil = Array.isArray(profilRows) ? profilRows[0] : null;
+      const parentUuid = profil ? profil.id : patientUuid;
+
+      // 2. Chercher les membres famille par compte_parent_id (UUID exact)
+      const familleRes = await fetch(
+        `${SUPA_URL}/rest/v1/patients?compte_parent_id=eq.${parentUuid}&select=*`,
+        { headers: { 'apikey': SUPA_SRK, 'Authorization': `Bearer ${SUPA_SRK}` } }
+      );
+      let membres = await familleRes.json();
+      if (!Array.isArray(membres)) membres = [];
+
+      // 3. Si pas de membres par compte_parent_id, chercher par email (fallback)
+      if (membres.length === 0 && profil && profil.email) {
+        const emailRes = await fetch(
+          `${SUPA_URL}/rest/v1/patients?email=eq.${encodeURIComponent(profil.email)}&select=*`,
+          { headers: { 'apikey': SUPA_SRK, 'Authorization': `Bearer ${SUPA_SRK}` } }
+        );
+        const byEmail = await emailRes.json();
+        if (Array.isArray(byEmail)) {
+          membres = byEmail.filter(p => p.id !== parentUuid);
+        }
       }
 
-      // Profils liés par compte_parent_id (membres famille sans email propre)
-      const { data: byParent } = await supabase
-        .from('patients').select('*').eq('compte_parent_id', patientUuid);
-      const linked = byParent || [];
+      // Exclure le profil principal (sécurité supplémentaire)
+      membres = membres.filter(p => p.id !== parentUuid);
 
-      // Fusionner et dédupliquer par id + exclure le profil principal
-      const all = [...byEmail];
-      for (const p of linked) {
-        if (!all.find(x => x.id === p.id)) all.push(p);
-      }
-      const filtered = all.filter(p => p.id !== patientUuid);
-
-      return res.status(200).json(filtered);
+      console.log('profils_famille — parentUuid:', parentUuid, '| membres:', membres.length);
+      return res.status(200).json(membres);
     }
 
     // GET /api/patient?action=consultations[&for=PAT-XX-...]
