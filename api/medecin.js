@@ -1,6 +1,6 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
-// VERSION : V2.1
+// VERSION : V2.1 (2026-06-13) : action signed_url pour justificatifs labo
 // FIX     : catalogue select — suppression colonnes inexistantes (description, obligatoire_defaut)
 // DATE    : 2026-05-12
 // CHANGELOG :
@@ -392,6 +392,34 @@ module.exports = async function handler(req, res) {
       const { error } = await supabase.from('examens').delete().eq('id', id);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });
+    }
+
+
+    // GET /api/medecin?action=signed_url&path=xxx
+    if (req.method === 'GET' && action === 'signed_url') {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).json({ error: 'path requis' });
+      const SUPA_SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const SUPA_URL = process.env.SUPABASE_URL;
+      try {
+        const signRes = await fetch(
+          `${SUPA_URL}/storage/v1/object/sign/resultats-labo/${filePath}`,
+          {
+            method: 'POST',
+            headers: {
+              'apikey': SUPA_SRK,
+              'Authorization': `Bearer ${SUPA_SRK}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ expiresIn: 3600 })
+          }
+        );
+        const signData = await signRes.json();
+        if (!signRes.ok) return res.status(500).json({ error: signData.message || 'Erreur signature' });
+        return res.status(200).json({ url: `${SUPA_URL}/storage/v1${signData.signedURL}` });
+      } catch (e) {
+        return res.status(500).json({ error: e.message });
+      }
     }
 
     return res.status(404).json({ error: 'Action non reconnue: ' + action });
