@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.75
+     VERSION : V4.76
      DATE    : 2026-05-05 21:23:43
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
@@ -3350,6 +3350,7 @@ function ouvrirDossierDocs(type){
 function ouvrirDossierExamens(){
   var el=document.getElementById('dossierMedBody');
   var examens=el._examens||[];
+  window._EXAM_PDF_URLS={};
   var today=new Date();today.setHours(0,0,0,0);
   var patId=(PROFILS[SEL]&&PROFILS[SEL].patientId)||'';
 
@@ -3383,6 +3384,7 @@ function ouvrirDossierExamens(){
     }
     exs.forEach(function(ex){
       var statut=ex.statut||'prescrit';
+      if(ex.resultat_pdf_url) window._EXAM_PDF_URLS[ex.id]=ex.resultat_pdf_url;
       var obl=ex.obligatoire;
       var statutColor=statut==='prescrit'?'#F59E0B':statut==='resultat_recu'?'#00C896':'#6B7280';
       var statutLabel=statut==='prescrit'?'⏳ À faire':statut==='resultat_recu'?'✅ Reçu':'❌ Annulé';
@@ -3417,6 +3419,32 @@ function ouvrirDossierExamens(){
   });
 
   el.innerHTML=html;
+  // Injecter boutons Justificatif via DOM (pas d'échappement HTML)
+  var allExams=[];
+  byConsultGroups&&Object.values(byConsultGroups).forEach(function(exs){allExams=allExams.concat(exs);});
+  el.querySelectorAll('button').forEach(function(btn,i){
+    var ex=allExams[Math.floor(i/1)];
+  });
+  // Approche directe: stocker dans variable globale
+  if(window._EXAM_PDF_URLS){
+    Object.keys(window._EXAM_PDF_URLS).forEach(function(examId){
+      var pdfUrl=window._EXAM_PDF_URLS[examId];
+      if(!pdfUrl)return;
+      var saisirBtns=el.querySelectorAll('button');
+      saisirBtns.forEach(function(b){
+        if(b.textContent.includes('Saisir')&&b.getAttribute('onclick')&&b.getAttribute('onclick').includes(examId)){
+          if(b.parentNode&&!b.parentNode.querySelector('.btn-justif')){
+            var jb=document.createElement('button');
+            jb.className='btn-justif';
+            jb.style.cssText='flex:1;padding:8px;background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.3);border-radius:8px;font-size:11px;font-weight:600;color:#0369a1;cursor:pointer;font-family:DM Sans,sans-serif;';
+            jb.textContent='📄 Justificatif';
+            jb.onclick=(function(u){return function(){voirJustificatif(u);};})(pdfUrl);
+            b.parentNode.appendChild(jb);
+          }
+        }
+      });
+    });
+  }
 }
 
 function ouvrirDossierOrdos(){
