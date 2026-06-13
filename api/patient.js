@@ -606,7 +606,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
         );
         if (exam?.id) {
           const patch = {
-            statut: 'recu',
+            statut: 'resultat_recu',
             resultat: match.valeur || '',
             interpretation: match.interpretation || '',
             date_resultat: now,
@@ -614,15 +614,23 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
           };
           if (pdfUrl) patch.resultat_pdf_url = pdfUrl;
           if (laboNom) patch.labo_nom = laboNom;
-          await supabase.from('examens').update(patch).eq('id', exam.id);
+          const _pr = await fetch(`${process.env.SUPABASE_URL}/rest/v1/examens?id=eq.${exam.id}`,{
+            method:'PATCH',
+            headers:{'apikey':SUPA_SRK,'Authorization':`Bearer ${SUPA_SRK}`,'Content-Type':'application/json','Prefer':'return=minimal'},
+            body:JSON.stringify(patch)
+          });
+          console.log('PATCH exam:', exam.type_examen, _pr.status);
         }
       }
 
       // Même URL justificatif sur TOUTES les lignes de la consultation (1 fichier = tous les examens)
       if (pdfUrl) {
-        await supabase.from('examens')
-          .update({ resultat_pdf_url: pdfUrl, labo_nom: laboNom || null })
-          .eq('consultation_id', consultation_id);
+        const _pr2 = await fetch(`${process.env.SUPABASE_URL}/rest/v1/examens?consultation_id=eq.${consultation_id}`,{
+          method:'PATCH',
+          headers:{'apikey':SUPA_SRK,'Authorization':`Bearer ${SUPA_SRK}`,'Content-Type':'application/json','Prefer':'return=minimal'},
+          body:JSON.stringify({resultat_pdf_url:pdfUrl, labo_nom:laboNom||null})
+        });
+        console.log('PDF URL update:', _pr2.status);
       }
 
       return res.status(200).json({
