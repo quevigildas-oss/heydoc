@@ -2584,7 +2584,8 @@ function afficherResultatsLabo(consultationId, data) {
     html += '<div class="labo-match-name">' + (m.type_examen || '') + '</div>';
     if (m.valeur) html += '<div class="labo-match-val">📊 ' + m.valeur + '</div>';
     if (m.interpretation) html += '<div class="labo-match-interp ' + interpClass + '">' + m.interpretation + '</div>';
-    if (!m.trouvé) html += '<div class="labo-match-val" style="color:#f59e0b">⚠️ Non trouvé dans le document</div>';
+    var _tro = m.trouve !== undefined ? m.trouve : m['trouvé'];
+  if (!_tro) html += '<div class="labo-match-val" style="color:#f59e0b">⚠️ Non trouvé dans le document</div>';
     html += '</div></div>';
   });
 
@@ -2593,6 +2594,24 @@ function afficherResultatsLabo(consultationId, data) {
 }
 
 // Construire la zone upload labo pour une consultation
+
+
+async function voirJustificatif(rawUrl){
+  try{
+    var marker='/object/resultats-labo/';
+    var pi=rawUrl.indexOf(marker);
+    if(pi<0){window.open(rawUrl,'_blank');return;}
+    var fp=rawUrl.substring(pi+marker.length);
+    var forParam=(typeof forSel==='function')?forSel():'';
+    toast('⏳ Chargement...');
+    var resp=await fetch('/api/patient?action=signed_url&path='+encodeURIComponent(fp)+forParam,{
+      headers:{'Authorization':'Bearer '+JWT_TOKEN}
+    });
+    var d=await resp.json();
+    if(d.url){window.open(d.url,'_blank');}
+    else{toast('❌ '+(d.error||'Erreur accès justificatif'));}
+  }catch(e){toast('❌ '+e.message);}
+}
 
 function laboChoisirFichier(cid) {
   var inp = document.getElementById('laboFileInput_' + cid);
