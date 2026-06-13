@@ -633,6 +633,42 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
       });
     }
 
+
+    // GET /api/patient?action=signed_url&path=xxx
+    // Génère une URL signée temporaire pour accéder à un fichier Storage
+    if (req.method === 'GET' && action === 'signed_url') {
+      const filePath = req.query.path;
+      if (!filePath) return res.status(400).json({ error: 'path requis' });
+
+      // Vérifier que le fichier appartient au patient (path commence par patient_id)
+      const targetPatientId2 = req.query.for || patientId;
+      if (!filePath.startsWith(targetPatientId2 + '/')) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+
+      const SUPA_SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      try {
+        const signRes = await fetch(
+          `${SUPABASE_URL}/storage/v1/object/sign/resultats-labo/${filePath}`,
+          {
+            method: 'POST',
+            headers: {
+              'apikey': SUPA_SRK,
+              'Authorization': `Bearer ${SUPA_SRK}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ expiresIn: 3600 }) // 1 heure
+          }
+        );
+        const signData = await signRes.json();
+        if (!signRes.ok) return res.status(500).json({ error: signData.message || 'Erreur signature' });
+        const signedUrl = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+        return res.status(200).json({ url: signedUrl, expires_in: 3600 });
+      } catch (eSign) {
+        return res.status(500).json({ error: eSign.message });
+      }
+    }
+
     return res.status(404).json({ error: 'Action non reconnue: ' + action });
 
   } catch (e) {
