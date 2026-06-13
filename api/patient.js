@@ -512,6 +512,127 @@ module.exports = async function handler(req, res) {
       return res.status(201).json(data);
     }
 
+
+    // POST /api/patient?action=analyser_resultats
+    // Analyse IA feuille labo + upload Storage + PATCH toutes lignes exam
+    if (req.method === 'POST' && action === 'analyser_resultats') {
+      const { contenu_base64, mime_type, examens, consultation_id, sauvegarder } = req.body;
+      if (!contenu_base64 || !mime_type || !examens || !examens.length) {
+        return res.status(400).json({ error: 'contenu_base64, mime_type et examens requis' });
+      }
+
+      const targetPatientId = req.query.for || patientId;
+      const { data: consult } = await supabase.from('consultations').select('id')
+        .eq('id', consultation_id).eq('patient_id', targetPatientId).single();
+      if (!consult) return res.status(403).json({ error: 'Consultation non trouvée' });
+
+      const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY;
+      if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_KEY manquant — ajouter dans Vercel env vars heydoc' });
+
+      const SUPA_SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      // Construire prompt
+      const examensList = examens.map(e => `- ${e.type_examen} (${e.obligatoire ? 'OBL' : 'REC'})`).join('\n');
+      const prompt = `Tu es un expert en analyses biologiques africaines (Côte d'Ivoire).
+Analyse ce document de résultats de laboratoire et identifie les examens prescrits :
+
+EXAMENS PRESCRITS :
+${examensList}
+
+Pour chaque examen, détermine : s'il est présent (trouvé: true/false), la valeur exacte, une interprétation courte.
+
+Réponds UNIQUEMENT avec ce JSON valide :
+{
+  "matches": [{"type_examen": "nom exact prescrit", "trouvé": true, "valeur": "valeur ou null", "interpretation": "normal/anormal/positif/négatif ou null"}],
+  "labo": "nom laboratoire ou null",
+  "date_document": "date ou null"
+}
+
+RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test rapide Plasmodium, GE=Goutte épaisse.`;
+
+      const messageContent = [];
+      if (mime_type === 'application/pdf') {
+        messageContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: contenu_base64 } });
+      } else {
+        messageContent.push({ type: 'image', source: { type: 'base64', media_type: mime_type, data: contenu_base64 } });
+      }
+      messageContent.push({ type: 'text', text: prompt });
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: messageContent }] })
+      });
+      const claudeData = await claudeRes.json();
+      const rawText = claudeData?.content?.[0]?.text || '';
+
+      let matches = [], laboNom = null, dateDoc = null;
+      try {
+        const parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+        matches = parsed.matches || [];
+        laboNom = parsed.labo || null;
+        dateDoc = parsed.date_document || null;
+      } catch(ep) {
+        console.error('Parse IA err:', ep.message, rawText.substring(0,200));
+        return res.status(200).json({ matches: [], error: 'Extraction IA échouée', raw: rawText.substring(0,200) });
+      }
+
+      // Upload Supabase Storage
+      let pdfUrl = null;
+      if (sauvegarder && SUPA_SRK) {
+        try {
+          const ext = mime_type === 'application/pdf' ? 'pdf' : 'jpg';
+          const storagePath = `${targetPatientId}/${consultation_id}/${Date.now()}.${ext}`;
+          const buf = Buffer.from(contenu_base64, 'base64');
+          const upRes = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`,
+            { method: 'POST', headers: { 'apikey': SUPA_SRK, 'Authorization': `Bearer ${SUPA_SRK}`, 'Content-Type': mime_type, 'x-upsert': 'false' }, body: buf }
+          );
+          if (upRes.ok) {
+            pdfUrl = `${SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`;
+            console.log('Storage upload OK:', storagePath);
+          } else { console.error('Storage err:', await upRes.text()); }
+        } catch(eS) { console.error('Storage exception:', eS.message); }
+      }
+
+      const now = new Date().toISOString();
+
+      // PATCH individuel par exam matché
+      for (const match of matches) {
+        if (!match.trouvé) continue;
+        const exam = examens.find(e =>
+          e.type_examen.toLowerCase().includes(match.type_examen.toLowerCase().substring(0,5)) ||
+          match.type_examen.toLowerCase().includes(e.type_examen.toLowerCase().substring(0,5))
+        );
+        if (exam?.id) {
+          const patch = {
+            statut: 'recu',
+            resultat: match.valeur || '',
+            interpretation: match.interpretation || '',
+            date_resultat: now,
+            extraction_json: { match, labo: laboNom, date_document: dateDoc, extrait_le: now }
+          };
+          if (pdfUrl) patch.resultat_pdf_url = pdfUrl;
+          if (laboNom) patch.labo_nom = laboNom;
+          await supabase.from('examens').update(patch).eq('id', exam.id);
+        }
+      }
+
+      // Même URL justificatif sur TOUTES les lignes de la consultation (1 fichier = tous les examens)
+      if (pdfUrl) {
+        await supabase.from('examens')
+          .update({ resultat_pdf_url: pdfUrl, labo_nom: laboNom || null })
+          .eq('consultation_id', consultation_id);
+      }
+
+      return res.status(200).json({
+        matches, labo: laboNom, date_document: dateDoc,
+        pdf_url: pdfUrl,
+        nb_trouvés: matches.filter(m => m.trouvé).length,
+        nb_total: matches.length
+      });
+    }
+
     return res.status(404).json({ error: 'Action non reconnue: ' + action });
 
   } catch (e) {
