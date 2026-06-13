@@ -3419,13 +3419,7 @@ function ouvrirDossierExamens(){
   });
 
   el.innerHTML=html;
-  // Injecter boutons Justificatif via DOM (pas d'échappement HTML)
-  var allExams=[];
-  byConsultGroups&&Object.values(byConsultGroups).forEach(function(exs){allExams=allExams.concat(exs);});
-  el.querySelectorAll('button').forEach(function(btn,i){
-    var ex=allExams[Math.floor(i/1)];
-  });
-  // Approche directe: stocker dans variable globale
+  // Injecter boutons Justificatif via DOM
   if(window._EXAM_PDF_URLS){
     Object.keys(window._EXAM_PDF_URLS).forEach(function(examId){
       var pdfUrl=window._EXAM_PDF_URLS[examId];
