@@ -534,21 +534,41 @@ module.exports = async function handler(req, res) {
       // Construire prompt
       const examensList = examens.map(e => `- ${e.type_examen} (${e.obligatoire ? 'OBL' : 'REC'})`).join('\n');
       const prompt = `Tu es un expert en analyses biologiques africaines (Côte d'Ivoire).
-Analyse ce document de résultats de laboratoire et identifie les examens prescrits :
+Analyse ce document de résultats de laboratoire et identifie les examens prescrits.
 
 EXAMENS PRESCRITS :
 ${examensList}
 
-Pour chaque examen, détermine : s'il est présent (trouvé: true/false), la valeur exacte, une interprétation courte.
+Pour chaque examen prescrit, détermine :
+1. S'il est présent dans le document (trouve: true/false)
+2. La valeur exacte extraite du document (valeur)
+3. L'interprétation clinique (interpretation) — OBLIGATOIREMENT l'une de ces 4 valeurs exactes :
+   - "Normal"     → résultat dans les valeurs de référence attendues
+   - "Anormal"    → résultat hors normes, test positif, présence d'agent pathogène, valeur basse ou élevée
+   - "Critique"   → résultat sévèrement anormal nécessitant une prise en charge urgente
+   - "En attente" → résultat incomplet, illisible ou non interprétable
 
-Réponds UNIQUEMENT avec ce JSON valide :
+Réponds UNIQUEMENT avec ce JSON valide, sans texte avant ou après :
 {
-  "matches": [{"type_examen": "nom exact prescrit", "trouvé": true, "valeur": "valeur ou null", "interpretation": "normal/anormal/positif/négatif ou null"}],
-  "labo": "nom laboratoire ou null",
-  "date_document": "date ou null"
+  "matches": [
+    {
+      "type_examen": "nom exact de l'examen prescrit (recopié)",
+      "trouve": true,
+      "valeur": "valeur ou résultat extrait, ou null si absent",
+      "interpretation": "Normal|Anormal|Critique|En attente"
+    }
+  ],
+  "labo": "nom du laboratoire si visible, sinon null",
+  "date_document": "date du document si visible, sinon null"
 }
 
-RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test rapide Plasmodium, GE=Goutte épaisse.`;
+RÈGLES ABSOLUES :
+- Ne jamais inventer un résultat absent du document
+- Si document illisible pour un examen → trouve: false
+- Matching sémantique : NFS = Numération Formule Sanguine = Hémogramme
+- TDR Paludisme = Test rapide Plasmodium = Test antigénique paludisme
+- GE = Goutte épaisse = Frottis sanguin paludisme
+- "interpretation" doit être EXACTEMENT l'un des 4 mots ci-dessus, rien d'autre`;
 
       const messageContent = [];
       if (mime_type === 'application/pdf') {
@@ -605,7 +625,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
       );
 
       for (const match of matches) {
-        const matched = match.trouve !== undefined ? match.trouve : match['trouvé'];
+        const matched = match.trouve !== undefined ? match.trouve : (match['trouvé'] !== undefined ? match['trouvé'] : false);
         if (!matched) continue;
         const exam = examens.find(e =>
           e.type_examen.toLowerCase().includes(match.type_examen.toLowerCase().substring(0,5)) ||
@@ -615,7 +635,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
           const patch = {
             statut: 'resultat_recu',
             resultat: match.valeur || '',
-            interpretation: match.interpretation || '',
+            interpretation: match.interpretation || 'En attente',
             date_resultat: now,
             extraction_json: { type_examen: match.type_examen, valeur: match.valeur, interpretation: match.interpretation, labo: laboNom, extrait_le: now }
           };
@@ -637,7 +657,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
       return res.status(200).json({
         matches, labo: laboNom, date_document: dateDoc,
         pdf_url: pdfUrl,
-        nb_trouvés: matches.filter(m => m.trouvé).length,
+        nb_trouvés: matches.filter(m => m.trouve || m['trouvé']).length,
         nb_total: matches.length
       });
     }
