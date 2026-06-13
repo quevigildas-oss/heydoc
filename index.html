@@ -8494,31 +8494,24 @@ function getContexteExamens(){
 // VOIR FICHIER EXAMEN — cherche dans dossier_medical via note=examenId
 // ══════════════════════════════
 async function voirFichierExamen(examenId){
+  // Priorité : PDF stocké dans Storage via analyser_resultats
+  var pdfUrl = window._EXAM_PDF_URLS && window._EXAM_PDF_URLS[examenId];
+  if(pdfUrl){
+    voirJustificatif(pdfUrl);
+    return;
+  }
+  // Fallback : chercher dans dossier_medical
   toast('⏳ Chargement...');
-  try{
-    // Chercher le document lié dans dossier_medical (note = examenId)
-    var r=await fetchAPI(API_URL+'/documents?action=get_by_note&note='+encodeURIComponent(examenId));
-    var data=await r.json();
-    var rows=Array.isArray(data)?data:(data.data||[]);
-    if(!rows.length){toast('Fichier non trouvé');return;}
-    var doc=rows[0];
-    var b64=doc.contenu_base64||'';
-    var mime=doc.mime_type||'image/jpeg';
-    if(!b64){toast('Fichier non disponible');return;}
-    // Ouvrir le fichier
-    var byteStr=atob(b64);
-    var ab=new ArrayBuffer(byteStr.length);
-    var ia=new Uint8Array(ab);
-    for(var i=0;i<byteStr.length;i++)ia[i]=byteStr.charCodeAt(i);
-    var blob=new Blob([ab],{type:mime});
-    var url=URL.createObjectURL(blob);
-    // Pour les images → afficher dans modal, pour PDF → nouvelle fenêtre
-    if(mime.startsWith('image/')){
-      afficherImageModal(url, doc.nom||'Résultat');
+  fetchAPI(API_URL+'/patient?action=examens').then(function(r){return r.json();}).then(function(exams){
+    var ex = Array.isArray(exams) ? exams.find(function(e){return e.id===examenId;}) : null;
+    if(ex && ex.resultat_pdf_url){
+      if(!window._EXAM_PDF_URLS) window._EXAM_PDF_URLS={};
+      window._EXAM_PDF_URLS[examenId] = ex.resultat_pdf_url;
+      voirJustificatif(ex.resultat_pdf_url);
     } else {
-      window.open(url,'_blank');
+      toast('Fichier non trouvé');
     }
-  }catch(e){toast('❌ '+e.message);}
+  }).catch(function(e){ toast('Erreur: '+e.message); });
 }
 
 function afficherImageModal(url, titre){
