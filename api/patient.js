@@ -585,11 +585,11 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
           const storagePath = `${targetPatientId}/${consultation_id}/${Date.now()}.${ext}`;
           const buf = Buffer.from(contenu_base64, 'base64');
           const upRes = await fetch(
-            `${SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`,
+            `${process.env.SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`,
             { method: 'POST', headers: { 'apikey': SUPA_SRK, 'Authorization': `Bearer ${SUPA_SRK}`, 'Content-Type': mime_type, 'x-upsert': 'false' }, body: buf }
           );
           if (upRes.ok) {
-            pdfUrl = `${SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`;
+            pdfUrl = `${process.env.SUPABASE_URL}/storage/v1/object/resultats-labo/${storagePath}`;
             console.log('Storage upload OK:', storagePath);
           } else { console.error('Storage err:', await upRes.text()); }
         } catch(eS) { console.error('Storage exception:', eS.message); }
@@ -597,9 +597,16 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
 
       const now = new Date().toISOString();
 
-      // PATCH individuel par exam matché
+      // PATCH avec client admin (SERVICE_ROLE_KEY) pour bypasser RLS
+      const { createClient } = require('@supabase/supabase-js');
+      const supabaseAdmin = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
       for (const match of matches) {
-        if (!match.trouvé) continue;
+        const matched = match.trouve !== undefined ? match.trouve : match['trouvé'];
+        if (!matched) continue;
         const exam = examens.find(e =>
           e.type_examen.toLowerCase().includes(match.type_examen.toLowerCase().substring(0,5)) ||
           match.type_examen.toLowerCase().includes(e.type_examen.toLowerCase().substring(0,5))
@@ -610,27 +617,21 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
             resultat: match.valeur || '',
             interpretation: match.interpretation || '',
             date_resultat: now,
-            extraction_json: { match, labo: laboNom, date_document: dateDoc, extrait_le: now }
+            extraction_json: { type_examen: match.type_examen, valeur: match.valeur, interpretation: match.interpretation, labo: laboNom, extrait_le: now }
           };
           if (pdfUrl) patch.resultat_pdf_url = pdfUrl;
           if (laboNom) patch.labo_nom = laboNom;
-          const _pr = await fetch(`${process.env.SUPABASE_URL}/rest/v1/examens?id=eq.${exam.id}`,{
-            method:'PATCH',
-            headers:{'apikey':SUPA_SRK,'Authorization':`Bearer ${SUPA_SRK}`,'Content-Type':'application/json','Prefer':'return=minimal'},
-            body:JSON.stringify(patch)
-          });
-          console.log('PATCH exam:', exam.type_examen, _pr.status);
+          const { error: pe } = await supabaseAdmin.from('examens').update(patch).eq('id', exam.id);
+          if (pe) console.error('PATCH err:', exam.type_examen, pe.message);
+          else console.log('PATCH OK:', exam.type_examen);
         }
       }
-
-      // Même URL justificatif sur TOUTES les lignes de la consultation (1 fichier = tous les examens)
       if (pdfUrl) {
-        const _pr2 = await fetch(`${process.env.SUPABASE_URL}/rest/v1/examens?consultation_id=eq.${consultation_id}`,{
-          method:'PATCH',
-          headers:{'apikey':SUPA_SRK,'Authorization':`Bearer ${SUPA_SRK}`,'Content-Type':'application/json','Prefer':'return=minimal'},
-          body:JSON.stringify({resultat_pdf_url:pdfUrl, labo_nom:laboNom||null})
-        });
-        console.log('PDF URL update:', _pr2.status);
+        const { error: pe2 } = await supabaseAdmin.from('examens')
+          .update({ resultat_pdf_url: pdfUrl, labo_nom: laboNom || null })
+          .eq('consultation_id', consultation_id);
+        if (pe2) console.error('PDF URL err:', pe2.message);
+        else console.log('PDF URL OK');
       }
 
       return res.status(200).json({
@@ -657,7 +658,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
       const SUPA_SRK = process.env.SUPABASE_SERVICE_ROLE_KEY;
       try {
         const signRes = await fetch(
-          `${SUPABASE_URL}/storage/v1/object/sign/resultats-labo/${filePath}`,
+          `${process.env.SUPABASE_URL}/storage/v1/object/sign/resultats-labo/${filePath}`,
           {
             method: 'POST',
             headers: {
@@ -670,7 +671,7 @@ RÈGLES : Ne jamais inventer. Matching sémantique : NFS=Hémogramme, TDR=Test r
         );
         const signData = await signRes.json();
         if (!signRes.ok) return res.status(500).json({ error: signData.message || 'Erreur signature' });
-        const signedUrl = `${SUPABASE_URL}/storage/v1${signData.signedURL}`;
+        const signedUrl = `${process.env.SUPABASE_URL}/storage/v1${signData.signedURL}`;
         return res.status(200).json({ url: signedUrl, expires_in: 3600 });
       } catch (eSign) {
         return res.status(500).json({ error: eSign.message });
