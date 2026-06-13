@@ -2513,12 +2513,13 @@ async function uploadResultatsLabo(consultationId) {
     var forParam = (typeof forSel === 'function') ? forSel() : '';
     var resp = await fetch('/api/patient?action=analyser_resultats' + forParam, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + JWT_TOKEN },
       body: JSON.stringify({
         contenu_base64: base64,
         mime_type: mimeType,
         examens: examens,
-        consultation_id: consultationId
+        consultation_id: consultationId,
+        sauvegarder: true
       })
     });
     var data = await resp.json();
