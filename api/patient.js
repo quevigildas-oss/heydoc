@@ -406,9 +406,13 @@ module.exports = async function handler(req, res) {
       const allowed = ['statut','code_retrait','pharmacie_selectionnee','pharmacie_tel','date_retrait'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
-      const { error } = await supabase.from('appels_offres').update(safe).eq('id', id);
+      // SERVICE_ROLE_KEY pour bypasser RLS — sinon update silencieux 0 lignes
+      const { createClient } = require('@supabase/supabase-js');
+      const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+      const { error, data: updated } = await supabaseAdmin.from('appels_offres').update(safe).eq('id', id).select('id');
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
+      console.log('PATCH ao:', id, '→', safe.statut, '| lignes:', updated?.length||0);
+      return res.status(200).json({ ok: true, updated: updated?.length||0 });
     }
 
     // PATCH /api/patient?action=consultation&id=xxx (avis patient uniquement)
