@@ -6675,9 +6675,12 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
         var autres=Array.isArray(autresData)?autresData:(autresData.data||[]);
         var aAnnuler=autres.filter(function(r){return r.id!==supabaseId&&r.statut!=='annule'&&r.statut!=='livre';});
         await Promise.all(aAnnuler.map(function(r){
-          return fetchAPI(API_URL+'/patient?action=ao&id='+encodeURIComponent(r.id),{method:'PATCH',body:JSON.stringify({statut:'annule'})}).catch(function(){});
+          return fetchAPI(API_URL+'/patient?action=ao&id='+encodeURIComponent(r.id),{method:'PATCH',body:JSON.stringify({statut:'annule'})})
+            .then(function(resp){return resp.json();})
+            .then(function(d){dbg('AO '+r.id.slice(0,8)+' annulé → '+(d.updated||0)+' ligne(s)');})
+            .catch(function(e){dbgWarn('AO annulation err: '+e.message);});
         }));
-        dbg('AO annulés: '+aAnnuler.length);
+        dbg('AO annulés (tentative): '+aAnnuler.length);
       }
     }catch(e){dbgWarn('Annulation autres AO: '+e.message);}
 
