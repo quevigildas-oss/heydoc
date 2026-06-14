@@ -273,16 +273,60 @@ function renderForm(){
       '</div>';
   }
 
-  function renderIndisponible(raison){
-    document.getElementById('hdrSub').textContent='Indisponible';
-    document.getElementById('mainContent').innerHTML=
-      getAoBadge()+
-      '<div class="card" style="text-align:center;padding:32px;">'+
-        '<div style="font-size:48px;margin-bottom:12px;">📦</div>'+
-        '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Médicament indisponible</div>'+
-        '<div style="font-size:13px;color:#aaa;">'+(raison||'Stock insuffisant')+'</div>'+
-      '</div>';
-  }
+// Sortie de renderLivre — fonction globale
+function renderIndisponible(raison){
+  document.getElementById('hdrSub').textContent='Indisponible';
+  document.getElementById('mainContent').innerHTML=
+    getAoBadge()+
+    '<div class="card" style="text-align:center;padding:32px;">'+
+      '<div style="font-size:48px;margin-bottom:12px;">📦</div>'+
+      '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Médicament indisponible</div>'+
+      '<div style="font-size:13px;color:#aaa;">'+(raison||'Stock insuffisant')+'</div>'+
+    '</div>';
+}
+
+// Bouton "Pas disponible" — sélection du motif
+function ouvrirRefus(){
+  var raisons=[
+    'Rupture de stock',
+    'Medicament non reference',
+    'Stock insuffisant pour la quantite',
+    'Medicament perime',
+    'Approvisionnement en cours'
+  ];
+  var opts=raisons.map(function(r){
+    return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;margin-bottom:8px;">'+
+      '<input type="radio" name="raison_refus" value="'+escHtml(r)+'" style="accent-color:#dc2626;">'+
+      '<span style="font-size:13px;color:#1A2B3C;">'+escHtml(r)+'</span>'+
+    '</label>';
+  }).join('');
+  document.getElementById('mainContent').innerHTML=
+    getAoBadge()+
+    '<div class="card">'+
+      '<div class="card-hdr" style="background:#dc2626;">📦 MOTIF D\'INDISPONIBILITE</div>'+
+      '<div class="card-body">'+
+        '<div style="font-size:13px;color:#6B7280;margin-bottom:14px;">Selectionnez la raison :</div>'+
+        opts+
+        '<button onclick="confirmerRefus()" class="btn-danger" style="margin-top:8px;">Confirmer l\'indisponibilite</button>'+
+        '<button onclick="renderForm()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:#6B7280;cursor:pointer;margin-top:6px;">Annuler</button>'+
+      '</div>'+
+    '</div>';
+}
+
+// Confirmer le motif d'indisponibilité
+async function confirmerRefus(){
+  var sel=document.querySelector('input[name="raison_refus"]:checked');
+  if(!sel){toast('Selectionnez une raison');return;}
+  var raison=sel.value;
+  try{
+    await dbPatch(aoData.supabaseId,{
+      statut:'indisponible',
+      raison_indisponibilite:raison,
+      date_reponse:new Date().toISOString()
+    });
+    renderIndisponible(raison);
+  }catch(e){toast('Erreur: '+e.message);}
+}
 
 
 window.addEventListener('load',function(){init();});
