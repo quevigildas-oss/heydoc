@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.76
-     DATE    : 2026-06-13 21:23:43
+     VERSION : V4.77
+     DATE    : 2026-06-14
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.77 — 2026-06-14 : FIX choisirOffre() — GET action=ao&id renvoie un objet (pas {data:[...]}), normalisation corrigée → annulation des autres AO de la consultation fonctionnelle
        V4.11 — 2026-04-21 : Onglet Hors réseau supprimé · Docs déclaratifs intégrés dans Réseau Dokita
        V4.10 — 2026-04-21 : DB_URL + SAVE_URL → heydoc-mu (séparation architecturale patient/médecin) · EXTRACT_URL déjà sur heydoc-mu
        V4.9 — 2026-04-12 : Message prévention téléphone après envoi dossier · Anamnèse dynamique (boutons OPTIONS) · Rafraîchissement profil Supabase · Générique sur ordonnance
@@ -6657,10 +6658,12 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
   toast('⏳ Confirmation en cours...');
   try{
     // Vérifier si un code existe déjà
+    // ⚠️ GET /patient?action=ao&id=xxx renvoie l'AO directement (via .single() côté API),
+    //    PAS {data:[...]} — normaliser comme un objet, pas un tableau (cf. piège action=profil)
     var existR=await fetchAPI(API_URL+'/patient?action=ao&id='+supabaseId);
     var existData=await existR.json();
-    var existRows=Array.isArray(existData)?existData:(existData.data||[]);
-    var existingCode=existRows.length&&existRows[0].code_retrait?existRows[0].code_retrait:'';
+    var existRow=Array.isArray(existData)?(existData[0]||null):(existData&&existData.id?existData:(existData&&existData.data?existData.data:null));
+    var existingCode=existRow&&existRow.code_retrait?existRow.code_retrait:'';
     var code=existingCode||String(Math.floor(100000+Math.random()*900000));
 
     // 1. PATCH l'AO choisi → accepte + code
@@ -6668,7 +6671,8 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
 
     // 2. Annuler les autres AO de la même consultation
     try{
-      var consultId=existRows.length?existRows[0].consultation_id||'':'';
+      var consultId=existRow?existRow.consultation_id||'':'';
+      dbg('choisirOffre: consultId='+(consultId||'(vide)'));
       if(consultId){
         var autresR=await fetchAPI(API_URL+'/patient?action=appels_offres&consultation_id='+encodeURIComponent(consultId)+'&for='+encodeURIComponent(PROFILS[SEL]&&PROFILS[SEL].patientId||''));
         var autresData=await autresR.json();

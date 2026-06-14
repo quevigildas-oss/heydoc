@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dokita — Réponse Pharmacie</title>
-<!-- VERSION: V2.1 — 2026-05-20 — Formulaire offre avec prix/quantités -->
+<!-- VERSION: V2.8 — 2026-06-14 — renderAnnule() texte chaleureux (depuis V2.1 projet) -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:Arial,sans-serif;background:#f0fdf4;color:#1A2B3C;min-height:100vh;}
@@ -221,23 +221,61 @@ function renderForm(){
         total_fcfa:totalGeneral,
         medicaments_offre:JSON.stringify(offres)
       });
-      renderSelectionne();
+      renderDejaRepondu();
+      // Notifier le patient via WhatsApp
+      try{
+        if(aoData.patientTel){
+          fetch('/api/whatsapp?action=notifier_patient',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              telephone:aoData.patientTel,
+              type:'offre_recue',
+              data:{prenom:aoData.patientPrenom||'',pharmacie:aoData.pharmNom||''}
+            })
+          });
+        }
+      }catch(e){console.warn('Notif WA:',e.message);}
     }catch(e){toast('⚠️ Erreur: '+e.message);}
   }
 
   function renderSelectionne(){
-    document.getElementById('hdrSub').textContent='Offre envoyée';
+    document.getElementById('hdrSub').textContent='Vous avez ete selectionne';
     document.getElementById('mainContent').innerHTML=
       getAoBadge()+
       '<div class="card" style="text-align:center;padding:24px;">'+
-        '<div style="font-size:48px;margin-bottom:12px;">🎯</div>'+
-        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Offre soumise !</div>'+
-        '<div style="font-size:13px;color:#aaa;line-height:1.5;">Le patient va recevoir votre offre.<br>Préparez les médicaments si vous êtes sélectionné.</div>'+
+        '<div style="font-size:48px;margin-bottom:12px;">🎉</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#00C896;margin-bottom:8px;">Vous avez ete selectionne !</div>'+
+        '<div style="font-size:13px;color:#aaa;margin-bottom:16px;">Demandez le code de retrait au patient et saisissez-le ci-dessous.</div>'+
       '</div>'+
       '<div class="card">'+
-        '<div class="card-hdr">💊 MÉDICAMENTS À PRÉPARER</div>'+
+        '<div class="card-hdr">💊 MÉDICAMENTS À PREPARER</div>'+
         '<div class="card-body">'+getMedsHtml(aoData.meds||[])+'</div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-hdr">🔐 VERIFICATION DU CODE DE RETRAIT</div>'+
+        '<div class="card-body">'+
+          '<div style="font-size:13px;color:#6B7280;margin-bottom:12px;">Le patient vous communique son code. Saisissez-le pour valider le retrait :</div>'+
+          '<input type="tel" id="codeInput" maxlength="6" placeholder="______" oninput="filtrerCode(this)" style="width:100%;border:2px solid #D1D5DB;border-radius:10px;padding:14px;font-size:32px;font-weight:800;letter-spacing:10px;text-align:center;color:#1A2B3C;outline:none;font-family:monospace;box-sizing:border-box;">'+
+          '<div id="codeErreur" style="display:none;color:#dc2626;font-size:13px;font-weight:600;text-align:center;margin-top:8px;">❌ Code errone — veuillez recommencer</div>'+
+          '<button onclick="validerCode()" class="btn-submit" style="margin-top:12px;">✅ Valider le code</button>'+
+        '</div>'+
       '</div>';
+  }
+
+  function filtrerCode(el){el.value=el.value.replace(/[^0-9]/g,'');}
+
+  function validerCode(){
+    var saisi=(document.getElementById('codeInput').value||'').trim();
+    var attendu=(aoData.codeRetrait||'').trim();
+    if(!saisi){toast('Saisissez le code du patient');return;}
+    if(saisi===attendu){
+      confirmerLivraison();
+    } else {
+      document.getElementById('codeInput').value='';
+      var err=document.getElementById('codeErreur');
+      if(err){err.style.display='block';setTimeout(function(){err.style.display='none';},3000);}
+    }
   }
 
   function renderDejaRepondu(){
@@ -273,19 +311,18 @@ function renderForm(){
       '</div>';
   }
 
-// Sortie de renderLivre — fonction globale
-function renderIndisponible(raison){
-  document.getElementById('hdrSub').textContent='Indisponible';
-  document.getElementById('mainContent').innerHTML=
-    getAoBadge()+
-    '<div class="card" style="text-align:center;padding:32px;">'+
-      '<div style="font-size:48px;margin-bottom:12px;">📦</div>'+
-      '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Médicament indisponible</div>'+
-      '<div style="font-size:13px;color:#aaa;">'+(raison||'Stock insuffisant')+'</div>'+
-    '</div>';
-}
+  function renderIndisponible(raison){
+    document.getElementById('hdrSub').textContent='Indisponible';
+    document.getElementById('mainContent').innerHTML=
+      getAoBadge()+
+      '<div class="card" style="text-align:center;padding:32px;">'+
+        '<div style="font-size:48px;margin-bottom:12px;">📦</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#e74c3c;margin-bottom:8px;">Médicament indisponible</div>'+
+        '<div style="font-size:13px;color:#aaa;">'+(raison||'Stock insuffisant')+'</div>'+
+      '</div>';
+  }
 
-// Bouton "Pas disponible" — sélection du motif
+
 function ouvrirRefus(){
   var raisons=[
     'Rupture de stock',
@@ -294,7 +331,7 @@ function ouvrirRefus(){
     'Medicament perime',
     'Approvisionnement en cours'
   ];
-  var opts=raisons.map(function(r){
+  var opts=raisons.map(function(r,i){
     return '<label style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid #fca5a5;border-radius:8px;cursor:pointer;margin-bottom:8px;">'+
       '<input type="radio" name="raison_refus" value="'+escHtml(r)+'" style="accent-color:#dc2626;">'+
       '<span style="font-size:13px;color:#1A2B3C;">'+escHtml(r)+'</span>'+
@@ -308,12 +345,11 @@ function ouvrirRefus(){
         '<div style="font-size:13px;color:#6B7280;margin-bottom:14px;">Selectionnez la raison :</div>'+
         opts+
         '<button onclick="confirmerRefus()" class="btn-danger" style="margin-top:8px;">Confirmer l\'indisponibilite</button>'+
-        '<button onclick="renderForm()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:#6B7280;cursor:pointer;margin-top:6px;">Annuler</button>'+
+        '<button onclick="renderForm()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:#6B7280;cursor:pointer;margin-top:6px;">Annuler — retour</button>'+
       '</div>'+
     '</div>';
 }
 
-// Confirmer le motif d'indisponibilité
 async function confirmerRefus(){
   var sel=document.querySelector('input[name="raison_refus"]:checked');
   if(!sel){toast('Selectionnez une raison');return;}
@@ -328,6 +364,38 @@ async function confirmerRefus(){
   }catch(e){toast('Erreur: '+e.message);}
 }
 
+async function confirmerLivraison(){
+  try{
+    await dbPatch(aoData.supabaseId,{
+      statut:'livre',
+      date_validation:new Date().toISOString()
+    });
+    renderLivre();
+
+    // Notifier le patient via WhatsApp
+    try{
+      if(aoData.patientTel){
+        fetch('/api/whatsapp?action=notifier_patient',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            telephone:aoData.patientTel,
+            type:'medicaments_prets',
+            data:{
+              prenom:     aoData.patientPrenom||'',
+              pharmacie:  aoData.pharmNom||'',
+              code_retrait:aoData.codeRetrait||''
+            }
+          })
+        });
+      }
+    }catch(e){console.warn('Notif WA:',e.message);}
+
+    // Payout pharmacie déclenché côté serveur (api/pharmacie.js)
+    // quand le PATCH statut=livre est reçu — PAYOUT_SECRET reste serveur
+
+  }catch(e){toast('Erreur: '+e.message);}
+}
 
 window.addEventListener('load',function(){init();});
 
