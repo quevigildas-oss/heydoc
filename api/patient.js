@@ -1,6 +1,12 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.9
+// VERSION : V2.10
+// FIX     : GET action=profil — honore &for=PAT-XX (membre famille, vérif compte_parent_id) — corrige
+//           rafraichirProfilSupabase() qui écrasait le profil du membre famille avec celui du compte principal
+// FIX     : GET action=ao&id= — autorise membres famille (compte_parent_id), comme PATCH action=ao — corrige
+//           choisirOffre() qui ne pouvait pas récupérer consultation_id pour annuler les autres AO (profil famille)
+// DATE    : 2026-06-15
+//   V2.10 (2026-06-15) : cf. FIX ci-dessus (bugs profils famille — sélection pharmacie + contexte clinique IA)
 // FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
@@ -114,8 +120,18 @@ module.exports = async function handler(req, res) {
 
     // ── GET ──────────────────────────────────────────────────────────────────
 
-    // GET /api/patient?action=profil
+    // GET /api/patient?action=profil[&for=PAT-XX] (membre famille)
     if (req.method === 'GET' && action === 'profil') {
+      const forId = req.query.for;
+      if (forId && forId !== patientId) {
+        // Profil d'un membre famille — vérifier le lien compte_parent_id
+        const { data: fam, error: famErr } = await supabase
+          .from('patients').select('*')
+          .eq('patient_id', forId).eq('compte_parent_id', patientUuid).limit(1);
+        if (famErr) return res.status(500).json({ error: famErr.message });
+        if (!fam || !fam.length) return res.status(403).json({ error: 'Non autorisé' });
+        return res.status(200).json(fam[0]);
+      }
       const { data, error } = await supabase
         .from('patients').select('*').eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
@@ -282,14 +298,21 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=ao&id=xxx  (AO unique par id)
+    // GET /api/patient?action=ao&id=xxx  (AO unique par id — patient lui-même OU membre famille)
     if (req.method === 'GET' && action === 'ao') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
       const { data, error } = await supabase
         .from('appels_offres').select('*')
-        .eq('id', id).eq('patient_id', patientId).single();
+        .eq('id', id).single();
       if (error) return res.status(500).json({ error: error.message });
+      // Vérifier appartenance — AO du patient lui-même OU d'un membre lié par compte_parent_id
+      if (data.patient_id !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', data.patient_id)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorisé' });
+      }
       return res.status(200).json(data);
     }
 
