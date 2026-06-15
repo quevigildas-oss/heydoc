@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.79
+     VERSION : V4.80
      DATE    : 2026-06-15
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.80 — 2026-06-15 : FIX speakMsg() — le bouton 🔊/⏹ ne relançait pas la lecture mais
+              n'arrêtait jamais réellement (cancel()+speak() systématique). Clic sur ⏹ = stop
+              réel désormais (cancel() + reset icône, sans relancer). Reset des autres boutons
+              restés sur ⏹ lors d'une nouvelle lecture. Ajout utt.onerror (reset icône).
        V4.79 — 2026-06-15 : FIX seConnecter() — transfere n'est vrai que pour la ligne du compte
               principal (p.id===data.patientId). Nécessaire suite au fix api/auth.js V1.2 qui inclut
               désormais les membres famille (compte_parent_id) dans data.profils dès le login —
@@ -2470,11 +2474,21 @@ function addMsg(role,text){
 // ── TTS : écouter une bulle IA ──
 function speakMsg(btn){
   if(!window.speechSynthesis)return;
+  // Si CE bouton est en train de lire → clic = STOP (ne pas relancer)
+  if(btn.textContent==='⏹'){
+    window.speechSynthesis.cancel();
+    btn.textContent='🔊';
+    return;
+  }
   var msgB=btn.closest('.msg-b');
   if(!msgB)return;
   // Récupérer le texte brut (sans le bouton 🔊)
-  var txt=msgB.innerText.replace('🔊','').trim();
+  var txt=msgB.innerText.replace('🔊','').replace('⏹','').trim();
   if(!txt)return;
+  // Réinitialiser l'icône de tout autre bouton resté sur ⏹ (lecture précédente annulée)
+  document.querySelectorAll('.msg-b button[aria-label="Écouter"]').forEach(function(b){
+    if(b!==btn)b.textContent='🔊';
+  });
   window.speechSynthesis.cancel();
   var utt=new SpeechSynthesisUtterance(txt);
   utt.lang='fr-FR';
@@ -2485,6 +2499,7 @@ function speakMsg(btn){
   if(frVoice)utt.voice=frVoice;
   btn.textContent='⏹';
   utt.onend=function(){btn.textContent='🔊';};
+  utt.onerror=function(){btn.textContent='🔊';};
   window.speechSynthesis.speak(utt);
 }
 
