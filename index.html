@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.77
-     DATE    : 2026-06-14
+     VERSION : V4.79
+     DATE    : 2026-06-15
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.79 — 2026-06-15 : FIX seConnecter() — transfere n'est vrai que pour la ligne du compte
+              principal (p.id===data.patientId). Nécessaire suite au fix api/auth.js V1.2 qui inclut
+              désormais les membres famille (compte_parent_id) dans data.profils dès le login —
+              sans ce fix, un membre famille (ex: Akouvi) serait affiché comme "Profil transféré".
        V4.77 — 2026-06-14 : FIX choisirOffre() — GET action=ao&id renvoie un objet (pas {data:[...]}), normalisation corrigée → annulation des autres AO de la consultation fonctionnelle
        V4.11 — 2026-04-21 : Onglet Hors réseau supprimé · Docs déclaratifs intégrés dans Réseau Dokita
        V4.10 — 2026-04-21 : DB_URL + SAVE_URL → heydoc-mu (séparation architecturale patient/médecin) · EXTRACT_URL déjà sur heydoc-mu
@@ -1259,7 +1263,9 @@ async function seConnecter(){
         patientId:p.patient_id||p.id,supabaseId:p.id,
         parrain_id:p.parrain_id||null,credit_reduction:p.credit_reduction||0,
         lien:p.lien_familial||'moi',compteParent:'',
-        transfere:!!(p.compte_parent_id),
+        // transfere: vrai uniquement si CE compte (le principal lui-même) a été transféré ailleurs.
+        // Pour un membre famille, compte_parent_id est le lien familial normal (ex: Akouvi) → false.
+        transfere: p.id===data.patientId ? !!(p.compte_parent_id) : false,
         ia_consent:p.ia_consent||false,
         statut_compte:p.statut_compte||'actif'
       };
