@@ -1,6 +1,8 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.11
+// VERSION : V2.12
+// FIX SECURITE : action=signed_url et action=analyser_resultats — &for=PAT-XX vérifié via
+//   estMembreFamille(), même correctif que V2.11 (dossier/appels_offres/examens/ordonnances).
 // FIX SECURITE : action=dossier/appels_offres/examens/ordonnances — &for=PAT-XX vérifié via
 //   estMembreFamille() (compte_parent_id ou email partagé), même pattern que action=consultations.
 //   _lib/supabase.js = service_role (RLS inopérant) → for= était une faille IDOR (CWE-639 / OWASP API1)
@@ -581,6 +583,9 @@ module.exports = async function handler(req, res) {
       if (!contenu_base64 || !mime_type || !examens || !examens.length) {
         return res.status(400).json({ error: 'contenu_base64, mime_type et examens requis' });
       }
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
 
       const targetPatientId = req.query.for || patientId;
       const { data: consult } = await supabase.from('consultations').select('id')
@@ -729,6 +734,9 @@ RÈGLES ABSOLUES :
     if (req.method === 'GET' && action === 'signed_url') {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).json({ error: 'path requis' });
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
 
       // Vérifier que le fichier appartient au patient (path commence par patient_id)
       const targetPatientId2 = req.query.for || patientId;
