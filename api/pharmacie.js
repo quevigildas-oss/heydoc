@@ -1,8 +1,12 @@
 // api/pharmacie.js
 // Endpoints pharmacie — authentification par token AO (ao_id dans l'URL)
-// VERSION : V1.3
+// VERSION : V1.4
+// FIX     : déclenchement payout_pharmacie — utilise appel_offre_id (= appels_offres.id, PK uuid)
+//           au lieu de ao_id (token texte séparé, jamais utilisé pour les opérations CRUD).
+//           Cohérent avec le fix symétrique dans api/payment.js (action=payout_pharmacie).
+// DATE    : 2026-06-17
+// ── V1.3 (2026-05-19) ──
 // ADD     : whitelist prix_unitaire, quantite_boites, total_fcfa, medicaments_offre, disponible_totalite
-// DATE    : 2026-05-19
 // NOTES   : Pas de JWT — la pharmacie s'authentifie via l'ao_id unique dans le lien WhatsApp
 //           Utilise service_role (via _lib/supabase.js) pour bypasser RLS
 //           Accès limité : appels_offres (lecture + PATCH) + stock_pharmacie (lecture + PATCH)
@@ -97,9 +101,11 @@ module.exports = async function handler(req, res) {
       if (safe.statut === 'livre') {
         try {
           // Recharger l'AO complet pour avoir les infos payout
+          // id (PK uuid) est l'identifiant utilisé partout pour les opérations CRUD —
+          // ao_id (texte) sert uniquement de token dans le lien WhatsApp, jamais ici.
           const { data: ao } = await supabase
             .from('appels_offres')
-            .select('ao_id, pharmacie_id, pharmacie_nom, total_fcfa')
+            .select('id, pharmacie_id, pharmacie_nom, total_fcfa')
             .eq('id', id).single();
 
           // Charger le mobile money de la pharmacie
@@ -119,7 +125,7 @@ module.exports = async function handler(req, res) {
                   'x-payout-secret': process.env.PAYOUT_SECRET || ''
                 },
                 body: JSON.stringify({
-                  ao_id:                  ao.ao_id || id,
+                  appel_offre_id:         ao.id,
                   pharmacie_id:           ao.pharmacie_id || '',
                   pharmacie_nom:          ao.pharmacie_nom || '',
                   montant_total:          ao.total_fcfa,
@@ -132,6 +138,8 @@ module.exports = async function handler(req, res) {
             if (!payoutData.ok) {
               console.error('Payout pharmacie echec:', payoutData.error);
             }
+          } else {
+            console.warn('Payout pharmacie non déclenché — total_fcfa ou mobile_money manquant pour AO', id);
           }
         } catch (payErr) {
           console.error('Payout pharmacie err:', payErr.message);

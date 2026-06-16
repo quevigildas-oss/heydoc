@@ -38,16 +38,27 @@ export default async function handler(req, res) {
     const {
       patient_id, patient_nom, patient_prenom,
       patient_email, patient_tel,
-      consultation_id, type_paiement
+      consultation_id, type_paiement,
+      montant, appel_offre_id
     } = req.body || {};
 
     if (!patient_id) return res.status(400).json({ error: 'patient_id requis' });
+
+    // Montant variable depuis V1.2 : pharmacie envoie le total réel de l'offre.
+    // Pour consultation/examen, comportement inchangé : 5000 FCFA fixe.
+    const montantFinal = (type_paiement === 'medicaments' && montant)
+      ? Math.round(Number(montant))
+      : 5000;
+
+    if (type_paiement === 'medicaments' && (!montantFinal || montantFinal <= 0)) {
+      return res.status(400).json({ error: 'montant invalide pour paiement médicaments' });
+    }
 
     const tx_ref = 'DKT-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex').toUpperCase();
 
     const payload = {
       tx_ref,
-      amount:       5000,
+      amount:       montantFinal,
       currency:     'XOF',
       redirect_url: `${BASE_URL}/api/payment?action=retour&txn=${tx_ref}`,
       customer: {
@@ -59,13 +70,16 @@ export default async function handler(req, res) {
         title:       'Dokita — Consultation médicale',
         description: type_paiement === 'examen'
           ? 'Envoi résultats examens — 5 000 FCFA'
+          : type_paiement === 'medicaments'
+          ? `Médicaments pharmacie — ${montantFinal} FCFA`
           : 'Consultation médicale AfriBot — 5 000 FCFA',
         logo: `${BASE_URL}/logo.png`
       },
       meta: {
         patient_id,
         consultation_id: consultation_id || '',
-        type_paiement:   type_paiement   || 'consultation'
+        type_paiement:   type_paiement   || 'consultation',
+        appel_offre_id:  appel_offre_id  || ''
       },
       payment_options: 'card,mobilemoney,ussd'
     };
@@ -90,7 +104,8 @@ export default async function handler(req, res) {
         transaction_id:  tx_ref,
         patient_id,
         consultation_id: consultation_id || null,
-        montant:         5000,
+        appel_offre_id:  appel_offre_id  || null,
+        montant:         montantFinal,
         devise:          'XOF',
         statut:          'en_attente',
         payment_url:     data.data.link,
@@ -123,7 +138,15 @@ export default async function handler(req, res) {
         });
         const vdata = await verif.json();
 
-        const statut = (vdata.data?.status === 'successful' && vdata.data?.amount >= 5000)
+        // Le montant minimum attendu dépend de la transaction réelle enregistrée,
+        // pas d'une constante 5000 — sinon un paiement médicaments à 3000 FCFA
+        // serait refusé alors qu'il est correct.
+        const { data: pRow } = await supabase
+          .from('paiements').select('montant')
+          .eq('transaction_id', tx_ref).single();
+        const montantAttendu = pRow?.montant || 5000;
+
+        const statut = (vdata.data?.status === 'successful' && vdata.data?.amount >= montantAttendu)
           ? 'paye' : 'echec';
 
         await supabase.from('paiements')
@@ -168,7 +191,11 @@ export default async function handler(req, res) {
       .eq('transaction_id', txn).single();
 
     if (error || !data) return res.status(404).json({ error: 'Transaction introuvable' });
-    return res.status(200).json({ statut: data.statut, montant: data.montant });
+    return res.status(200).json({
+      statut: data.statut,
+      montant: data.montant,
+      appel_offre_id: data.appel_offre_id || null
+    });
   }
 
   // ══════════════════════════════════════════════
@@ -272,7 +299,7 @@ export default async function handler(req, res) {
   // ══════════════════════════════════════════════
   // ACTION : payout_pharmacie — virer la part pharmacie après retrait confirmé
   // Escrow : Dokita retient 5%, reverse 95% à la pharmacie
-  // Appelé par pharmacie.html après confirmerLivraison()
+  // Appelé par api/pharmacie.js après confirmerLivraison() (statut=livre)
   // Auth : x-payout-secret
   // ══════════════════════════════════════════════
   if (req.method === 'POST' && action === 'payout_pharmacie') {
@@ -281,9 +308,12 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Non autorisé' });
     }
 
-    const { ao_id, pharmacie_id, pharmacie_nom, montant_total, mobile_money_numero, mobile_money_operateur } = req.body || {};
-    if (!ao_id || !montant_total) {
-      return res.status(400).json({ error: 'ao_id et montant_total requis' });
+    // FIX V1.2 : ao_id (token texte séparé) remplacé par appel_offre_id (PK uuid).
+    // Schéma confirmé : appels_offres.id est la PK ; ao_id est un token texte distinct
+    // utilisé seulement pour l'URL WhatsApp pharmacie — jamais pour les opérations CRUD.
+    const { appel_offre_id, pharmacie_id, pharmacie_nom, montant_total, mobile_money_numero, mobile_money_operateur } = req.body || {};
+    if (!appel_offre_id || !montant_total) {
+      return res.status(400).json({ error: 'appel_offre_id et montant_total requis' });
     }
 
     const COMMISSION_DOKITA = 0.05; // 5%
@@ -294,7 +324,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Numéro mobile money pharmacie non renseigné' });
     }
 
-    const payout_ref = 'PAYOUT-PH-' + ao_id.slice(0, 8).toUpperCase() + '-' + Date.now();
+    const payout_ref = 'PAYOUT-PH-' + appel_offre_id.slice(0, 8).toUpperCase() + '-' + Date.now();
 
     try {
       const r = await fetch(`${FLW_BASE}/transfers`, {
@@ -311,7 +341,7 @@ export default async function handler(req, res) {
           currency:        'XOF',
           beneficiary_name: pharmacie_nom || 'Pharmacie Dokita',
           reference:       payout_ref,
-          narration:       `Paiement Dokita médicaments AO ${ao_id.slice(0, 8)}`
+          narration:       `Paiement Dokita médicaments AO ${appel_offre_id.slice(0, 8)}`
         })
       });
       const pdata = await r.json();
@@ -322,6 +352,7 @@ export default async function handler(req, res) {
       await supabase.from('paiements').insert([{
         transaction_id:  payout_ref,
         patient_id:      'PAYOUT-PHARMA',
+        appel_offre_id:  appel_offre_id,
         montant:         montant_pharmacie,
         devise:          'XOF',
         statut:          statut_payout,
@@ -329,10 +360,13 @@ export default async function handler(req, res) {
         created_at:      new Date().toISOString()
       }]);
 
-      // Mettre à jour l'AO avec le statut payout
+      // FIX V1.2 : .eq('ao_id', ao_id) → .eq('id', appel_offre_id).
+      // appels_offres.id est la PK uuid ; l'ancienne version matchait sur la
+      // colonne texte ao_id qui n'est jamais utilisée pour les opérations CRUD
+      // ailleurs dans le code — ce PATCH ne touchait donc jamais aucune ligne.
       await supabase.from('appels_offres')
-        .update({ payout_statut: 'en_cours', updated_at: new Date().toISOString() })
-        .eq('ao_id', ao_id);
+        .update({ payout_statut: statut_payout === 'en_cours' ? 'en_cours' : 'echec', updated_at: new Date().toISOString() })
+        .eq('id', appel_offre_id);
 
       if (pdata.status !== 'success') {
         return res.status(400).json({ error: pdata.message || 'Payout pharmacie échoué' });
