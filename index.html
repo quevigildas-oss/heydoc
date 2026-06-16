@@ -2190,10 +2190,10 @@ async function verifierPaiementRetour(){
     if(d.statut==='paye'){
       var examCid=sessionStorage.getItem('dk_paiement_exam_cid')||'';
       var pendingAo=sessionStorage.getItem('dk_meds_pending_ao')||'';
-      if(examCid && pendingAo && examCid==='dk_paiement_meds_'+pendingAo){
-        sessionStorage.setItem(examCid,'1');
-        sessionStorage.removeItem('dk_paiement_exam_cid');
-        toast('Paiement confirme - confirmation de la pharmacie...');
+      if(pendingAo){
+        // Retour paiement médicaments — marquer payé puis relancer choisirOffre()
+        sessionStorage.setItem('dk_paiement_ao_'+pendingAo,'1');
+        toast('✅ Paiement confirmé — confirmation de la pharmacie...');
         var pNom=sessionStorage.getItem('dk_meds_pending_nom')||'';
         var pTel=sessionStorage.getItem('dk_meds_pending_tel')||'';
         var pTotal=sessionStorage.getItem('dk_meds_pending_total')||'0';
@@ -2201,7 +2201,7 @@ async function verifierPaiementRetour(){
         sessionStorage.removeItem('dk_meds_pending_nom');
         sessionStorage.removeItem('dk_meds_pending_tel');
         sessionStorage.removeItem('dk_meds_pending_total');
-        setTimeout(function(){choisirOffre(pendingAo,pNom,pTel,pTotal);},1000);
+        setTimeout(function(){nav('offresScreen');choisirOffre(pendingAo,pNom,pTel,pTotal);},1000);
       } else if(examCid){
         sessionStorage.setItem(examCid,'1');
         sessionStorage.removeItem('dk_paiement_exam_cid');
@@ -6595,7 +6595,7 @@ function renderOffres(complete,stops2,toutes){
           :o.statut==='accepte'?
             '<div style="width:100%;padding:11px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3);border-radius:10px;text-align:center;font-size:12px;font-weight:700;color:#6366f1;">⏳ En cours de retrait</div>'
           :
-          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\',\''+o.total_fcfa+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'
+          '<button onclick="choisirOffre(\''+o.supabaseId+'\',\''+escHtml(o.pharmNom).replace(/'/g,'&#39;')+'\',\''+tel+'\',\''+o.prixMeds+'\')" style="width:100%;background:'+(isComplete?'var(--accent)':'rgba(245,158,11,.2)')+';border:'+(isComplete?'none':'1px solid #d97706')+';border-radius:10px;padding:11px;font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:'+(isComplete?'#fff':'#d97706')+';cursor:pointer;">'+(isComplete?'✅ Choisir cette pharmacie':'⚠️ Choisir (partiel)')+'</button>'
           )+
         '</div>';
     });
@@ -6676,6 +6676,51 @@ function renderCarteCode(code,pharmNom,meds,num){
 }
 
 async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
+  // ── GATE PAIEMENT MÉDICAMENTS ──
+  // Le patient paie en ligne (Flutterwave) AVANT d'accepter l'offre.
+  // Si le paiement a déjà été validé pour cet AO (retour Flutterwave), on saute le gate.
+  var montant=parseFloat(totalFcfa)||0;
+  var paiementOkKey='dk_paiement_ao_'+supabaseId;
+  var paiementDejaOk=sessionStorage.getItem(paiementOkKey)==='1';
+
+  if(!paiementDejaOk){
+    if(!montant||montant<=0){
+      toast('⚠️ Montant invalide — impossible de lancer le paiement');
+      return;
+    }
+    toast('⏳ Redirection vers le paiement...');
+    var pPay=PROFILS[SEL]||{};
+    try{
+      var rPay=await fetchAPI(API_URL+'/payment?action=initier',{
+        method:'POST',
+        body:JSON.stringify({
+          patient_id:     pPay.patientId||'',
+          patient_nom:    pPay.nom||'',
+          patient_prenom: pPay.prenom||'',
+          patient_email:  pPay.email||'',
+          patient_tel:    pPay.tel||'',
+          type_paiement:  'medicaments',
+          montant:        montant,
+          appel_offre_id: supabaseId
+        })
+      });
+      var dPay=await rPay.json();
+      if(dPay.payment_url){
+        sessionStorage.setItem('dk_meds_pending_ao',supabaseId);
+        sessionStorage.setItem('dk_meds_pending_nom',pharmNom||'');
+        sessionStorage.setItem('dk_meds_pending_tel',pharmTel||'');
+        sessionStorage.setItem('dk_meds_pending_total',String(montant));
+        sessionStorage.setItem('dk_paiement_txn',dPay.transaction_id);
+        window.location.href=dPay.payment_url;
+      } else {
+        toast('❌ Erreur paiement: '+(dPay.error||'Inconnue'));
+      }
+    }catch(ePay){
+      toast('❌ Erreur: '+ePay.message);
+    }
+    return; // on s'arrête ici — la suite se joue au retour via verifierPaiementRetour()
+  }
+
   toast('⏳ Confirmation en cours...');
   try{
     // Vérifier si un code existe déjà
@@ -6689,6 +6734,9 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
 
     // 1. PATCH l'AO choisi → accepte + code
     await fetchAPI(API_URL+'/patient?action=ao&id='+encodeURIComponent(supabaseId),{method:'PATCH',body:JSON.stringify({statut:'accepte',code_retrait:code})});
+
+    // Nettoyer le marqueur de paiement — l'AO est maintenant accepté, plus besoin de le rejouer
+    sessionStorage.removeItem(paiementOkKey);
 
     // 2. Annuler les autres AO de la même consultation
     try{
