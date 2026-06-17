@@ -353,16 +353,38 @@ async function chargerAlertePayouts(){
     var rows=Array.isArray(data)?data:(data.data||[]);
     if(!rows.length){el.style.display='none';return;}
     el.style.display='block';
-    el.innerHTML='🚨 '+rows.length+' paiement(s) pharmacie non aboutis — '+
+    el.innerHTML='🚨 '+rows.length+' paiement(s) pharmacie non aboutis<br><br>'+
       rows.map(function(row){
-        return escHtml(row.pharmacie_nom||'Pharmacie inconnue')+' ('+(row.total_fcfa||'?')+' FCFA, AO '+(row.id||'').slice(0,8)+')';
-      }).join(', ')+
-      '. Vérifier le mobile money de la pharmacie concernée (onglet 🏪 Pharmacies) puis relancer le payout si besoin.';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(239,68,68,.15);">'+
+          '<span>'+escHtml(row.pharmacie_nom||'Pharmacie inconnue')+' — '+(row.total_fcfa||'?')+' FCFA (AO '+(row.id||'').slice(0,8)+')</span>'+
+          '<button onclick="relancerPayout(\''+row.id+'\',this)" style="flex-shrink:0;padding:4px 10px;background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:6px;font-size:11px;font-weight:700;color:var(--danger);cursor:pointer;">🔁 Relancer</button>'+
+        '</div>';
+      }).join('')+
+      '<div style="margin-top:8px;font-size:11px;opacity:.8;">Vérifier le mobile money de la pharmacie concernée (onglet 🏪 Pharmacies) avant de relancer si le premier essai a échoué pour cette raison.</div>';
   }catch(ex){
     // Echec silencieux volontaire — ne pas bloquer le chargement du dashboard
     // si cette route a un problème ; l'alerte est un confort, pas une dépendance critique.
     el.style.display='none';
   }
+}
+
+async function relancerPayout(appelOffreId, btn){
+  if(btn){btn.disabled=true;btn.textContent='⏳...';}
+  try{
+    var r=await fetchAdmin(ADMIN_URL+'?action=relancer_payout',{
+      method:'POST',
+      body:JSON.stringify({appel_offre_id:appelOffreId})
+    });
+    var data=await r.json();
+    if(data.ok){
+      alert('✅ Payout relancé avec succès pour cet AO.');
+    } else {
+      alert('❌ Payout toujours en échec : '+(data.error||'erreur inconnue'));
+    }
+  }catch(ex){
+    alert('❌ Erreur réseau : '+ex.message);
+  }
+  chargerAlertePayouts(); // recharge dans tous les cas pour refléter l'état réel
 }
 
 async function chargerPharmacies(){
