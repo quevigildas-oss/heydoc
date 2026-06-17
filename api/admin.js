@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET' && action === 'pharmacies') {
     // Table 'pharmacies' en dev — à migrer vers 'etablissements' avant go-live
     const { data, error } = await supabase
-      .from('pharmacies').select('id, nom, ville, telephone')
+      .from('pharmacies').select('id, nom, ville, telephone, mobile_money_numero, mobile_money_operateur')
       .order('nom').limit(200);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data || []);
