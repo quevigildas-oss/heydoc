@@ -106,5 +106,63 @@ export default async function handler(req, res) {
     return res.status(200).json(data || []);
   }
 
+  // POST relancer_payout — rejoue le payout pharmacie pour un AO déjà livré,
+  // sans repasser par tout le flux patient. Relit les données fraîches (utile
+  // si le mobile money de la pharmacie vient d'être corrigé via PATCH pharmacie)
+  // puis rappelle payment.js?action=payout_pharmacie, exactement comme le ferait
+  // pharmacie.js automatiquement après confirmerLivraison().
+  if (req.method === 'POST' && action === 'relancer_payout') {
+    const appelOffreId = req.body?.appel_offre_id;
+    if (!appelOffreId) return res.status(400).json({ error: 'appel_offre_id requis' });
+
+    const { data: ao, error: aoErr } = await supabase
+      .from('appels_offres')
+      .select('id, pharmacie_id, pharmacie_nom, total_fcfa, statut')
+      .eq('id', appelOffreId).single();
+    if (aoErr || !ao) return res.status(404).json({ error: 'AO introuvable' });
+    if (ao.statut !== 'livre') {
+      return res.status(400).json({ error: 'AO pas au statut livre — payout non applicable' });
+    }
+    if (!ao.total_fcfa || !ao.pharmacie_id) {
+      return res.status(400).json({ error: 'total_fcfa ou pharmacie_id manquant sur cet AO' });
+    }
+
+    const { data: pharma, error: phErr } = await supabase
+      .from('pharmacies')
+      .select('mobile_money_numero, mobile_money_operateur')
+      .eq('id', ao.pharmacie_id).single();
+    if (phErr || !pharma?.mobile_money_numero) {
+      return res.status(400).json({ error: 'Mobile money pharmacie manquant — corriger via l\'onglet Pharmacies avant de relancer' });
+    }
+
+    try {
+      const payoutRes = await fetch(
+        (process.env.BASE_URL || 'https://heydoc-mu.vercel.app') + '/api/payment?action=payout_pharmacie',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-payout-secret': process.env.PAYOUT_SECRET || ''
+          },
+          body: JSON.stringify({
+            appel_offre_id:         ao.id,
+            pharmacie_id:           ao.pharmacie_id,
+            pharmacie_nom:          ao.pharmacie_nom || '',
+            montant_total:          ao.total_fcfa,
+            mobile_money_numero:    pharma.mobile_money_numero,
+            mobile_money_operateur: pharma.mobile_money_operateur || ''
+          })
+        }
+      );
+      const payoutData = await payoutRes.json();
+      if (!payoutData.ok) {
+        return res.status(400).json({ error: payoutData.error || 'Payout toujours en échec', details: payoutData });
+      }
+      return res.status(200).json({ ok: true, ...payoutData });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   return res.status(404).json({ error: 'Route introuvable' });
 }
