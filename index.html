@@ -5485,10 +5485,13 @@ var ETABLISSEMENTS=[]; // chargé au login depuis Supabase etablissements // cha
 
 async function chargerEtablissements(){
   // Chargement au login — stocké en mémoire pour toute la session
-  // Dev → table 'pharmacies' (is_test, vos numéros) | Prod → 'etablissements'
-  var etablUrl=DOKITA_ENV==='dev'
-    ? API_URL+'/patient?action=pharmacies'
-    : API_URL+'/patient?action=etablissements';
+  // pharmacies est l'unique source pour ce flux, dev ET prod : c'est déjà la liste
+  // filtrée des pharmacies partenaires (on n'y insère que ce qui est signé), alors que
+  // etablissements (274 lignes) est un catalogue géographique non lié au paiement —
+  // confirmé par SQL le 2026-06-17 : aucune des 3 pharmacies de test n'existe dans
+  // etablissements (LEFT JOIN sur nom → 0 correspondance). etablissements reste utilisée
+  // uniquement par le module RDV (chargerEtabsParType), pas par ce flux.
+  var etablUrl=API_URL+'/patient?action=pharmacies';
   try{
     var r=await fetch(etablUrl);
     var data=await r.json();
@@ -5518,7 +5521,7 @@ async function chargerEtablissements(){
           google_rating:e.google_rating||null
         };
       });
-      dbg('Etablissements chargés: '+ETABLISSEMENTS.length+' | pharmacies: '+ETABLISSEMENTS.filter(function(e){return e.type==='pharmacie';}).length);
+      dbg('Pharmacies chargées: '+ETABLISSEMENTS.length);
     } else {
       // Fallback test si table vide
       ETABLISSEMENTS=[
