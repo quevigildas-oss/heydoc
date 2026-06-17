@@ -74,6 +74,7 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
   </div>
 
   <div class="container">
+    <div id="alertePayoutsGlobale" style="display:none;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--danger);"></div>
     <div class="tabs">
       <div class="tab on" id="tabLivraison" onclick="switchTab('livraison')">📦 Nouvelle livraison</div>
       <div class="tab" id="tabReconciliation" onclick="switchTab('reconciliation')">📊 Réconciliation</div>
@@ -338,6 +339,30 @@ if(sessionStorage.getItem('dk_admin')==='1'){
 async function init(){
   document.getElementById('dateLivraison').value=new Date().toISOString().split('T')[0];
   await chargerEtablissements();
+  chargerAlertePayouts();
+}
+
+// Alerte passive payouts KO — visible dès l'ouverture du dashboard, peu importe
+// l'onglet actif. TODO (documenté, pas implémenté) : brancher une notification
+// WhatsApp active à Dokita en plus de cet affichage passif, cf. master spec.
+async function chargerAlertePayouts(){
+  var el=document.getElementById('alertePayoutsGlobale');
+  try{
+    var r=await fetchAdmin(ADMIN_URL+'?action=payouts_ko');
+    var data=await r.json();
+    var rows=Array.isArray(data)?data:(data.data||[]);
+    if(!rows.length){el.style.display='none';return;}
+    el.style.display='block';
+    el.innerHTML='🚨 '+rows.length+' paiement(s) pharmacie non aboutis — '+
+      rows.map(function(row){
+        return escHtml(row.pharmacie_nom||'Pharmacie inconnue')+' ('+(row.total_fcfa||'?')+' FCFA, AO '+(row.id||'').slice(0,8)+')';
+      }).join(', ')+
+      '. Vérifier le mobile money de la pharmacie concernée (onglet 🏪 Pharmacies) puis relancer le payout si besoin.';
+  }catch(ex){
+    // Echec silencieux volontaire — ne pas bloquer le chargement du dashboard
+    // si cette route a un problème ; l'alerte est un confort, pas une dépendance critique.
+    el.style.display='none';
+  }
 }
 
 async function chargerPharmacies(){
