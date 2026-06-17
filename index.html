@@ -6948,7 +6948,7 @@ async function envoyerAux(s,meds,lat,lon,rayon,cacheIdx){
       });
     }
     try{
-      await fetchAPI(API_URL+'/patient?action=ordonnance&id='+AO_SESSION_ID,{
+      await fetchAPI(API_URL+'/patient?action=ordonnance&consultation_id='+AO_SESSION_ID,{
         method:'PATCH',
         body:JSON.stringify({ao_soumis:true})
       });
@@ -7107,7 +7107,7 @@ async function aoTermine(){
     // Marquer ao_soumis dans Supabase
     if(AO_SESSION_ID){
       try{
-        await fetchAPI(API_URL+'/patient?action=ordonnance&id='+AO_SESSION_ID+forSel(),{method:'PATCH',body:JSON.stringify({ao_soumis:true})});
+        await fetchAPI(API_URL+'/patient?action=ordonnance&consultation_id='+AO_SESSION_ID+forSel(),{method:'PATCH',body:JSON.stringify({ao_soumis:true})});
       }catch(e){dbg('ao_soumis patch err: '+e.message);}
     }
     toast('✅ '+envoyes.length+' pharmacie(s) contactée(s) — 15 min pour répondre');
