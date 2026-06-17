@@ -89,5 +89,22 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  // GET payouts_ko — AO livrés dont le payout pharmacie n'a pas réussi
+  // Cas couverts : payout_statut='echec' (Flutterwave a refusé le transfert),
+  // ou statut='livre' alors que payout_statut est resté à 'en_attente' (le payout
+  // n'a jamais été déclenché — typiquement mobile_money manquant côté pharmacie,
+  // cf. warning "Payout pharmacie non déclenché" dans les logs api/pharmacie).
+  if (req.method === 'GET' && action === 'payouts_ko') {
+    const { data, error } = await supabase
+      .from('appels_offres')
+      .select('id, pharmacie_id, pharmacie_nom, total_fcfa, statut, payout_statut, livraison_at, updated_at')
+      .eq('statut', 'livre')
+      .or('payout_statut.eq.echec,payout_statut.eq.en_attente,payout_statut.is.null')
+      .order('updated_at', { ascending: false })
+      .limit(200);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data || []);
+  }
+
   return res.status(404).json({ error: 'Route introuvable' });
 }
