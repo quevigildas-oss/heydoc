@@ -1,6 +1,23 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.9
+// VERSION : V2.13
+// FIX     : PATCH action=ordonnance — accepte désormais &consultation_id= en plus de &id=.
+//   Le front envoyait AO_SESSION_ID (un consultation_id) sous le paramètre id, qui ne
+//   correspond à aucune PK ordonnances → 403/400 systématique, silencieux (ao_soumis
+//   jamais marqué). Confirmé par audit + test réel le 2026-06-17.
+// DATE    : 2026-06-17
+// FIX SECURITE : action=signed_url et action=analyser_resultats — &for=PAT-XX vérifié via
+//   estMembreFamille(), même correctif que V2.11 (dossier/appels_offres/examens/ordonnances).
+// FIX SECURITE : action=dossier/appels_offres/examens/ordonnances — &for=PAT-XX vérifié via
+//   estMembreFamille() (compte_parent_id ou email partagé), même pattern que action=consultations.
+//   _lib/supabase.js = service_role (RLS inopérant) → for= était une faille IDOR (CWE-639 / OWASP API1)
+//   permettant à tout patient connecté de lire les données de n'importe quel patient_id via &for=.
+// FIX     : GET action=profil — honore &for=PAT-XX (membre famille, vérif compte_parent_id) — corrige
+//           rafraichirProfilSupabase() qui écrasait le profil du membre famille avec celui du compte principal
+// FIX     : GET action=ao&id= — autorise membres famille (compte_parent_id), comme PATCH action=ao — corrige
+//           choisirOffre() qui ne pouvait pas récupérer consultation_id pour annuler les autres AO (profil famille)
+// DATE    : 2026-06-15
+//   V2.10 (2026-06-15) : cf. FIX ci-dessus (bugs profils famille — sélection pharmacie + contexte clinique IA)
 // FIX     : PATCH ao/ordonnance/consultation — autoriser membres famille (compte_parent_id)
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
@@ -43,6 +60,24 @@
 const supabase = require('./_lib/supabase');
 const authMiddleware = require('./_middleware/auth');
 const { rbacPatient } = require('./_middleware/rbac');
+
+// Vérifie que `forId` (patient_id PAT-XX-...) est un membre famille du compte authentifié
+// (compte_parent_id === patientUuid OU email partagé) — même logique que action=consultations
+// _lib/supabase.js utilise SERVICE_ROLE_KEY (RLS inopérant) : cette vérification applicative
+// est l'UNIQUE protection contre l'accès cross-patient via ?for=
+async function estMembreFamille(forId, patientUuid) {
+  const { data: famCheck } = await supabase
+    .from('patients').select('id, patient_id, compte_parent_id, email')
+    .eq('patient_id', forId).limit(1);
+  const member = famCheck && famCheck[0];
+  if (!member) return false;
+  if (member.compte_parent_id === patientUuid) return true;
+  if (member.email) {
+    const { data: self } = await supabase.from('patients').select('email').eq('id', patientUuid).single();
+    if (self && self.email && member.email === self.email) return true;
+  }
+  return false;
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -114,8 +149,18 @@ module.exports = async function handler(req, res) {
 
     // ── GET ──────────────────────────────────────────────────────────────────
 
-    // GET /api/patient?action=profil
+    // GET /api/patient?action=profil[&for=PAT-XX] (membre famille)
     if (req.method === 'GET' && action === 'profil') {
+      const forId = req.query.for;
+      if (forId && forId !== patientId) {
+        // Profil d'un membre famille — vérifier le lien compte_parent_id
+        const { data: fam, error: famErr } = await supabase
+          .from('patients').select('*')
+          .eq('patient_id', forId).eq('compte_parent_id', patientUuid).limit(1);
+        if (famErr) return res.status(500).json({ error: famErr.message });
+        if (!fam || !fam.length) return res.status(403).json({ error: 'Non autorisé' });
+        return res.status(200).json(fam[0]);
+      }
       const { data, error } = await supabase
         .from('patients').select('*').eq('id', patientUuid).single();
       if (error) return res.status(500).json({ error: error.message });
@@ -212,8 +257,11 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=examens[&consultation_id=xxx][&statut=xxx]
+    // GET /api/patient?action=examens[&consultation_id=xxx][&statut=xxx][&for=PAT-XX]
     if (req.method === 'GET' && action === 'examens') {
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
       const examTarget = req.query.for || patientId;
       let query = supabase.from('examens').select('*').eq('patient_id', examTarget);
       if (req.query.consultation_id) query = query.eq('consultation_id', req.query.consultation_id);
@@ -235,8 +283,11 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=ordonnances
+    // GET /api/patient?action=ordonnances[&for=PAT-XX]
     if (req.method === 'GET' && action === 'ordonnances') {
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
       const ordTarget = req.query.for || patientId;
       let query = supabase.from('ordonnances').select('*').eq('patient_id', ordTarget);
       if (req.query.statut) query = query.eq('statut', req.query.statut);
@@ -258,8 +309,11 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=dossier
+    // GET /api/patient?action=dossier[&for=PAT-XX]
     if (req.method === 'GET' && action === 'dossier') {
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
       const { data, error } = await supabase
         .from('dossier_medical')
         .select('id,patient_id,nom,type_document,mime_type,taille_octets,source,statut,valeur,note,created_at,visible_medecin,resultat_ia,extraction_json')
@@ -271,8 +325,11 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=appels_offres[&consultation_id=xxx]
+    // GET /api/patient?action=appels_offres[&consultation_id=xxx][&for=PAT-XX]
     if (req.method === 'GET' && action === 'appels_offres') {
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
       const aoTarget = req.query.for || patientId;
       let query = supabase.from('appels_offres').select('*').eq('patient_id', aoTarget);
       if (req.query.consultation_id) query = query.eq('consultation_id', req.query.consultation_id);
@@ -282,14 +339,21 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=ao&id=xxx  (AO unique par id)
+    // GET /api/patient?action=ao&id=xxx  (AO unique par id — patient lui-même OU membre famille)
     if (req.method === 'GET' && action === 'ao') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
       const { data, error } = await supabase
         .from('appels_offres').select('*')
-        .eq('id', id).eq('patient_id', patientId).single();
+        .eq('id', id).single();
       if (error) return res.status(500).json({ error: error.message });
+      // Vérifier appartenance — AO du patient lui-même OU d'un membre lié par compte_parent_id
+      if (data.patient_id !== patientId) {
+        const { data: famCheck } = await supabase.from('patients')
+          .select('id').eq('patient_id', data.patient_id)
+          .eq('compte_parent_id', patientUuid).limit(1);
+        if (!famCheck || !famCheck.length) return res.status(403).json({ error: 'Non autorisé' });
+      }
       return res.status(200).json(data);
     }
 
@@ -365,7 +429,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // PATCH /api/patient?action=ordonnance&id=xxx
+    // PATCH /api/patient?action=ordonnance&id=xxx  (ou &consultation_id=xxx)
     if (req.method === 'PATCH' && action === 'ordonnance') {
       const id = req.query.id;
       const consultationId = req.query.consultation_id;
@@ -532,6 +596,9 @@ module.exports = async function handler(req, res) {
       if (!contenu_base64 || !mime_type || !examens || !examens.length) {
         return res.status(400).json({ error: 'contenu_base64, mime_type et examens requis' });
       }
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
 
       const targetPatientId = req.query.for || patientId;
       const { data: consult } = await supabase.from('consultations').select('id')
@@ -680,6 +747,9 @@ RÈGLES ABSOLUES :
     if (req.method === 'GET' && action === 'signed_url') {
       const filePath = req.query.path;
       if (!filePath) return res.status(400).json({ error: 'path requis' });
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid))) {
+        return res.status(403).json({ error: 'Accès non autorisé' });
+      }
 
       // Vérifier que le fichier appartient au patient (path commence par patient_id)
       const targetPatientId2 = req.query.for || patientId;
