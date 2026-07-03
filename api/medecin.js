@@ -1,5 +1,16 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
+// VERSION : V2.2 (2026-07-03)
+// FIX     : colonne inexistante `naiss` dans les SELECT de action=patient et
+//           action=patient_by_pid (la colonne réelle est `date_naissance`) —
+//           PostgREST renvoyait une erreur => 500 systématique et silencieux :
+//           - bouton appel/visio : "Numéro patient non disponible" (fallback tel KO)
+//           - chargerDossierPatient() : PATIENT_DOSSIER toujours null (allergies/
+//             antécédents/traitements jamais chargés depuis la fiche patient)
+//           + SELECT patient_by_pid complété (nom_complet, email, traitements_reguliers,
+//             date_naissance) : champs déjà mappés par le front, absents du SELECT
+//           + SÉCURITÉ : ajout checkPatientLink() sur patient_by_pid (était la seule
+//             route patient sans contrôle d'association médecin-patient — IDOR)
 // VERSION : V2.1 (2026-06-13) : action signed_url pour justificatifs labo
 // FIX     : catalogue select — suppression colonnes inexistantes (description, obligatoire_defaut)
 // DATE    : 2026-05-12
@@ -168,7 +179,7 @@ module.exports = async function handler(req, res) {
       if (!await checkPatientLink(patientId))
         return res.status(403).json({ error: 'Patient non associé à ce médecin' });
       const { data, error } = await supabase.from('patients')
-        .select('id,prenom,nom,naiss,sexe,poids,taille,groupe_sanguin,allergies,antecedents,ville,telephone,langue_preferee,patient_id')
+        .select('id,prenom,nom,date_naissance,sexe,poids,taille,groupe_sanguin,allergies,antecedents,ville,telephone,langue_preferee,patient_id')
         .eq('id', patientId).single();
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json(data);
@@ -178,8 +189,13 @@ module.exports = async function handler(req, res) {
     if (req.method === 'GET' && action === 'patient_by_pid') {
       const pid = req.query.patient_id;
       if (!pid) return res.status(400).json({ error: 'patient_id requis' });
+      // RBAC (V2.2) : même contrôle que les routes soeurs (dossier, patient, examens) —
+      // consultations.patient_id est le PID texte (cf. save.js), sémantique identique
+      // à action=dossier dont le 403 est déjà géré proprement côté front.
+      if (!await checkPatientLink(pid))
+        return res.status(403).json({ error: 'Patient non associé à ce médecin' });
       const { data, error } = await supabase.from('patients')
-        .select('id,prenom,nom,naiss,sexe,poids,taille,groupe_sanguin,allergies,antecedents,ville,telephone,langue_preferee,patient_id')
+        .select('id,prenom,nom,nom_complet,date_naissance,sexe,poids,taille,groupe_sanguin,allergies,antecedents,traitements_reguliers,ville,telephone,email,langue_preferee,patient_id')
         .eq('patient_id', pid).limit(1);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json(data);
