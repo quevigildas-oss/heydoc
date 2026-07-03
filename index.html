@@ -1,11 +1,21 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.80
-     DATE    : 2026-06-15
+     VERSION : V4.81
+     DATE    : 2026-07-03
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
+       V4.81 — 2026-07-03 : DÉSACTIVATION (réversible) gate paiement médicaments dans
+              choisirOffre() — test modèle "paiement au comptoir" : le patient accepte
+              l'offre et reçoit son code de retrait SANS paiement en ligne ; il paie la
+              pharmacie au retrait. Commission Dokita facturée à la pharmacie en fin de
+              mois (registre = AO statut='livre'). Le code du gate est conservé en
+              commentaire, réactivable tel quel. verifierPaiementRetour() intact (branche
+              pendingAo inerte tant que le gate est off). Regroupe aussi les fixes
+              session 15 livrés sans numéro de version (gate paiement choisirOffre,
+              fix verifierPaiementRetour/pendingAo, o.prixMeds, pharmacie_id dans
+              envoyerAux, chargerEtablissements→pharmacies, ao_soumis consultation_id).
        V4.80 — 2026-06-15 : FIX speakMsg() — le bouton 🔊/⏹ ne relançait pas la lecture mais
               n'arrêtait jamais réellement (cancel()+speak() systématique). Clic sur ⏹ = stop
               réel désormais (cancel() + reset icône, sans relancer). Reset des autres boutons
@@ -6679,11 +6689,15 @@ function renderCarteCode(code,pharmNom,meds,num){
 }
 
 async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
-  // ── GATE PAIEMENT MÉDICAMENTS ──
-  // Le patient paie en ligne (Flutterwave) AVANT d'accepter l'offre.
-  // Si le paiement a déjà été validé pour cet AO (retour Flutterwave), on saute le gate.
   var montant=parseFloat(totalFcfa)||0;
   var paiementOkKey='dk_paiement_ao_'+supabaseId;
+
+  /* ── GATE PAIEMENT MÉDICAMENTS (désactivé V4.81 — test modèle "paiement au comptoir") ──
+     Modèle testé : le patient NE paie PAS en ligne. Il accepte l'offre, reçoit son code
+     de retrait, et paie directement la pharmacie au retrait. Dokita facture sa commission
+     à la pharmacie en fin de mois (registre = AO statut='livre', dashboard admin).
+     Pour RÉACTIVER le paiement escrow Flutterwave : décommenter ce bloc tel quel —
+     la branche pendingAo de verifierPaiementRetour() est intacte et redeviendra active.
   var paiementDejaOk=sessionStorage.getItem(paiementOkKey)==='1';
 
   if(!paiementDejaOk){
@@ -6723,6 +6737,7 @@ async function choisirOffre(supabaseId,pharmNom,pharmTel,totalFcfa){
     }
     return; // on s'arrête ici — la suite se joue au retour via verifierPaiementRetour()
   }
+  ── FIN GATE PAIEMENT MÉDICAMENTS ── */
 
   toast('⏳ Confirmation en cours...');
   try{
