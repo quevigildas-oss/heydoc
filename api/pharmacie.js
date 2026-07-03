@@ -1,6 +1,11 @@
 // api/pharmacie.js
 // Endpoints pharmacie — authentification par token AO (ao_id dans l'URL)
-// VERSION : V1.4
+// VERSION : V1.5
+// FIX     : désactivation (réversible) du payout pharmacie automatique sur statut=livre.
+//           Modèle "paiement au comptoir" en test : patient paie la pharmacie au retrait,
+//           commission Dokita facturée en fin de mois. Code payout V1.4 conservé en commentaire.
+// DATE    : 2026-07-03
+// ── V1.4 (2026-06-17) ──
 // FIX     : déclenchement payout_pharmacie — utilise appel_offre_id (= appels_offres.id, PK uuid)
 //           au lieu de ao_id (token texte séparé, jamais utilisé pour les opérations CRUD).
 //           Cohérent avec le fix symétrique dans api/payment.js (action=payout_pharmacie).
@@ -97,7 +102,18 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      // Si statut=livre → déclencher payout pharmacie côté serveur
+      // Si statut=livre → payout pharmacie automatique DÉSACTIVÉ (V1.5)
+      // Modèle testé : le patient paie la pharmacie au comptoir ; Dokita ne transfère
+      // plus les fonds. La commission (5%) est facturée à la pharmacie en fin de mois.
+      // Registre de facturation = AO statut='livre' avec payout_statut en_attente/null
+      // (c'est exactement ce que liste déjà l'écran admin "payouts_ko" — réutilisé tel quel).
+      // Pour RÉACTIVER l'escrow : décommenter ce bloc tel quel (fixes V1.4 inclus).
+      // NB technique : le payout Flutterwave Transfers échouait de toute façon —
+      // hypothèse documentée : IP sortante statique requise, non disponible sur Vercel Hobby.
+      if (safe.statut === 'livre') {
+        console.log('Payout auto désactivé (V1.5) — AO', id, 'à facturer en fin de mois (modèle comptoir)');
+      }
+      /* ── PAYOUT PHARMACIE AUTOMATIQUE (désactivé V1.5, code V1.4 conservé) ──
       if (safe.statut === 'livre') {
         try {
           // Recharger l'AO complet pour avoir les infos payout
@@ -146,6 +162,7 @@ module.exports = async function handler(req, res) {
           // Ne pas bloquer la réponse — le PATCH est fait, le payout sera retenté manuellement
         }
       }
+      ── FIN PAYOUT PHARMACIE AUTOMATIQUE ── */
 
       return res.status(200).json({ ok: true });
     }
