@@ -1,5 +1,7 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
+// VERSION : V2.4 (2026-07-04) : filtre additif ?medecin_id= sur GET rdv (agenda
+//           médecin basculé sur medecin_id — refonte §6E, front V4.32)
 // VERSION : V2.3 (2026-07-03)
 // RÉVISION 04/07 (avant 1er déploiement V2.3) : whitelists alignées au schéma réel
 //           vérifié par information_schema — retrait des colonnes fantômes
@@ -234,9 +236,11 @@ module.exports = async function handler(req, res) {
     // GET /api/medecin?action=rdv
     if (req.method === 'GET' && action === 'rdv') {
       const etabId = req.query.etablissement_id;
+      const medIdRdv = req.query.medecin_id; // V2.4 — agenda par médecin (refonte §6E)
       const statut = req.query.statut;
       let query = supabase.from('rendez_vous').select('*');
       if (etabId) query = query.eq('etablissement_id', etabId);
+      if (medIdRdv) query = query.eq('medecin_id', medIdRdv);
       if (statut) query = query.eq('statut', statut);
       const { data, error } = await query
         .order('created_at', { ascending: false }).limit(100);
