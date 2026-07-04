@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.81
+     VERSION : V4.82
      DATE    : 2026-07-03
+     CHANGELOG V4.82 : Rappel in-app RDV téléconsultation (Lot 3) — toast à
+              T-10 min avant tout RDV 'confirme' (cache 5 min, check 60 s,
+              dédoublonnage localStorage). Aucun autre changement. Le RDV créé
+              par le médecin (medecin.js V2.3) apparaît automatiquement dans la
+              rubrique Rendez-vous existante (ligne rendez_vous standard).
      STACK   : Claude RAG (/api/rag) + Supabase + Anthropic API
      STATUS  : Migration Notion → Supabase complète
      CHANGELOG:
@@ -1495,6 +1500,49 @@ var GEO_DATA={clinique:[],labo:[],pharmacie:[]};
 // Restaurer session si email en localStorage
 try{var _sess=localStorage.getItem('dk_session');if(_sess){var _s=JSON.parse(_sess);SESSION_EMAIL=_s.email||'';SESSION_PATIENT_ID=_s.patientId||'';}}catch(e){}
 // Auto-login si session trouvée
+/* ── RAPPEL RDV TÉLÉCONSULTATION IN-APP (V4.82, Lot 3) ──────────────────────
+   T-10 min avant un RDV confirmé : toast "le médecin va vous envoyer le lien".
+   Limite assumée (PWA sans infra push) : ne se déclenche que si l'appli est
+   ouverte. La garantie principale reste le WhatsApp envoyé à la réservation.
+   Dédoublonnage par localStorage (1 rappel par RDV). Cache API rafraîchi
+   toutes les 5 min ; vérification locale toutes les 60 s. */
+var RDV_RAPPEL_CACHE=[];
+var RDV_RAPPEL_FETCH_TS=0;
+async function rafraichirCacheRdvRappel(){
+  try{
+    if(typeof fetchAPI!=='function'||!PROFILS||!PROFILS[SEL])return;
+    var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=confirme'+forSel());
+    if(!r||!r.ok)return;
+    var d=await r.json();
+    RDV_RAPPEL_CACHE=Array.isArray(d)?d:(d.data||[]);
+    RDV_RAPPEL_FETCH_TS=Date.now();
+  }catch(e){}
+}
+function verifierRappelsRDV(){
+  try{
+    var now=Date.now();
+    if(now-RDV_RAPPEL_FETCH_TS>5*60*1000)rafraichirCacheRdvRappel();
+    (RDV_RAPPEL_CACHE||[]).forEach(function(rdv){
+      if(!rdv||!rdv.id||!rdv.date_confirmee)return;
+      var heure=(rdv.heure_confirmee||rdv.heure_souhaitee||'').slice(0,5);
+      if(!heure)return;
+      var t=new Date(rdv.date_confirmee+'T'+heure+':00');
+      if(isNaN(t.getTime()))return;
+      var diff=t.getTime()-now;
+      if(diff>0&&diff<=10*60*1000){
+        var key='dk_rdv_rappel_'+rdv.id;
+        if(localStorage.getItem(key))return;
+        localStorage.setItem(key,'1');
+        toast('⏰ Téléconsultation dans '+Math.max(1,Math.round(diff/60000))+' min — votre médecin va vous envoyer le lien de connexion par WhatsApp');
+      }
+    });
+  }catch(e){}
+}
+window.addEventListener('DOMContentLoaded',function(){
+  setTimeout(rafraichirCacheRdvRappel,4000);
+  setInterval(verifierRappelsRDV,60*1000);
+});
+
 window.addEventListener('DOMContentLoaded',function(){
   verifierPaiementRetour();
   // Polling badge Offres Dokita toutes les 30s
