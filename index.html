@@ -1,8 +1,14 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.82
-     DATE    : 2026-07-03
+     VERSION : V4.83
+     DATE    : 2026-07-04
+     CHANGELOG V4.83 : (1) Demande/confirmation/annulation de RDV côté patient
+              DÉSACTIVÉES (gardes + bouton commenté, réversibles) — créneaux
+              proposés par le médecin (Lot 3) ; le bug de libération de créneau
+              devient sans objet. (2) État AO 📬 "Offres reçues — voir" distinct
+              et cliquable (ouvrirOffres) — complète les 4 états de la spec
+              session 14 (le 1-clic Twilio existait déjà).
      CHANGELOG V4.82 : Rappel in-app RDV téléconsultation (Lot 3) — toast à
               T-10 min avant tout RDV 'confirme' (cache 5 min, check 60 s,
               dédoublonnage localStorage). Aucun autre changement. Le RDV créé
@@ -5633,7 +5639,12 @@ async function ouvrirRDV(){
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
 
+    /* V4.83 — Demande de RDV patient DÉSACTIVÉE (décision GQ session 17) :
+       les créneaux sont désormais proposés directement par le médecin depuis le
+       dossier (Lot 3). Rien n'est supprimé — décommenter pour réactiver.
     var addBtn='<button onclick="ouvrirNouveauRDV()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(217,48,37,.8),rgba(239,68,68,.7));border:none;border-radius:14px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:16px;">📅 Prendre un rendez-vous</button>';
+    */
+    var addBtn='<div style="width:100%;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:12px;color:var(--text2);text-align:center;margin-bottom:16px;">📅 Vos rendez-vous de téléconsultation sont fixés par votre médecin — vous serez notifié.</div>';
 
     if(!rows.length){
       el.innerHTML=addBtn+
@@ -5902,6 +5913,8 @@ async function selectionnerEtablissement(etabId, etabNom, etabWa, etabEmail){
 }
 
 async function soumettreDemRDV(btn){
+  // V4.83 — flux de demande désactivé (créneaux proposés par le médecin). Retirer ce garde pour réactiver.
+  toast('📅 Les rendez-vous sont fixés directement par votre médecin');return;
   var motifEl=document.getElementById('rdvMotifSelect');
   var typeVal=motifEl?motifEl.value:'consultation';
   var typeLabel=motifEl?motifEl.options[motifEl.selectedIndex].text:'Consultation';
@@ -5941,6 +5954,8 @@ async function soumettreDemRDV(btn){
 }
 
 async function confirmerCreneau(rdvId, date, heure){
+  // V4.83 — confirmation désactivée (réservation d'office par le médecin). Retirer ce garde pour réactiver.
+  toast('📅 Les rendez-vous sont fixés directement par votre médecin');return;
   try{
     await fetchAPI(API_URL+'/patient?action=rdv&id='+encodeURIComponent(rdvId),{method:'PATCH',body:JSON.stringify({statut:'confirme',date_confirmee:date,heure_confirmee:heure,creneaux_proposes:[]})});
     toast('✅ RDV confirmé — '+new Date(date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'})+' à '+heure);
@@ -5957,6 +5972,9 @@ async function confirmerRDV(rdvId){
 }
 
 async function annulerRDV(rdvId){
+  // V4.83 — annulation patient désactivée (la libération de créneau associée était de toute
+  // façon cassée — PATCH sans id + champ hors whitelist ; documenté au spec). Contacter le médecin.
+  toast('📅 Pour modifier ce rendez-vous, contactez votre médecin');return;
   try{
     // Récupérer le slot pour le libérer
     var r=await fetchAPI(API_URL+'/patient?action=rdv&id='+encodeURIComponent(rdvId));
@@ -7597,7 +7615,10 @@ async function voirOrdonnanceHisto(i){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(0,200,150,.08);border:1px solid rgba(0,200,150,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent);">✅ Retrait effectué</div>';
   } else if(aoStatut==='accepte'||aoStatut==='en_livraison'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.3);border-radius:12px;text-align:center;font-size:11px;color:var(--accent2);">🏪 En cours de retrait</div>';
-  } else if(aoStatut==='offres_recues'||aoStatut==='en_attente'){
+  } else if(aoStatut==='offres_recues'){
+    // V4.83 — état 📬 distinct et cliquable (spec session 14, dernier état manquant)
+    btnMoinsCher='<button onclick="ouvrirOffres()" style="flex:1;padding:14px;background:rgba(14,165,233,.1);border:1px solid rgba(14,165,233,.4);border-radius:12px;font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:var(--accent2);cursor:pointer;">📬 Offres reçues — voir</button>';
+  } else if(aoStatut==='en_attente'||aoStatut==='soumis'){
     btnMoinsCher='<div style="flex:1;padding:14px;background:var(--card);border:1px solid rgba(245,158,11,.3);border-radius:12px;text-align:center;font-size:11px;font-weight:700;color:#F59E0B;">⏳ En attente des offres</div>';
   } else if(aoStatut==='annule'){
     // Si ao_soumis=true → une pharmacie avait accepté, ne pas relancer
