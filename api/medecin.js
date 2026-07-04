@@ -1,6 +1,10 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
 // VERSION : V2.3 (2026-07-03)
+// RÉVISION 04/07 (avant 1er déploiement V2.3) : whitelists alignées au schéma réel
+//           vérifié par information_schema — retrait des colonnes fantômes
+//           notes/motif_refus (rdv) et heure_fin/notes (disponibilites) qui auraient
+//           fait échouer tout UPDATE/INSERT les incluant (pattern `naiss`).
 // AJOUT   : RDV téléconsultation planifié par le médecin (Lot 3) :
 //           - GET  disponibilites : filtre additif ?medecin_id= (créneaux du médecin,
 //             indépendants d'etablissements — refonte §6E amorcée)
@@ -337,7 +341,8 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'disponibilite') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const allowed = ['statut','heure_debut','heure_fin','duree_minutes','notes'];
+      // Schéma vérifié 04/07 : pas de heure_fin ni notes dans disponibilites
+      const allowed = ['statut','heure_debut','duree_minutes'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
       const { error } = await supabase.from('disponibilites').update(safe).eq('id', id);
@@ -349,7 +354,9 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'rdv') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const allowed = ['statut','creneaux_proposes','date_confirmee','heure_confirmee','notes','motif_refus'];
+      // Whitelist alignée au schéma vérifié le 04/07 (information_schema) :
+      // 'notes' et 'motif_refus' n'existent pas — vraies colonnes : note_praticien/note_patient
+      const allowed = ['statut','creneaux_proposes','date_confirmee','heure_confirmee','note_praticien'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
       const { error } = await supabase.from('rendez_vous').update(safe).eq('id', id);
@@ -364,7 +371,7 @@ module.exports = async function handler(req, res) {
     // le patient peut annuler via le flux existant côté app patient.
     if (req.method === 'POST' && action === 'rdv') {
       const allowed = ['patient_id','patient_nom','disponibilite_id','date_confirmee',
-                       'heure_confirmee','type_rdv','motif','etablissement_nom','notes'];
+                       'heure_confirmee','type_rdv','motif','etablissement_nom','note_praticien'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
       if (!safe.patient_id) return res.status(400).json({ error: 'patient_id requis' });
