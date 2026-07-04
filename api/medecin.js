@@ -1,5 +1,14 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
+// VERSION : V2.3 (2026-07-03)
+// AJOUT   : RDV téléconsultation planifié par le médecin (Lot 3) :
+//           - GET  disponibilites : filtre additif ?medecin_id= (créneaux du médecin,
+//             indépendants d'etablissements — refonte §6E amorcée)
+//           - POST rdv : le médecin crée un RDV confirmé (whitelist, medecin_id forcé
+//             depuis le JWT, RBAC checkPatientLink) — nécessite migration
+//             migration_rdv_teleconsultation.sql (heure_confirmee, medecin_id)
+//           - PATCH rdv : heure_confirmee ajoutée à la whitelist (était rejetée
+//             silencieusement alors que le front patient la lit)
 // VERSION : V2.2 (2026-07-03)
 // FIX     : colonne inexistante `naiss` dans les SELECT de action=patient et
 //           action=patient_by_pid (la colonne réelle est `date_naissance`) —
@@ -204,8 +213,10 @@ module.exports = async function handler(req, res) {
     // GET /api/medecin?action=disponibilites
     if (req.method === 'GET' && action === 'disponibilites') {
       const etabId = req.query.etablissement_id;
+      const medId = req.query.medecin_id; // V2.3 — créneaux téléconsultation par médecin
       let query = supabase.from('disponibilites').select('*');
       if (etabId) query = query.eq('etablissement_id', etabId);
+      if (medId) query = query.eq('medecin_id', medId);
       const aujourd = new Date().toISOString().slice(0, 10);
       const { data, error } = await query
         .gte('date_specifique', aujourd)
@@ -338,7 +349,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH' && action === 'rdv') {
       const id = req.query.id;
       if (!id) return res.status(400).json({ error: 'id requis' });
-      const allowed = ['statut','creneaux_proposes','date_confirmee','notes','motif_refus'];
+      const allowed = ['statut','creneaux_proposes','date_confirmee','heure_confirmee','notes','motif_refus'];
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
       const { error } = await supabase.from('rendez_vous').update(safe).eq('id', id);
@@ -347,6 +358,27 @@ module.exports = async function handler(req, res) {
     }
 
     // ── POST ─────────────────────────────────────────────────────────────────
+
+    // POST /api/medecin?action=rdv  (V2.3 — téléconsultation planifiée par le médecin)
+    // Réservation d'office (décision GQ session 16) : statut 'confirme' direct,
+    // le patient peut annuler via le flux existant côté app patient.
+    if (req.method === 'POST' && action === 'rdv') {
+      const allowed = ['patient_id','patient_nom','disponibilite_id','date_confirmee',
+                       'heure_confirmee','type_rdv','motif','etablissement_nom','notes'];
+      const safe = {};
+      allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
+      if (!safe.patient_id) return res.status(400).json({ error: 'patient_id requis' });
+      if (!safe.date_confirmee || !safe.heure_confirmee)
+        return res.status(400).json({ error: 'date_confirmee et heure_confirmee requis' });
+      if (!await checkPatientLink(safe.patient_id))
+        return res.status(403).json({ error: 'Patient non associé à ce médecin' });
+      safe.statut = 'confirme';
+      safe.medecin_id = medecinId; // depuis le JWT — jamais depuis le body
+      const { data, error } = await supabase
+        .from('rendez_vous').insert(safe).select('id').single();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    }
 
     // POST /api/medecin?action=ordonnance
     if (req.method === 'POST' && action === 'ordonnance') {
