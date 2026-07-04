@@ -1,8 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA ADMIN — Interface saisie livraisons LABOREX
-     VERSION : V1.4
-     DATE    : 2026-05-21 — Migration JWT admin
+     VERSION : V1.5
+     DATE    : 2026-07-04 — Onglet 💰 Facturation partenaires (redevance forfaitaire
+               par acte : médecins 1000 FCFA HT/consultation + 1000/lecture examens,
+               pharmacies 5% des AO livrés, TVA 18% en sus). Bouton "Relancer" payout
+               retiré (route neutralisée côté admin.js V1.4 — modèle comptoir en test),
+               encart payouts relabellisé en registre de facturation.
      ACCÈS   : Protégé par mot de passe admin
 ============================================ -->
 <html lang="fr">
@@ -80,6 +84,7 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
       <div class="tab" id="tabReconciliation" onclick="switchTab('reconciliation')">📊 Réconciliation</div>
       <div class="tab" id="tabHistorique" onclick="switchTab('historique')">📋 Historique</div>
       <div class="tab" id="tabPharmacies" onclick="switchTab('pharmacies')">🏪 Pharmacies</div>
+      <div class="tab" id="tabFacturation" onclick="switchTab('facturation')">💰 Facturation</div>
     </div>
 
     <!-- LIVRAISON -->
@@ -169,6 +174,20 @@ body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-hei
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="tc" id="tcFacturation">
+      <div class="sec-title">Facturation partenaires — redevance forfaitaire par acte</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">
+        <input type="month" id="factMois" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px;color:var(--text);outline:none;">
+        <button onclick="chargerFacturation()" id="btnFactCharger" style="padding:9px 16px;background:var(--accent);border:none;border-radius:8px;font-size:13px;font-weight:700;color:#04211A;cursor:pointer;">Charger</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;line-height:1.5;">
+        Médecins : forfait par consultation aboutie + forfait par consultation avec lecture de résultats d'examens.
+        Pharmacies : 5% du montant des AO livrés. Montants <b>HT</b> — TVA 18% facturée en sus.
+        ⚠️ Tant que les paiements patients sont désactivés (phase pilote), ces montants sont indicatifs.
+      </div>
+      <div id="factContenu"><div style="color:var(--text3);font-size:13px;">Choisissez un mois puis cliquez Charger.</div></div>
     </div>
 
     <div class="tc" id="tcHistorique">
@@ -357,10 +376,12 @@ async function chargerAlertePayouts(){
       rows.map(function(row){
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(239,68,68,.15);">'+
           '<span>'+escHtml(row.pharmacie_nom||'Pharmacie inconnue')+' — '+(row.total_fcfa||'?')+' FCFA (AO '+(row.id||'').slice(0,8)+')</span>'+
-          '<button onclick="relancerPayout(\''+row.id+'\',this)" style="flex-shrink:0;padding:4px 10px;background:rgba(239,68,68,.15);border:1px solid var(--danger);border-radius:6px;font-size:11px;font-weight:700;color:var(--danger);cursor:pointer;">🔁 Relancer</button>'+
+          /* Bouton "Relancer" retiré V1.5 — la relance de virement est neutralisée
+             côté serveur (admin.js V1.4, modèle comptoir en test). Les AO listés ici
+             sont à facturer via l'onglet 💰 Facturation. */
         '</div>';
       }).join('')+
-      '<div style="margin-top:8px;font-size:11px;opacity:.8;">Vérifier le mobile money de la pharmacie concernée (onglet 🏪 Pharmacies) avant de relancer si le premier essai a échoué pour cette raison.</div>';
+      '<div style="margin-top:8px;font-size:11px;opacity:.8;">Modèle "paiement au comptoir" en test : aucun virement automatique. Ces AO livrés constituent l\'assiette de la commission — voir l\'onglet 💰 Facturation.</div>';
   }catch(ex){
     // Echec silencieux volontaire — ne pas bloquer le chargement du dashboard
     // si cette route a un problème ; l'alerte est un confort, pas une dépendance critique.
@@ -449,9 +470,109 @@ async function chargerEtablissements(){
   }catch(ex){toast('❌ Erreur pharmacies: '+ex.message);}
 }
 
+// ── FACTURATION PARTENAIRES (V1.5) ──
+var FACT_DATA=null;
+function initFacturation(){
+  var inp=document.getElementById('factMois');
+  if(inp&&!inp.value){
+    var d=new Date();
+    inp.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }
+}
+function fmtFCFA(n){return (Math.round(n)||0).toLocaleString('fr-FR')+' FCFA';}
+async function chargerFacturation(){
+  var mois=document.getElementById('factMois').value;
+  var out=document.getElementById('factContenu');
+  if(!mois){out.innerHTML='<div style="color:var(--danger);font-size:13px;">Choisissez un mois.</div>';return;}
+  var btn=document.getElementById('btnFactCharger');
+  btn.disabled=true;btn.textContent='⏳';
+  try{
+    var r=await fetchAdmin(ADMIN_URL+'?action=facturation&mois='+encodeURIComponent(mois));
+    var d=await r.json();
+    if(!r.ok){out.innerHTML='<div style="color:var(--danger);font-size:13px;">❌ '+(d.error||'Erreur')+'</div>';return;}
+    FACT_DATA=d;
+    var html='';
+    // ── Médecins ──
+    html+='<div class="sec-title" style="margin-top:4px;">👨‍⚕️ Médecins ('+d.medecins.length+')</div>';
+    if(!d.medecins.length){html+='<div style="color:var(--text3);font-size:12px;margin-bottom:16px;">Aucun acte médecin sur '+d.mois+'.</div>';}
+    else{
+      html+='<div style="overflow-x:auto;"><table class="tbl"><tr><th>Médecin</th><th>Consult.</th><th>Lect. exam.</th><th>HT</th><th>TVA</th><th>TTC</th><th></th></tr>';
+      d.medecins.forEach(function(m,i){
+        html+='<tr><td>'+m.nom+'</td><td>'+m.nb_consultations+'</td><td>'+m.nb_lectures_examens+'</td>'+
+          '<td>'+fmtFCFA(m.redevance_ht)+'</td><td>'+fmtFCFA(m.tva)+'</td><td><b>'+fmtFCFA(m.ttc)+'</b></td>'+
+          '<td><button onclick="imprimerFacture(\'medecin\','+i+')" style="padding:4px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text2);cursor:pointer;">🖨 Facture</button></td></tr>';
+      });
+      html+='</table></div>';
+    }
+    // ── Pharmacies ──
+    html+='<div class="sec-title" style="margin-top:18px;">🏪 Pharmacies ('+d.pharmacies.length+')</div>';
+    if(!d.pharmacies.length){html+='<div style="color:var(--text3);font-size:12px;">Aucun AO livré sur '+d.mois+'.</div>';}
+    else{
+      html+='<div style="overflow-x:auto;"><table class="tbl"><tr><th>Pharmacie</th><th>AO livrés</th><th>Total vendu</th><th>Comm. '+ (d.pharmacies[0].commission_pct||5) +'% HT</th><th>TVA</th><th>TTC</th><th></th></tr>';
+      d.pharmacies.forEach(function(p,i){
+        html+='<tr><td>'+p.pharmacie_nom+'</td><td>'+p.nb_ao+'</td><td>'+fmtFCFA(p.total_vendu_fcfa)+'</td>'+
+          '<td>'+fmtFCFA(p.redevance_ht)+'</td><td>'+fmtFCFA(p.tva)+'</td><td><b>'+fmtFCFA(p.ttc)+'</b></td>'+
+          '<td><button onclick="imprimerFacture(\'pharmacie\','+i+')" style="padding:4px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text2);cursor:pointer;">🖨 Facture</button></td></tr>';
+      });
+      html+='</table></div>';
+    }
+    out.innerHTML=html;
+  }catch(e){out.innerHTML='<div style="color:var(--danger);font-size:13px;">❌ '+e.message+'</div>';}
+  finally{btn.disabled=false;btn.textContent='Charger';}
+}
+function imprimerFacture(type,idx){
+  if(!FACT_DATA)return;
+  var x=(type==='medecin'?FACT_DATA.medecins:FACT_DATA.pharmacies)[idx];
+  if(!x)return;
+  var lignes='';
+  if(type==='medecin'){
+    lignes+='<tr><td>Téléconsultations abouties — redevance forfaitaire d\'utilisation de la plateforme</td>'+
+      '<td style="text-align:center;">'+x.nb_consultations+'</td><td style="text-align:right;">'+fmtFCFA(x.tarif_consultation_ht)+'</td>'+
+      '<td style="text-align:right;">'+fmtFCFA(x.nb_consultations*x.tarif_consultation_ht)+'</td></tr>';
+    if(x.nb_lectures_examens>0){
+      lignes+='<tr><td>Consultations avec lecture de résultats d\'examens — redevance forfaitaire</td>'+
+        '<td style="text-align:center;">'+x.nb_lectures_examens+'</td><td style="text-align:right;">'+fmtFCFA(x.tarif_lecture_ht)+'</td>'+
+        '<td style="text-align:right;">'+fmtFCFA(x.nb_lectures_examens*x.tarif_lecture_ht)+'</td></tr>';
+    }
+  }else{
+    lignes+='<tr><td>Commission sur médicaments délivrés via le réseau Dokita ('+x.nb_ao+' commandes, total vendu '+fmtFCFA(x.total_vendu_fcfa)+')</td>'+
+      '<td style="text-align:center;">'+x.commission_pct+'%</td><td style="text-align:right;">—</td>'+
+      '<td style="text-align:right;">'+fmtFCFA(x.redevance_ht)+'</td></tr>';
+  }
+  var detail='';
+  if(x.actes&&x.actes.length){
+    detail='<h3 style="font-size:12px;margin:18px 0 6px;">Annexe — détail des actes ('+x.actes.length+')</h3>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:10px;">'+
+      x.actes.map(function(a){
+        var ref=(type==='medecin'?a.consultation_id:a.id)||'';
+        var extra=(type==='medecin'?(a.lecture_examens?' · lecture examens':''):(' · '+fmtFCFA(a.montant)));
+        return '<tr><td style="border-bottom:1px solid #ddd;padding:3px 0;">'+String(a.date||'').slice(0,10)+'</td>'+
+          '<td style="border-bottom:1px solid #ddd;padding:3px 0;">'+ref+extra+'</td></tr>';
+      }).join('')+'</table>';
+  }
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Facture Dokita — '+(x.nom||x.pharmacie_nom)+'</title></head>'+
+    '<body style="font-family:Arial,sans-serif;color:#111;max-width:700px;margin:30px auto;padding:0 20px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+      '<div><h1 style="font-size:20px;margin:0;color:#00785A;">DOKITA</h1><div style="font-size:11px;color:#555;">Plateforme de télémédecine — dokitrust.com</div></div>'+
+      '<div style="text-align:right;font-size:11px;color:#555;">Facture — période '+FACT_DATA.mois+'<br>Émise le '+new Date().toLocaleDateString('fr-FR')+'</div>'+
+    '</div>'+
+    '<div style="margin:22px 0 6px;font-size:13px;"><b>Facturé à :</b> '+(x.nom||x.pharmacie_nom)+(x.email?(' — '+x.email):'')+'</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;">'+
+      '<tr style="background:#f2f2f2;"><th style="text-align:left;padding:7px;">Désignation</th><th style="padding:7px;">Qté</th><th style="padding:7px;">PU HT</th><th style="padding:7px;text-align:right;">Montant HT</th></tr>'+lignes+
+      '<tr><td colspan="3" style="text-align:right;padding:7px;">Total HT</td><td style="text-align:right;padding:7px;">'+fmtFCFA(x.redevance_ht)+'</td></tr>'+
+      '<tr><td colspan="3" style="text-align:right;padding:7px;">TVA '+FACT_DATA.tva_pct+'%</td><td style="text-align:right;padding:7px;">'+fmtFCFA(x.tva)+'</td></tr>'+
+      '<tr style="font-weight:bold;"><td colspan="3" style="text-align:right;padding:7px;">Total TTC</td><td style="text-align:right;padding:7px;">'+fmtFCFA(x.ttc)+'</td></tr>'+
+    '</table>'+
+    '<div style="font-size:10px;color:#555;margin-top:14px;">Redevance forfaitaire d\'utilisation de la plateforme Dokita (mise en relation, prise de rendez-vous, téléconsultation vidéo, dossier patient, ordonnance électronique, notifications). Payable sous 15 jours.</div>'+
+    detail+
+    '<script>window.print();</'+'script></body></html>');
+  w.document.close();
+}
+
 // ── ONGLETS ──
 function switchTab(t){
-  ['Livraison','Reconciliation','Historique','Pharmacies'].forEach(function(n){
+  ['Livraison','Reconciliation','Historique','Pharmacies','Facturation'].forEach(function(n){
     var low=n.toLowerCase();
     document.getElementById('tab'+n).classList.toggle('on',low===t);
     document.getElementById('tc'+n).classList.toggle('on',low===t);
@@ -459,6 +580,7 @@ function switchTab(t){
   if(t==='reconciliation')chargerReconciliation();
   if(t==='historique')chargerHistorique();
   if(t==='pharmacies')chargerPharmacies();
+  if(t==='facturation')initFacturation();
 }
 
 // ── MÉDICAMENTS ──
