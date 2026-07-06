@@ -1,8 +1,15 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.84
+     VERSION : V4.85
      DATE    : 2026-07-06
+     CHANGELOG V4.85 : FIX éjection pendant l'inscription (page profil) —
+              (1) gardes durcies du rappel RDV V4.82 : JWT + profil réel requis
+              (le minuteur appelait l'API sans session → 401 → "Session expirée"
+              → retour login toutes les ≤60 s) ; (2) auto-login après création du
+              compte principal (nécessite patient.js V2.14 : route inscription
+              publique) ; (3) le message d'erreur serveur (ex: 409 doublon email)
+              est affiché tel quel au lieu du générique.
      CHANGELOG V4.84 : FIX inscription bloquée ("Erreur: r.json is not a function") —
               deux lignes mortes dans creerCompte() référençant des stubs {ok:true}
               d'une migration inachevée (l'appel check_email/check_parrain était déjà
@@ -1525,7 +1532,10 @@ var RDV_RAPPEL_CACHE=[];
 var RDV_RAPPEL_FETCH_TS=0;
 async function rafraichirCacheRdvRappel(){
   try{
-    if(typeof fetchAPI!=='function'||!PROFILS||!PROFILS[SEL])return;
+    // V4.85 — garde durcie : JWT requis + profil RÉEL (creerCompte pose un stub
+    // sans patientId pendant l'inscription → un appel sans token = 401 = éjection)
+    if(typeof fetchAPI!=='function'||!chargerJWT())return;
+    if(!PROFILS||!PROFILS[SEL]||!PROFILS[SEL].patientId)return;
     var r=await fetchAPI(API_URL+'/patient?action=rdv&statut=confirme'+forSel());
     if(!r||!r.ok)return;
     var d=await r.json();
@@ -1535,6 +1545,7 @@ async function rafraichirCacheRdvRappel(){
 }
 function verifierRappelsRDV(){
   try{
+    if(!chargerJWT())return; // V4.85 — inerte tant qu'aucune session n'existe
     var now=Date.now();
     if(now-RDV_RAPPEL_FETCH_TS>5*60*1000)rafraichirCacheRdvRappel();
     (RDV_RAPPEL_CACHE||[]).forEach(function(rdv){
@@ -2154,17 +2165,26 @@ function saveProfil(){
         method:'POST',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
         body:JSON.stringify(body)
-      }).then(function(r){return r.json();}).then(function(data){
+      }).then(function(r){return r.json();}).then(async function(data){
         var row=Array.isArray(data)?data[0]:data;
         if(row&&row.id){
           PROFILS[0].supabaseId=row.id;
           SESSION_PATIENT_ID=p.patientId;
           try{localStorage.setItem('dk_session',JSON.stringify({email:SESSION_EMAIL,patientId:p.patientId}));}catch(e){}
           saveProfils();
+          // V4.85 — AUTO-LOGIN : sans JWT, le premier appel protégé renverrait 401
+          // → éjection. On obtient la session immédiatement (et le code est haché
+          // au passage — chemin A — fermant la fenêtre "en clair" de l'inscription).
+          try{
+            var rL=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'patient',email:SESSION_EMAIL,code:SESSION_CODE_TEMP})});
+            var dL=await rL.json();
+            if(rL.ok&&dL.token){sauvegarderJWT(dL.token);if(dL.patientId)SESSION_PATIENT_ID=SESSION_PATIENT_ID||dL.patientId;dbg('Auto-login OK après inscription');}
+            else{dbgWarn('Auto-login KO: '+(dL&&dL.error||rL.status));}
+          }catch(eL){dbgWarn('Auto-login err: '+eL.message);}
           toast('✅ Profil créé !');
           dbg('Fiche profil créée: '+row.id);
         } else {
-          toast('⚠️ Erreur création profil');
+          toast('⚠️ '+((data&&data.error)?data.error:'Erreur création profil'));
           dbg('saveProfil INSERT err: '+JSON.stringify(data).slice(0,100));
         }
         SESSION_CODE_TEMP='';
