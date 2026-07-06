@@ -1,8 +1,15 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.83
-     DATE    : 2026-07-04
+     VERSION : V4.84
+     DATE    : 2026-07-06
+     CHANGELOG V4.84 : FIX inscription bloquée ("Erreur: r.json is not a function") —
+              deux lignes mortes dans creerCompte() référençant des stubs {ok:true}
+              d'une migration inachevée (l'appel check_email/check_parrain était déjà
+              câblé correctement). L'inscription était bloquée côté CLIENT quel que
+              soit l'état du serveur — probablement depuis l'introduction du stub.
+              NB : les catch internes restent fail-open (endpoint injoignable = email
+              considéré libre) — assumé, documenté au spec §15.
      CHANGELOG V4.83 : (1) Demande/confirmation/annulation de RDV côté patient
               DÉSACTIVÉES (gardes + bouton commenté, réversibles) — créneaux
               proposés par le médecin (Lot 3) ; le bug de libération de créneau
@@ -1376,17 +1383,19 @@ async function creerCompte(){
   if(code!==code2){err.textContent='Les codes ne correspondent pas';err.classList.add('on');return;}
   err.textContent='Vérification en cours...';err.classList.add('on');
   try{
-    var r={ok:true};var rData=[];try{var rChk=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_email',email:email})});rData=(await rChk.json()).exists?[{}]:[];}catch(e){}
-    var check=await r.json();
-    var existing=Array.isArray(check)?check:(check.data||[]);
+    // V4.84 — fix inscription : lignes mortes supprimées ("r.json is not a function").
+    // L'ancien code référençait un stub {ok:true} resté d'une migration inachevée ;
+    // l'appel check_email (rChk) était déjà correct, seule la ligne morte bloquait tout.
+    var rData=[];try{var rChk=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_email',email:email})});rData=(await rChk.json()).exists?[{}]:[];}catch(e){}
+    var existing=rData;
     if(existing.length>0){err.textContent='Un compte existe déjà avec cet email';err.classList.add('on');return;}
 
     // Vérifier le code parrain si renseigné
     var parrainId=null;
     if(codeParrain){
-      var rParrain={ok:true};var dParrain={data:[]};try{var rPar=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_parrain',code:codeParrain})});var pData=await rPar.json();dParrain={data:pData.valid?[{id:pData.parrain_id}]:[]};}catch(e){}
-      var dParrain=await rParrain.json();
-      var rowsParrain=Array.isArray(dParrain)?dParrain:(dParrain.data||[]);
+      // V4.84 — même fix : ligne morte supprimée (écrasait dParrain puis levait TypeError)
+      var dParrain={data:[]};try{var rPar=await fetch(API_URL+'/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'check_parrain',code:codeParrain})});var pData=await rPar.json();dParrain={data:pData.valid?[{id:pData.parrain_id}]:[]};}catch(e){}
+      var rowsParrain=dParrain.data||[];
       if(rowsParrain.length){
         parrainId=rowsParrain[0].id;
         dbg('Parrain trouvé: '+parrainId);
