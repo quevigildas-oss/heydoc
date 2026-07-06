@@ -22,6 +22,19 @@
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
+// VERSION : V2.14 (2026-07-06)
+// FIX     : inscription du COMPTE PRINCIPAL impossible — action=inscription était
+//           protégée par JWT et conçue pour les membres famille uniquement (elle lit
+//           patientUuid du token) ; un nouvel utilisateur sans session recevait
+//           401 "Token manquant" → éjecté vers le login par le front.
+//           → Nouvelle branche PUBLIQUE (sans Bearer) dans la section routes
+//             publiques existante : whitelist stricte, anti-doublon serveur (409),
+//             parrain vérifié serveur (credit_reduction DÉRIVÉ, jamais du client),
+//             compte_parent_id interdit, rate limiting IP (table auth_attempts).
+//           → La branche authentifiée (membre famille) est conservée + whitelistée
+//             (l'insert(body) brut permettait d'injecter code_acces, credit_reduction,
+//             statut_compte, ou de rattacher un profil à la famille d'autrui via
+//             compte_parent_id arbitraire — désormais forcé au compte connecté).
 // FIX     : consultations/examens/ordonnances/dossier — support ?for=PAT-XX pour membres famille
 // FIX     : profils_famille — inclut membres liés par compte_parent_id (email null)
 // DATE    : 2026-06-12
@@ -132,6 +145,70 @@ module.exports = async function handler(req, res) {
   }
 
   // ── Authentification JWT obligatoire pour toutes les routes suivantes ────────
+  // ── POST inscription SANS token : création du COMPTE PRINCIPAL (V2.14) ────
+  // Si un Bearer est présent, on n'entre PAS ici : le middleware puis la route
+  // authentifiée (membre famille) plus bas s'appliquent, inchangés.
+  const aBearer = String(req.headers['authorization'] || '').startsWith('Bearer ');
+  if (req.method === 'POST' && action === 'inscription' && !aBearer) {
+    const b = req.body || {};
+    const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null;
+
+    // Rate limiting (pattern auth.js V2.0, table auth_attempts) — fail-open
+    try {
+      const depuis = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      const { count } = await supabase.from('auth_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('identifiant', 'ins:' + (ip || 'sans-ip')).gte('created_at', depuis);
+      if ((count || 0) >= 5)
+        return res.status(429).json({ error: 'Trop de créations de compte — réessayez dans 15 minutes' });
+      await supabase.from('auth_attempts').insert({ identifiant: 'ins:' + (ip || 'sans-ip'), ip });
+    } catch (e) {}
+
+    if (!b.email || !b.code_acces || !b.prenom || !b.nom || !b.patient_id)
+      return res.status(400).json({ error: 'email, code_acces, prenom, nom et patient_id requis' });
+    if (b.compte_parent_id)
+      return res.status(400).json({ error: "compte_parent_id interdit à l'inscription" });
+
+    const email = String(b.email).toLowerCase().trim();
+
+    // Anti-doublon SERVEUR : un seul compte principal par email.
+    // (Le check front est fail-open ; l'index unique partiel viendra au lot P1 —
+    //  course résiduelle entre deux requêtes simultanées acceptée d'ici là.)
+    const { data: dejaLa, error: eDup } = await supabase.from('patients')
+      .select('id').eq('email', email).is('compte_parent_id', null).limit(1);
+    if (eDup) return res.status(500).json({ error: eDup.message });
+    if (dejaLa && dejaLa.length)
+      return res.status(409).json({ error: 'Un compte existe déjà avec cet email' });
+
+    // Parrain vérifié serveur ; credit dérivé (jamais pris du body)
+    let parrainId = null;
+    if (b.parrain_id) {
+      const { data: par } = await supabase.from('patients').select('id').eq('id', b.parrain_id).limit(1);
+      if (par && par.length) parrainId = par[0].id;
+    }
+
+    // Whitelist stricte — jamais insert(body) brut sur une route publique
+    const safe = {
+      prenom: b.prenom, nom: b.nom,
+      date_naissance: b.date_naissance || null,
+      sexe: b.sexe || null,
+      poids: b.poids || null,
+      telephone: b.telephone || null,
+      email,
+      ville: b.ville || 'Abidjan',
+      groupe_sanguin: b.groupe_sanguin || null,
+      langue_preferee: b.langue_preferee || null,
+      patient_id: b.patient_id,
+      code_acces: String(b.code_acces),
+      lien_familial: 'moi',
+      parrain_id: parrainId,
+      credit_reduction: parrainId ? 10 : 0
+    };
+    const { data, error } = await supabase.from('patients').insert(safe).select('id').single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(201).json(data);
+  }
+
   await new Promise((resolve, reject) => {
     authMiddleware(req, res, (err) => err ? reject(err) : resolve());
   }).catch(() => null);
@@ -578,12 +655,26 @@ module.exports = async function handler(req, res) {
     if (req.method === 'POST' && action === 'inscription') {
       // Vérifier que l'email correspond au patient connecté (même famille)
       const { data: self } = await supabase.from('patients').select('email').eq('id', patientUuid).single();
-      const body = req.body;
-      if (body.email && body.email !== self.email) {
+      const b = req.body || {};
+      if (b.email && b.email !== self.email) {
         return res.status(403).json({ error: 'Email doit correspondre au compte principal' });
       }
-      body.email = self.email; // forcer le même email famille
-      const { data, error } = await supabase.from('patients').insert(body).select('id').single();
+      // V2.14 — whitelist + compte_parent_id FORCÉ au compte connecté (l'insert(body)
+      // brut permettait code_acces/credit/statut arbitraires et le rattachement à
+      // la famille d'autrui). Comportement du flux front inchangé.
+      const safe = {
+        prenom: b.prenom || '', nom: b.nom || '',
+        patient_id: b.patient_id || '',
+        compte_parent_id: patientUuid,
+        lien_familial: b.lien_familial || 'autre',
+        date_naissance: b.date_naissance || null,
+        telephone: b.telephone || null,
+        ville: b.ville || null,
+        poids: b.poids || null,
+        sexe: b.sexe || null,
+        email: self.email
+      };
+      const { data, error } = await supabase.from('patients').insert(safe).select('id').single();
       if (error) return res.status(500).json({ error: error.message });
       return res.status(201).json(data);
     }
