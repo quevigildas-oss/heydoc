@@ -1,5 +1,9 @@
 // /api/extract-examen.js
 // DOKITA — Extraction automatique resultats examens par Claude Vision
+// V1.2 — 2026-07-09 : FIX modèle retiré du service (claude-sonnet-4-20250514 → erreur
+//        API not_found). Remplacé par claude-sonnet-4-6 (génération stable, vision).
+//        ⚠️ Ne pas migrer vers Sonnet 5 sans revue : il rejette les paramètres de
+//        sampling non par défaut (sans impact ici, mais règle générale du projet).
 // V1.1 — Fix module.exports
 
 const handler = async function(req, res) {
@@ -74,7 +78,7 @@ const handler = async function(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-20250514',
+        model:      'claude-sonnet-4-6', // V1.2 — ex claude-sonnet-4-20250514 (retiré)
         max_tokens: 2000,
         messages: [
           {
