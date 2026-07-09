@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA ADMIN — Interface saisie livraisons LABOREX
-     VERSION : V1.5
-     DATE    : 2026-07-04 — Onglet 💰 Facturation partenaires (redevance forfaitaire
+     VERSION : V1.6
+     DATE    : 2026-07-09 — FIX modèle Claude retiré (claude-sonnet-4-20250514 → not_found
+               API) sur la lecture des bons de livraison ; remplacé par claude-sonnet-4-6
+               (génération stable, vision, compatible temperature explicite — NE PAS
+               migrer vers Sonnet 5 sans revoir les paramètres : il rejette temperature≠défaut). — Onglet 💰 Facturation partenaires (redevance forfaitaire
                par acte : médecins 1000 FCFA HT/consultation + 1000/lecture examens,
                pharmacies 5% des AO livrés, TVA 18% en sus). Bouton "Relancer" payout
                retiré (route neutralisée côté admin.js V1.4 — modèle comptoir en test),
@@ -249,7 +252,7 @@ async function importerBonLivraison(input){
 
     // Appel Claude API
     var payload={
-      model:'claude-sonnet-4-20250514',
+      model:'claude-sonnet-4-6', // V1.6 — claude-sonnet-4-20250514 retiré du service (not_found)
       max_tokens:1000,
       messages:[{
         role:'user',
