@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.86
-     DATE    : 2026-07-09
+     VERSION : V4.87
+     DATE    : 2026-07-10
+     CHANGELOG V4.87 : FIX écrasement d'identité profil famille — mettreAJourProfilNotion
+              n'envoyait pas ?for=, le PATCH serveur écrivait donc toujours sur le compte
+              principal (Gildas écrasé en modifiant Akouvi). Ajout du for= pour les
+              profils famille (même logique que rafraichirProfilSupabase). Nécessite
+              patient.js V2.16 (support for= sécurisé sur PATCH profil).
      CHANGELOG V4.86 : RDV confirmé passé (date+heure) affiché "✅ Effectué" dans la
               liste Rendez-vous (visuel ; le vrai statut 'effectue' est écrit en base
               par le médecin à l'envoi de l'ordonnance — medecin.js V2.5). Le badge
@@ -5433,9 +5438,16 @@ async function mettreAJourProfilNotion(p){
   if(p.groupe_sanguin)body.groupe_sanguin=p.groupe_sanguin;
   if(p.langue)body.langue_preferee=p.langue;
   if(p.sx)body.sexe=p.sx==='H'?'M':p.sx==='F'?'F':null;
+  // V4.87 — cibler le bon profil : sans for=, le serveur écrivait sur le compte
+  // principal (JWT) → écrasait Gildas quand on éditait un membre famille. Même
+  // logique que rafraichirProfilSupabase (lecture) : for= si ce n'est pas le principal.
+  var estFamille=p.patientId&&p.patientId!==SESSION_PATIENT_ID;
+  var url=estFamille
+    ? API_URL+'/patient?action=profil&for='+encodeURIComponent(p.patientId)
+    : API_URL+'/patient?action=profil';
   try{
-    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify(body)});
-    dbg('Profil Supabase mis à jour ✅');
+    await fetchAPI(url,{method:'PATCH',body:JSON.stringify(body)});
+    dbg('Profil Supabase mis à jour ✅ ('+(estFamille?'famille '+p.patientId:'principal')+')');
   }catch(e){dbg('Erreur MAJ profil: '+e.message);}
 }
 
