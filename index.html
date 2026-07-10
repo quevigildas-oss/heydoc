@@ -1,8 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.85
-     DATE    : 2026-07-06
+     VERSION : V4.86
+     DATE    : 2026-07-09
+     CHANGELOG V4.86 : RDV confirmé passé (date+heure) affiché "✅ Effectué" dans la
+              liste Rendez-vous (visuel ; le vrai statut 'effectue' est écrit en base
+              par le médecin à l'envoi de l'ordonnance — medecin.js V2.5). Le badge
+              'effectue' existait déjà dans STATUT_RDV. Aucun autre changement.
      CHANGELOG V4.85 : FIX éjection pendant l'inscription (page profil) —
               (1) gardes durcies du rappel RDV V4.82 : JWT + profil réel requis
               (le minuteur appelait l'API sans session → 401 → "Session expirée"
@@ -5701,7 +5705,13 @@ async function ouvrirRDV(){
         try{rdv.creneaux_proposes=JSON.parse(rdv.creneaux_proposes);}catch(e){rdv.creneaux_proposes=[];}
       }
       if(!Array.isArray(rdv.creneaux_proposes))rdv.creneaux_proposes=[];
-      var st=STATUT_RDV[rdv.statut]||{label:rdv.statut,color:'var(--text3)',bg:'var(--card)'};
+      // V4.86 — RDV confirmé dont la date+heure est passée : afficher "✅ Effectué"
+      var statutAff=rdv.statut;
+      if(rdv.statut==='confirme'&&rdv.date_confirmee){
+        var dtR=new Date(rdv.date_confirmee+'T'+((rdv.heure_confirmee||'00:00').slice(0,5))+':00');
+        if(!isNaN(dtR.getTime())&&dtR.getTime()<Date.now())statutAff='effectue';
+      }
+      var st=STATUT_RDV[statutAff]||{label:statutAff,color:'var(--text3)',bg:'var(--card)'};
       var dateAff=rdv.date_confirmee||rdv.date_souhaitee||'';
       if(dateAff)dateAff=new Date(dateAff).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long'});
       var heureAff=rdv.heure_confirmee||rdv.heure_souhaitee||'';
