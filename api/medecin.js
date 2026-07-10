@@ -1,5 +1,8 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
+// VERSION : V2.5 (2026-07-09) : PATCH action=rdv_effectue&consultation_id= — marque
+//           le RDV téléconsultation 'effectue' à l'envoi de l'ordonnance (fait métier).
+//           + consultation_id ajouté à la whitelist POST rdv (lien RDV↔consultation).
 // VERSION : V2.4 (2026-07-04) : filtre additif ?medecin_id= sur GET rdv (agenda
 //           médecin basculé sur medecin_id — refonte §6E, front V4.32)
 // VERSION : V2.3 (2026-07-03)
@@ -354,6 +357,25 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // PATCH /api/medecin?action=rdv_effectue&consultation_id=xxx  (V2.5)
+    // Marque le RDV téléconsultation comme 'effectue' quand l'ordonnance est envoyée.
+    // Fait métier fiable (pas d'ordonnance sans échange patient). consultation_id est
+    // TEXTE dans rendez_vous ; on caste l'UUID de consultation reçu. RBAC : la consult
+    // doit appartenir au médecin.
+    if (req.method === 'PATCH' && action === 'rdv_effectue') {
+      const cid = req.query.consultation_id;
+      if (!cid) return res.status(400).json({ error: 'consultation_id requis' });
+      if (!await checkConsultationOwnership(cid))
+        return res.status(403).json({ error: 'Consultation non autorisée' });
+      const { error } = await supabase.from('rendez_vous')
+        .update({ statut: 'effectue' })
+        .eq('consultation_id', String(cid))
+        .eq('medecin_id', medecinId)
+        .eq('statut', 'confirme'); // ne touche que les RDV encore confirmés
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(200).json({ ok: true });
+    }
+
     // PATCH /api/medecin?action=rdv&id=xxx
     if (req.method === 'PATCH' && action === 'rdv') {
       const id = req.query.id;
@@ -375,7 +397,8 @@ module.exports = async function handler(req, res) {
     // le patient peut annuler via le flux existant côté app patient.
     if (req.method === 'POST' && action === 'rdv') {
       const allowed = ['patient_id','patient_nom','disponibilite_id','date_confirmee',
-                       'heure_confirmee','type_rdv','motif','etablissement_nom','note_praticien'];
+                       'heure_confirmee','type_rdv','motif','etablissement_nom','note_praticien',
+                       'consultation_id']; // V2.5 — lien RDV↔consultation (marquage 'effectue')
       const safe = {};
       allowed.forEach(k => { if (req.body[k] !== undefined) safe[k] = req.body[k]; });
       if (!safe.patient_id) return res.status(400).json({ error: 'patient_id requis' });

@@ -22,6 +22,11 @@
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
+// VERSION : V2.15 (2026-07-09)
+// FIX     : GET action=rdv ne supportait pas ?for= (profils famille) — SEULE route
+//           lecture RDV oubliée du correctif estMembreFamille V2.11/V2.12. Un RDV
+//           créé pour un membre famille (ex. Akouvi) était invisible côté patient
+//           et bloquait aussi le rappel T-10. Aligné sur les routes soeurs.
 // VERSION : V2.14 (2026-07-06)
 // FIX     : inscription du COMPTE PRINCIPAL impossible — action=inscription était
 //           protégée par JWT et conçue pour les membres famille uniquement (elle lit
@@ -434,9 +439,14 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
 
-    // GET /api/patient?action=rdv
+    // GET /api/patient?action=rdv  (V2.15 : support for= profils famille — était
+    // la SEULE route lecture RDV sans ce correctif ; RDV d'un membre famille
+    // invisible côté patient tant qu'on filtrait sur le seul patient_id du JWT)
     if (req.method === 'GET' && action === 'rdv') {
-      let query = supabase.from('rendez_vous').select('*').eq('patient_id', patientId);
+      if (req.query.for && req.query.for !== patientId && !(await estMembreFamille(req.query.for, patientUuid)))
+        return res.status(403).json({ error: 'Non autorisé' });
+      const rdvTarget = req.query.for || patientId;
+      let query = supabase.from('rendez_vous').select('*').eq('patient_id', rdvTarget);
       if (req.query.statut) query = query.eq('statut', req.query.statut);
       if (req.query.etablissement_id) query = query.eq('etablissement_id', req.query.etablissement_id);
       const { data, error } = await query.order('created_at', { ascending: false }).limit(20);

@@ -1,8 +1,11 @@
 // ============================================
 // DOKITA WHATSAPP API — api/whatsapp.js
-// VERSION : V1.1
-// DATE    : 2026-05-26
-// Twilio WhatsApp Sandbox → prod Meta Cloud API
+// VERSION : V1.2
+// DATE    : 2026-07-09
+// AJOUT   : action=notifier_rdv — notification WhatsApp de téléconsultation
+//           planifiée par le médecin (pattern envoyer_ao). Sandbox Twilio :
+//           n'arrive qu'aux numéros enrôlés tant que Meta Cloud n'est pas actif.
+// V1.1 — 2026-05-26 : Twilio WhatsApp Sandbox → prod Meta Cloud API
 // ============================================
 
 export default async function handler(req, res) {
@@ -50,6 +53,17 @@ export default async function handler(req, res) {
     const data = await r.json();
     if (!r.ok) throw new Error(data.message || 'Twilio error ' + r.status);
     return data.sid;
+  }
+
+  // ── Helper : date ISO (YYYY-MM-DD) → libellé lisible FR ──
+  function dateLisible(iso) {
+    try {
+      const JOURS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+      const MOIS  = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+      const d = new Date(iso + 'T00:00:00');
+      if (isNaN(d.getTime())) return iso;
+      return JOURS[d.getDay()] + ' ' + d.getDate() + ' ' + MOIS[d.getMonth()];
+    } catch (e) { return iso; }
   }
 
   // ── ACTION : envoyer AO aux pharmacies ──
@@ -106,6 +120,37 @@ export default async function handler(req, res) {
       results,
       errors
     });
+  }
+
+  // ── ACTION : notifier_rdv — téléconsultation planifiée par le médecin (V1.2) ──
+  if (action === 'notifier_rdv') {
+    const { telephone, patient_nom, date, heure, medecin_nom } = req.body || {};
+    if (!telephone || !date || !heure) {
+      return res.status(400).json({ error: 'telephone, date et heure requis' });
+    }
+
+    const message = [
+      `📅 *DOKITA — Téléconsultation confirmée*`,
+      ``,
+      `Bonjour${patient_nom ? ' ' + patient_nom : ''},`,
+      ``,
+      `Votre téléconsultation${medecin_nom ? ' avec le Dr ' + medecin_nom : ''} est confirmée :`,
+      `🗓️ *${dateLisible(date)}*`,
+      `🕐 *${String(heure).slice(0, 5)}*`,
+      ``,
+      `Ce rendez-vous est visible dans votre application Dokita (rubrique Rendez-vous).`,
+      ``,
+      `📱 Quelques minutes avant l'heure, tenez votre téléphone à portée : votre médecin vous enverra le lien de connexion par WhatsApp au moment du rendez-vous.`,
+      ``,
+      `_Dokitrust — Plateforme médicale digitale_`
+    ].join('\n');
+
+    try {
+      const sid = await sendWhatsApp(telephone, message);
+      return res.status(200).json({ ok: true, sid });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
   }
 
   // ── ACTION : notifier patient (ordonnance prête, offre reçue) ──
@@ -168,9 +213,6 @@ export default async function handler(req, res) {
 
   // ── ACTION : notifier_pharmacie — informer pharmacie non retenue ──
   if (action === 'notifier_pharmacie') {
-    const auth = req.headers['authorization'] || '';
-    if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Non autorisé' });
-
     const { telephone, type, data: notifData } = req.body || {};
     if (!telephone || !type) {
       return res.status(400).json({ error: 'telephone et type requis' });
