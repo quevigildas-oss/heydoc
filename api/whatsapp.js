@@ -1,5 +1,6 @@
 // ============================================
 // DOKITA WHATSAPP API — api/whatsapp.js
+// VERSION : V1.3 (2026-07-10) : message notifier_rdv — émojis date retirés (préfixes Date:/Heure:)
 // VERSION : V1.2
 // DATE    : 2026-07-09
 // AJOUT   : action=notifier_rdv — notification WhatsApp de téléconsultation
@@ -130,13 +131,13 @@ export default async function handler(req, res) {
     }
 
     const message = [
-      `📅 *DOKITA — Téléconsultation confirmée*`,
+      `*DOKITA — Téléconsultation confirmée*`,
       ``,
       `Bonjour${patient_nom ? ' ' + patient_nom : ''},`,
       ``,
       `Votre téléconsultation${medecin_nom ? ' avec le Dr ' + medecin_nom : ''} est confirmée :`,
-      `🗓️ *${dateLisible(date)}*`,
-      `🕐 *${String(heure).slice(0, 5)}*`,
+      `Date : *${dateLisible(date)}*`,
+      `Heure : *${String(heure).slice(0, 5)}*`,
       ``,
       `Ce rendez-vous est visible dans votre application Dokita (rubrique Rendez-vous).`,
       ``,

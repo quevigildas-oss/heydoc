@@ -1,5 +1,8 @@
 // api/medecin.js
 // Endpoints médecin — protégés JWT
+// VERSION : V2.6 (2026-07-10) : POST rdv — anti-doublon : refus (409) si un RDV
+//           'confirme' existe déjà pour la consultation (message : annuler avant de
+//           reprogrammer). Complète le garde-fou côté front DokitaPro V4.34.
 // VERSION : V2.5 (2026-07-09) : PATCH action=rdv_effectue&consultation_id= — marque
 //           le RDV téléconsultation 'effectue' à l'envoi de l'ordonnance (fait métier).
 //           + consultation_id ajouté à la whitelist POST rdv (lien RDV↔consultation).
@@ -406,6 +409,19 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'date_confirmee et heure_confirmee requis' });
       if (!await checkPatientLink(safe.patient_id))
         return res.status(403).json({ error: 'Patient non associé à ce médecin' });
+      // V2.6 — anti-doublon : un seul RDV téléconsultation actif par consultation.
+      // Un RDV 'confirme' non encore honoré ('effectue') bloque la création d'un second.
+      // (Garde serveur — le message est aussi affiché côté front avant l'appel.)
+      if (safe.consultation_id) {
+        const { data: dejaRdv } = await supabase.from('rendez_vous')
+          .select('id')
+          .eq('consultation_id', String(safe.consultation_id))
+          .eq('medecin_id', medecinId)
+          .eq('statut', 'confirme')
+          .limit(1);
+        if (dejaRdv && dejaRdv.length)
+          return res.status(409).json({ error: 'Un rendez-vous est déjà programmé pour cette consultation. Veuillez l\'annuler avant d\'en programmer un nouveau.' });
+      }
       safe.statut = 'confirme';
       safe.medecin_id = medecinId; // depuis le JWT — jamais depuis le body
       const { data, error } = await supabase
