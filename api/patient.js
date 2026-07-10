@@ -22,6 +22,13 @@
 // FIX     : POST ao — conserver patient_id du profil sélectionné (famille)
 // ADD     : GET pharmacies → table 'pharmacies' (is_test) — avant go-live basculer vers etablissements
 // NOTE    : appels_offres — colonnes stock_theorique, rayon_km, patient_lat/lng ajoutées en base
+// VERSION : V2.16 (2026-07-10)
+// FIX     : PATCH action=profil écrivait TOUJOURS sur le compte principal (eq id JWT),
+//           ignorant le profil famille édité → modifier un membre (ex. Akouvi) écrasait
+//           l'identité du compte principal (Gildas). Ajout du ciblage ?for= sécurisé
+//           (estMembreFamille) — même correctif que les routes de lecture. Whitelist
+//           durcie (retrait email/parrain_id/credit_reduction/statut_compte/etc.) et
+//           colonne fantôme 'naiss' retirée. Nécessite front V4.87 (envoi du for=).
 // VERSION : V2.15 (2026-07-09)
 // FIX     : GET action=rdv ne supportait pas ?for= (profils famille) — SEULE route
 //           lecture RDV oubliée du correctif estMembreFamille V2.11/V2.12. Un RDV
@@ -486,15 +493,31 @@ module.exports = async function handler(req, res) {
     // PATCH /api/patient?action=profil
     if (req.method === 'PATCH' && action === 'profil') {
       const updates = req.body;
+      // V2.16 — whitelist DURCIE : retrait des champs sensibles (email, parrain_id,
+      // credit_reduction, statut_compte, alerte_abus, nb_remboursements,
+      // code_parrainage) qu'un patient ne doit pas pouvoir modifier via l'édition de
+      // son profil (privilèges/identité/facturation). + colonne fantôme 'naiss' retirée
+      // (vraie colonne : date_naissance, déjà envoyée par le front).
       const allowed = [
-        'prenom','nom','naiss','sexe','poids','taille','groupe_sanguin',
-        'langue_preferee','telephone','email','ville','antecedents','allergies',
-        'ia_consent','ia_consent_date','code_parrainage','parrain_id',
-        'credit_reduction','nb_remboursements','alerte_abus','statut_compte',
-        'ao_soumis'
+        'prenom','nom','date_naissance','sexe','poids','taille','groupe_sanguin',
+        'langue_preferee','telephone','ville','antecedents','allergies',
+        'ia_consent','ia_consent_date','ao_soumis'
       ];
       const safe = {};
       allowed.forEach(k => { if (updates[k] !== undefined) safe[k] = updates[k]; });
+
+      // V2.16 — CIBLAGE PAR for= (profils famille). SANS for= : compte principal (JWT).
+      // AVEC for= différent : vérifier estMembreFamille AVANT toute écriture, sinon le
+      // PATCH écrivait TOUJOURS sur le compte principal (bug d'écrasement d'identité).
+      const forId = req.query.for;
+      if (forId && forId !== patientId) {
+        if (!(await estMembreFamille(forId, patientUuid)))
+          return res.status(403).json({ error: 'Non autorisé' });
+        const { error } = await supabase.from('patients').update(safe).eq('patient_id', forId);
+        if (error) return res.status(500).json({ error: error.message });
+        return res.status(200).json({ ok: true });
+      }
+
       const { error } = await supabase.from('patients').update(safe).eq('id', patientUuid);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });
