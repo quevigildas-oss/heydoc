@@ -1,5 +1,6 @@
 // ============================================
 // DOKITA WHATSAPP API — api/whatsapp.js
+// VERSION : V1.4 (2026-07-10) : action notifier_annulation_rdv (annulation par le médecin)
 // VERSION : V1.3 (2026-07-10) : message notifier_rdv — émojis date retirés (préfixes Date:/Heure:)
 // VERSION : V1.2
 // DATE    : 2026-07-09
@@ -146,6 +147,31 @@ export default async function handler(req, res) {
       `_Dokitrust — Plateforme médicale digitale_`
     ].join('\n');
 
+    try {
+      const sid = await sendWhatsApp(telephone, message);
+      return res.status(200).json({ ok: true, sid });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ── ACTION : notifier_annulation_rdv — téléconsultation annulée par le médecin (V1.4) ──
+  if (action === 'notifier_annulation_rdv') {
+    const { telephone, patient_nom, date, heure } = req.body || {};
+    if (!telephone || !date) {
+      return res.status(400).json({ error: 'telephone et date requis' });
+    }
+    const message = [
+      `*DOKITA — Téléconsultation annulée*`,
+      ``,
+      `Bonjour${patient_nom ? ' ' + patient_nom : ''},`,
+      ``,
+      `Nous vous informons que votre téléconsultation prévue le *${dateLisible(date)}*${heure ? ' à *' + String(heure).slice(0,5) + '*' : ''} a été annulée par votre médecin.`,
+      ``,
+      `Un nouveau rendez-vous vous sera proposé prochainement. Nous vous prions de nous excuser pour la gêne occasionnée.`,
+      ``,
+      `_Dokitrust — Plateforme médicale digitale_`
+    ].join('\n');
     try {
       const sid = await sendWhatsApp(telephone, message);
       return res.status(200).json({ ok: true, sid });
