@@ -1,8 +1,12 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.87
+     VERSION : V4.88
      DATE    : 2026-07-10
+     CHANGELOG V4.88 : Masquage des RDV annulés dans "Mes Rendez-vous" (statuts
+              annule_patient/annule_praticien filtrés à l'affichage ; conservés en
+              base). Le patient est informé de l'annulation par WhatsApp (whatsapp.js
+              V1.4, déclenché côté médecin).
      CHANGELOG V4.87 : FIX écrasement d'identité profil famille — mettreAJourProfilNotion
               n'envoyait pas ?for=, le PATCH serveur écrivait donc toujours sur le compte
               principal (Gildas écrasé en modifiant Akouvi). Ajout du for= pour les
@@ -5683,6 +5687,9 @@ async function ouvrirRDV(){
     var r=await fetchAPI(API_URL+'/patient?action=rdv'+forSel());
     var data=await r.json();
     var rows=Array.isArray(data)?data:(data.data||[]);
+    // V4.88 — masquer les RDV annulés (ils restent en base, mais ne polluent plus la
+    // liste patient). Le patient est informé de l'annulation par WhatsApp.
+    rows=rows.filter(function(rdv){return rdv.statut!=='annule_patient'&&rdv.statut!=='annule_praticien';});
 
     /* V4.83 — Demande de RDV patient DÉSACTIVÉE (décision GQ session 17) :
        les créneaux sont désormais proposés directement par le médecin depuis le
