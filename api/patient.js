@@ -1,6 +1,12 @@
 // api/patient.js
 // Endpoints patient — protégés JWT
-// VERSION : V2.13
+// VERSION : V2.17
+// V2.17 — 2026-08 : CONSENTEMENT (Sprint 1). Ajout de 'ia_consent_version' à la whitelist du
+//   PATCH profil (traçabilité : quelle version du texte de consentement le patient a acceptée ;
+//   le front index_patient.html V4.90 envoie CONSENT_VERSION avec ia_consent + ia_consent_date).
+//   NB : l'en-tête indiquait "V2.13" alors que le CORPS contenait déjà les correctifs V2.16
+//   (whitelist durcie, date_naissance, ciblage for=) — en-tête corrigé pour lever ce décalage.
+// VERSION précédente (corps) : V2.16
 // FIX     : PATCH action=ordonnance — accepte désormais &consultation_id= en plus de &id=.
 //   Le front envoyait AO_SESSION_ID (un consultation_id) sous le paramètre id, qui ne
 //   correspond à aucune PK ordonnances → 403/400 systématique, silencieux (ao_soumis
@@ -501,7 +507,7 @@ module.exports = async function handler(req, res) {
       const allowed = [
         'prenom','nom','date_naissance','sexe','poids','taille','groupe_sanguin',
         'langue_preferee','telephone','ville','antecedents','allergies',
-        'ia_consent','ia_consent_date','ao_soumis'
+        'ia_consent','ia_consent_date','ia_consent_version','ao_soumis'
       ];
       const safe = {};
       allowed.forEach(k => { if (updates[k] !== undefined) safe[k] = updates[k]; });
