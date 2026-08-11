@@ -1,8 +1,17 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.88
-     DATE    : 2026-07-10
+     VERSION : V4.90
+     DATE    : 2026-08
+     CHANGELOG V4.90 : CONSENTEMENT (Sprint 1). Texte de consentement IA réécrit pour couvrir
+              le traitement des données de santé, l'analyse par IA, le TRANSFERT INTERNATIONAL
+              (prestataire hors du pays), l'analyse des résultats/images d'examens, et les DROITS
+              du patient (accès/rectification/suppression/retrait). Retrait de la mention trompeuse
+              "strictement confidentielles". Ajout d'un versionnage du consentement (CONSENT_VERSION
+              envoyé et stocké via ia_consent_version — nécessite patient.js V2.17 + migration SQL).
+              ⚠️ Texte À FAIRE VALIDER PAR UN JURISTE (ARTCI/loi CI 2013) avant go-live réel.
+     CHANGELOG V4.89 : DÉ-IDENTIFICATION (Sprint 1, Lot A). Prénom retiré du patient_context
+              envoyé à Claude Vision (extraction labo) — cf. commentaire dans uploadResultat().
      CHANGELOG V4.88 : Masquage des RDV annulés dans "Mes Rendez-vous" (statuts
               annule_patient/annule_praticien filtrés à l'affichage ; conservés en
               base). Le patient est informé de l'annulation par WhatsApp (whatsapp.js
@@ -1358,25 +1367,31 @@ function afficherConsentementIA(supabaseId){
   m.id='consentModal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
   m.innerHTML=
-    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;box-shadow:0 -4px 40px rgba(0,0,0,.3);">'+
+    '<div style="background:var(--card);border-radius:20px 20px 16px 16px;padding:24px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 -4px 40px rgba(0,0,0,.3);">'+
       '<div style="font-size:32px;text-align:center;margin-bottom:12px;">🤖</div>'+
-      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);text-align:center;margin-bottom:12px;">Dokita utilise une IA médicale</div>'+
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:800;color:var(--text);text-align:center;margin-bottom:12px;">Consentement au traitement de vos données de santé</div>'+
       '<div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:20px;">'+
-        'Pour vous accompagner dans vos consultations, Dokita utilise <strong>AfriBot</strong>, un assistant médical IA basé sur les recommandations de l\'OMS et de Médecins Sans Frontières.<br><br>'+
-        '⚠️ <strong>AfriBot n\'est pas un médecin.</strong> Il collecte vos symptômes et aide le médecin à préparer votre consultation. La prescription est toujours validée et signée par un médecin humain.<br><br>'+
-        'Vos données sont <strong>strictement confidentielles</strong> et ne sont jamais partagées sans votre accord.'+
+        'Pour vous accompagner, Dokita utilise <strong>AfriBot</strong>, un assistant IA fondé sur les recommandations de l\'OMS et de Médecins Sans Frontières, qui recueille vos symptômes et analyse vos résultats d\'examens afin d\'aider votre médecin.<br><br>'+
+        '⚠️ <strong>AfriBot n\'est pas un médecin.</strong> Il assiste le médecin ; c\'est toujours un médecin humain qui décide, valide et signe la prescription.<br><br>'+
+        '<strong>En continuant, vous acceptez que :</strong><br>'+
+        '• vos <strong>données de santé</strong> (symptômes, résultats et images d\'examens, dossier) soient traitées par la plateforme et partagées avec les professionnels de santé de votre parcours de soin (médecins, pharmacies) ;<br>'+
+        '• ces données soient <strong>analysées par une intelligence artificielle</strong> pour assister le médecin ;<br>'+
+        '• pour cette analyse, vos données puissent être <strong>traitées par un prestataire technique situé hors de votre pays</strong> (transfert international), de façon sécurisée et sans être utilisées pour entraîner l\'IA.<br><br>'+
+        '<strong>Vos droits :</strong> vous pouvez à tout moment demander l\'accès à vos données, leur rectification ou leur suppression, et <strong>retirer votre consentement</strong> (ce qui interrompra l\'usage de l\'IA pour vos consultations).<br><br>'+
+        '<span style="color:var(--text3);font-size:11px;">Pour toute demande relative à vos données, contactez Dokita via l\'application.</span>'+
       '</div>'+
-      '<button onclick="accepterConsentementIA(\''+supabaseId+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">✅ J\'accepte et je continue</button>'+
+      '<button onclick="accepterConsentementIA(\''+supabaseId+'\')" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;color:#fff;cursor:pointer;margin-bottom:10px;">✅ J\'ai lu et j\'accepte</button>'+
       '<button onclick="refuserConsentementIA()" style="width:100%;padding:10px;background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;">Je refuse — me déconnecter</button>'+
     '</div>';
+
   document.body.appendChild(m);
 }
 
 async function accepterConsentementIA(supabaseId){
   document.getElementById('consentModal').remove();
-  // Sauvegarder consentement dans Supabase
+  // Sauvegarder consentement dans Supabase (V4.90 : + version du texte accepté pour traçabilité)
   try{
-    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({ia_consent:true,ia_consent_date:new Date().toISOString()})});
+    await fetchAPI(API_URL+'/patient?action=profil',{method:'PATCH',body:JSON.stringify({ia_consent:true,ia_consent_date:new Date().toISOString(),ia_consent_version:CONSENT_VERSION})});
   }catch(e){dbg('Consent save err: '+e.message);}
   renderProfils();
   nav('profilsScreen');
@@ -1499,6 +1514,13 @@ var RAG_URL      ='https://heydoc-medecin.vercel.app/api/rag';
 var SAVE_URL     ='https://heydoc-mu.vercel.app/api/save';
 var DB_URL       ='https://heydoc-mu.vercel.app/api/db';
 var EXTRACT_URL  ='https://heydoc-mu.vercel.app/api/extract-examen';
+
+// V4.90 — CONSENTEMENT (Sprint 1) : version du texte de consentement en vigueur.
+// Stockée avec le consentement du patient (ia_consent_version) pour tracer QUELLE version
+// il a acceptée. À incrémenter à chaque modification substantielle du texte de consentement
+// (⇒ redemande du consentement possible aux patients ayant accepté une version antérieure).
+// ⚠️ Texte de consentement À FAIRE VALIDER PAR UN JURISTE (ARTCI/loi CI 2013) avant go-live réel.
+var CONSENT_VERSION='2026-08-v1';
 
 // ══════════════════════════════
 // STATE
