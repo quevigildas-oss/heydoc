@@ -6221,7 +6221,15 @@ async function ajouterResultatReseau(input, examenId, nomExamen, consultationId)
     var resultatTexte='';
     try{
       toast('🤖 Extraction IA des valeurs...');
-      var pCtx=(p.prenom||'')+(p._age?', '+p._age+' ans':'')+(p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'');
+      // V4.89 — DÉ-IDENTIFICATION (Sprint 1) : prénom retiré du patient_context envoyé à
+      // Claude Vision. Le prénom est un identifiant inutile pour l'interprétation d'un résultat
+      // de laboratoire ; seuls l'âge et le sexe sont cliniquement pertinents (normes selon
+      // âge/sexe). Réversible : réactiver l'ancienne ligne ci-dessous si besoin.
+      // ⚠️ NB (cas dur 3b, non traité ici) : l'IMAGE elle-même peut contenir le nom du patient
+      // en clair (Claude Vision la lit). Ce point est couvert par le consentement patient (P0)
+      // pour le pilote ; masquage d'image = chantier séparé ultérieur.
+      // var pCtx=(p.prenom||'')+(p._age?', '+p._age+' ans':'')+(p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'');
+      var pCtx=(p._age?p._age+' ans':'')+(p.sx?(p._age?', ':'')+(p.sx==='H'?'Homme':'Femme'):'');
       var extR=await fetch(EXTRACT_URL,{
         method:'POST',
         headers:{'Content-Type':'application/json','x-dokita-key':DOKITA_KEY},
