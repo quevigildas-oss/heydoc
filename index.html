@@ -1,8 +1,23 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.90
+     VERSION : V4.93
      DATE    : 2026-08
+     CHANGELOG V4.93 : BRIQUE 2 (garde-fou red flags) étape 3.4a — message d'orientation patient.
+              Si le back détecte un signe de gravité (red_flags.gravite), un message d'orientation
+              NON-ALARMISTE est affiché au patient AVANT la confirmation d'envoi ("diriger sans
+              alarmer" : ton calme, consigne claire, rassurant, un médecin est prévenu). Le contexte
+              red flags est récupéré depuis la réponse RESUME. ⚠️ Texte à valider médicalement.
+              (Priorisation côté médecin = étape 3.4b, à venir.)
+     CHANGELOG V4.92 : BRIQUE 2 (garde-fou red flags) étape 3.2 — masquage des étiquettes
+              techniques de sécurité [RF-FILTRE] et [RF-MOTIF:motif] à l'affichage (comme
+              [OPTIONS:]). Ces tags servent au back (appariement des réponses au RESUME) et ne
+              doivent jamais être vus du patient. Correction robustesse : le retrait des OPTIONS
+              repart de cleanText (déjà nettoyé des tags RF) et non de text.
+     CHANGELOG V4.91 : DÉ-IDENTIFICATION (complément Lot A) — prénom et nom du profil retirés
+              du contexte [PROFIL PATIENT: ...] envoyé à AfriBot au 1er message (complète les 3
+              fuites déjà traitées en V4.89). Le bot reçoit âge/sexe/poids/ville/allergies/
+              antécédents, mais plus l'identité. Réversible (ligne commentée).
      CHANGELOG V4.90 : CONSENTEMENT (Sprint 1). Texte de consentement IA réécrit pour couvrir
               le traitement des données de santé, l'analyse par IA, le TRANSFERT INTERNATIONAL
               (prestataire hors du pays), l'analyse des résultats/images d'examens, et les DROITS
@@ -2566,10 +2581,15 @@ function addMsg(role,text){
   // Détecter et extraire [OPTIONS: A | B | C]
   var optionsHtml='';
   var cleanText=text;
+  // BRIQUE 2 (V4.92) : masquer les étiquettes techniques de sécurité [RF-FILTRE] et
+  // [RF-MOTIF:motif] avant tout affichage. Elles servent au back (appariement des réponses
+  // red flags au RESUME) et ne doivent JAMAIS être visibles du patient — comme [OPTIONS:].
+  cleanText=cleanText.replace(/\[RF-FILTRE\]/gi,'').replace(/\[RF-MOTIF:[^\]]*\]/gi,'').trim();
   var optMatch=text.match(/\[OPTIONS:\s*([^\]]+)\]/);
   if(optMatch&&role==='ai'){
     var options=optMatch[1].split('|').map(function(o){return o.trim();}).filter(Boolean);
-    cleanText=text.replace(/\[OPTIONS:\s*[^\]]+\]/,'').trim();
+    // repart de cleanText (déjà nettoyé des tags [RF-...]) pour ne pas les réintroduire
+    cleanText=cleanText.replace(/\[OPTIONS:\s*[^\]]+\]/,'').trim();
     optionsHtml='<div class="opt-btns">'+
       options.map(function(opt){
         var safeOpt=opt.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
@@ -2825,9 +2845,15 @@ async function sendMsg(){
   // Calculer IMC si taille et poids disponibles
   var imc=null;
   if(p.poids&&p.taille){imc=Math.round(parseFloat(p.poids)/Math.pow(parseFloat(p.taille)/100,2)*10)/10;}
-  var ctx='[PROFIL PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
-    (a?', '+a+' ans':'')+
-    (p.sx?', '+(p.sx==='H'?'Homme':'Femme'):'')+
+  // V4.91 — DÉ-IDENTIFICATION (complément Lot A) : prénom et nom du profil retirés du contexte
+  // envoyé à AfriBot au 1er message. Ces identifiants ne servent pas à l'orientation clinique
+  // (le bot n'a pas besoin de savoir QUI est le patient pour analyser des symptômes). Le profil
+  // reste géré localement. Réversible : réactiver l'ancienne ligne ci-dessous si un cadre
+  // conforme le permet. La ponctuation initiale est gérée pour ne pas laisser de virgule orpheline.
+  // var ctx='[PROFIL PATIENT: '+p.prenom+(p.nom?' '+p.nom:'')+
+  //   (a?', '+a+' ans':'')+
+  var ctx='[PROFIL PATIENT: '+(a?a+' ans':'')+
+    (p.sx?(a?', ':'')+(p.sx==='H'?'Homme':'Femme'):'')+
     (p.poids?', '+p.poids+'kg':'')+
     (p.taille?', '+p.taille+'cm':'')+
     (imc?', IMC: '+imc:'')+(imc?(imc<18.5?' (maigreur)':imc<25?' (normal)':imc<30?' (surpoids)':' (obésité)'):'')+ 
@@ -3026,6 +3052,7 @@ async function envoyerDossier(email,nomMed,medId){
 
   // ── ÉTAPE 1 : résumé JSON via /api/rag ──
   var resume={};
+  var redFlagsCtx=null; // BRIQUE 2 : contexte red flags (déclaré hors du try pour portée garantie)
   try{
     var messages=msgs.map(function(m){return {role:m.role==='ai'?'assistant':'user',content:m.text};});
     messages.push({role:'user',content:'RESUME_CONSULTATION'});
@@ -3039,6 +3066,8 @@ async function envoyerDossier(email,nomMed,medId){
     });
     clearTimeout(ragTimeout);
     var d=await r.json();
+    // BRIQUE 2 (V4.93) : récupérer le contexte red flags calculé par le back (déterministe).
+    redFlagsCtx = d.red_flags || null;
     var rep=d.answer||d.response||d.text||'';
     if(rep){
       var clean=rep.replace(/```json|```/g,'').trim();
@@ -3217,6 +3246,15 @@ async function envoyerDossier(email,nomMed,medId){
   }
 
   // ── ÉTAPE 5 : message patient + navigation ──
+  // BRIQUE 2 (V4.93) : si un signe de gravité (red flag 🔴) a été détecté par le back,
+  // afficher AVANT la confirmation un message d'orientation — RÈGLE "diriger sans alarmer" :
+  // ton calme, pas de mots anxiogènes, consigne claire et faisable, rassurant. Le médecin
+  // est prévenu (le dossier lui part de toute façon ; la priorisation côté médecin = étape 2.4b).
+  // ⚠️ Texte à VALIDER MÉDICALEMENT (Dr Fouani), comme les questions red flags.
+  if(redFlagsCtx && redFlagsCtx.gravite===true){
+    addMsg('ai','Merci pour ces informations. D\'après ce que vous m\'avez indiqué, il est préférable que vous soyez vu(e) par un soignant sans tarder. Si vous le pouvez, rendez-vous au centre de santé ou aux urgences le plus proche.');
+    addMsg('ai','Un médecin de Dokita est prévenu en priorité et pourra vous recontacter. Vous n\'êtes pas seul(e).');
+  }
   addMsg('ai','Votre dossier a bien été transmis au '+nomMed+'. Il examinera votre dossier et vous prescrira une ordonnance. Vous serez notifié dès validation.');
   if(saveOk)addMsg('ai','📱 Gardez votre téléphone près de vous avec le son activé — votre médecin peut vous contacter pour une consultation audio ou vidéo dans les prochaines heures.');
   toast(saveOk?'✅ Dossier envoyé — votre médecin a été notifié':'⚠️ Erreur envoi — réessayez');
