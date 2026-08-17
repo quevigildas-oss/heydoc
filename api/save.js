@@ -1,5 +1,7 @@
 // /api/save.js
 // DOKITA — Sauvegarde consultation dans Supabase
+// V4.12 — 2026-08 : BRIQUE 2 — ajout du champ red_flags (JSON) au payload consultation.
+//         ⚠️ nécessite la colonne JSONB red_flags dans consultations (migration_red_flags.sql).
 // V4.9 — Ajout notification email médecin via Resend
 // V4.10 — Fix module.exports + mapping champs OMS
 // V4.11 — Fix RLS : SUPABASE_KEY → SUPABASE_SERVICE_ROLE_KEY
@@ -54,6 +56,10 @@ const handler = async function(req, res) {
       medecin_id:          body.medecin_id || null,
       statut:              'en_attente',
       validation_ia:       'EN_ATTENTE',
+      // BRIQUE 2 (V4.12) : contexte red flags calculé par rag.js et transmis par le front.
+      // Chaîne JSON (ou null) → colonne JSONB red_flags de consultations (cf. migration).
+      // Permet au médecin de voir gravité + checklist. Ignoré si la colonne n'existe pas encore.
+      red_flags:           body.red_flags || null,
       is_test:             IS_TEST
     };
 
