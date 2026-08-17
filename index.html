@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <!-- ============================================
      DOKITA — App Patient
-     VERSION : V4.93
+     VERSION : V4.94
      DATE    : 2026-08
+     CHANGELOG V4.94 : BRIQUE 2 étape 3.4b-0 — persistance du contexte red flags dans la
+              consultation (champ red_flags au payload, nécessite migration + save.js V4.12).
      CHANGELOG V4.93 : BRIQUE 2 (garde-fou red flags) étape 3.4a — message d'orientation patient.
               Si le back détecte un signe de gravité (red_flags.gravite), un message d'orientation
               NON-ALARMISTE est affiché au patient AVANT la confirmation d'envoi ("diriger sans
@@ -3161,7 +3163,12 @@ async function envoyerDossier(email,nomMed,medId){
     antecedents:cleanStr(p.antecedents||resume.antecedents||'',300),
     patient_sexe:p.sx=='H'?'Masculin':p.sx=='F'?'Féminin':'Non renseigné',
     statut:'en_attente',
-    medecin_id:medObj?medObj.supabaseId:null
+    medecin_id:medObj?medObj.supabaseId:null,
+    // BRIQUE 2 (V4.94) : persister le contexte red flags dans la consultation pour que le
+    // médecin puisse voir la gravité + la checklist (colonne JSONB red_flags, cf. migration).
+    // null si aucune question de sécurité n'a été posée (rétrocompat). Stocké en chaîne JSON
+    // pour compatibilité avec l'API save (le back/Supabase le range en JSONB).
+    red_flags:redFlagsCtx?JSON.stringify(redFlagsCtx):null
   };
 
   // ── ÉTAPE 3 : /api/save → Supabase ──
